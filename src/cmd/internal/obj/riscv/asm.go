@@ -21,21 +21,58 @@
 package riscv
 
 import (
+	"log"
+
 	"cmd/internal/obj"
 )
 
-// TODO(myenik)
-func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
-}
-
+// progedit is called individually for each Prog.
 // TODO(myenik)
 func progedit(ctxt *obj.Link, p *obj.Prog) {
-}
+	log.Printf("progedit: ctxt: %+v p: %#v p: %s", ctxt, p, p)
 
-// TODO(myenik)
-func assemble(ctxt *obj.Link, cursym *obj.LSym) {
+	// Rewrite branches as TYPE_BRANCH
+	switch p.As {
+	case AJAL,
+		AJALR,
+		ABEQ,
+		ABNE,
+		ABLT,
+		ABLTU,
+		ABGE,
+		ABGEU,
+		obj.ARET,
+		obj.ADUFFZERO,
+		obj.ADUFFCOPY:
+		if p.To.Sym != nil {
+			p.To.Type = obj.TYPE_BRANCH
+		}
+	}
 }
 
 // TODO(myenik)
 func follow(ctxt *obj.Link, s *obj.LSym) {
+	log.Printf("follow: ctxt: %+v", ctxt)
+
+	for ; s != nil; s = s.Next {
+		log.Printf("s: %+v", s)
+	}
+}
+
+// TODO(myenik)
+func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
+	log.Printf("preprocess: ctxt: %+v", ctxt)
+
+	for ; cursym != nil; cursym = cursym.Next {
+		log.Printf("cursym: %+v", cursym)
+	}
+}
+
+// TODO(myenik)
+func assemble(ctxt *obj.Link, cursym *obj.LSym) {
+	log.Printf("assemble: ctxt: %+v", ctxt)
+
+	for ; cursym != nil; cursym = cursym.Next {
+		log.Printf("cursym: %+v", cursym)
+	}
 }
