@@ -524,8 +524,8 @@ const (
 	RBase386   = 1 * 1024
 	RBaseAMD64 = 2 * 1024
 	RBaseARM   = 3 * 1024
-	RBasePPC64 = 4 * 1024 // range [4k, 8k)
-	RBaseARM64 = 8 * 1024 // range [8k, 16k)
+	RBasePPC64 = 4 * 1024  // range [4k, 8k)
+	RBaseARM64 = 8 * 1024  // range [8k, 16k)
 	RBaseRISCV = 16 * 1024 // range [16k, 24k)
 )
 

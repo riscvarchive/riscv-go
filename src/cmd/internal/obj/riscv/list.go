@@ -36,7 +36,7 @@ import (
 var (
 	// Registers is a map of register names to integer IDs.
 	Registers = make(map[string]int16)
-	regNames = make(map[int16]string)
+	regNames  = make(map[int16]string)
 
 	// Instructions is a map of instruction names to integer IDs.
 	Instructions = make(map[string]int)
@@ -44,11 +44,11 @@ var (
 
 func initRegisters() {
 	for i := REG_X0; i <= REG_X31; i++ {
-		name := fmt.Sprintf("X%d", i - REG_X0)
+		name := fmt.Sprintf("X%d", i-REG_X0)
 		Registers[name] = int16(i)
 	}
 	for i := REG_F0; i <= REG_F31; i++ {
-		name := fmt.Sprintf("F%d", i - REG_F0)
+		name := fmt.Sprintf("F%d", i-REG_F0)
 		Registers[name] = int16(i)
 	}
 }
