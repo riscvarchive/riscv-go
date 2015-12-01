@@ -10,6 +10,7 @@ import (
 	"cmd/link/internal/arm"
 	"cmd/link/internal/arm64"
 	"cmd/link/internal/ppc64"
+	"cmd/link/internal/riscv"
 	"cmd/link/internal/x86"
 	"fmt"
 	"os"
@@ -30,5 +31,7 @@ func main() {
 		arm64.Main()
 	case "ppc64", "ppc64le":
 		ppc64.Main()
+	case "riscv":
+		riscv.Main()
 	}
 }

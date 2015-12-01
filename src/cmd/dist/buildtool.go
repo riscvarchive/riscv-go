@@ -49,6 +49,7 @@ var bootstrapDirs = []string{
 	"link/internal/arm64",
 	"link/internal/ld",
 	"link/internal/ppc64",
+	"link/internal/riscv",
 	"link/internal/x86",
 }
 
