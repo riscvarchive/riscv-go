@@ -173,6 +173,7 @@ const (
 	EM_MIPS_RS4_BE       = 10
 	EM_ALPHA_STD         = 41
 	EM_ALPHA             = 0x9026
+	EM_RISCV             = 243 // https://lists.riscv.org/lists/arc/sw-dev/2015-07/msg00022.html
 	SHN_UNDEF            = 0
 	SHN_LORESERVE        = 0xff00
 	SHN_LOPROC           = 0xff00
@@ -602,7 +603,55 @@ const (
 	R_SPARC_REGISTER           = 53
 	R_SPARC_UA64               = 54
 	R_SPARC_UA16               = 55
-	ARM_MAGIC_TRAMP_NUMBER     = 0x5c000003
+
+	// RISC-V relocations (see https://github.com/riscv/riscv-gnu-toolchain/blob/50af352/binutils/include/elf/riscv.h).
+	R_RISCV_NONE          = 0  // No relocation.
+	R_RISCV_32            = 1  // 32-bit relocation.
+	R_RISCV_64            = 2  // 64-bit relocation.
+	R_RISCV_RELATIVE      = 3  // Relocation against a local symbol in a shared object.
+	R_RISCV_COPY          = 4  //
+	R_RISCV_JUMP_SLOT     = 5  //
+	R_RISCV_TLS_DTPMOD32  = 6  // Dynamic TLS relocations.
+	R_RISCV_TLS_DTPMOD64  = 7  //    "     "       "
+	R_RISCV_TLS_DTPREL32  = 8  //    "     "       "
+	R_RISCV_TLS_DTPREL64  = 9  //    "     "       "
+	R_RISCV_TLS_TPREL32   = 10 //    "     "       "
+	R_RISCV_TLS_TPREL64   = 11 //    "     "       "
+	R_RISCV_BRANCH        = 16 // 12-bit PC-relative branch offset.
+	R_RISCV_JAL           = 17 // 20-bit PC-relative jump offset.
+	R_RISCV_CALL          = 18 // 32-bit PC-relative function call (AUIPC/JALR).
+	R_RISCV_CALL_PLT      = 19 //    "        "          "      "        "
+	R_RISCV_GOT_HI20      = 20 // High 20 bits of 32-bit PC-relative GOT access.
+	R_RISCV_TLS_GOT_HI20  = 21 // High 20 bits of 32-bit PC-relative TLS IE GOT access.
+	R_RISCV_TLS_GD_HI20   = 22 // High 20 bits of 32-bit PC-relative TLS GD GOT reference.
+	R_RISCV_PCREL_HI20    = 23 // High 20 bits of 32-bit PC-relative reference.
+	R_RISCV_PCREL_LO12_I  = 24 // Low 12 bits of a 32-bit PC-relative load or add.
+	R_RISCV_PCREL_LO12_S  = 25 // Low 12 bits of a 32-bit PC-relative store.
+	R_RISCV_HI20          = 26 // High 20 bits of 32-bit absolute address.
+	R_RISCV_LO12_I        = 27 // High 12 bits of 32-bit load or add.
+	R_RISCV_LO12_S        = 28 // High 12 bits of 32-bit store.
+	R_RISCV_TPREL_HI20    = 29 // High 20 bits of TLS LE thread pointer offset.
+	R_RISCV_TPREL_LO12_I  = 30 // Low 12 bits of TLS LE thread pointer offset for loads and adds.
+	R_RISCV_TPREL_LO12_S  = 31 // Low 12 bits of TLS LE thread pointer offset for stores.
+	R_RISCV_TPREL_ADD     = 32 // TLS LE thread pointer usage.
+	R_RISCV_ADD8          = 33 // 8-bit in-place addition, for local label subtraction.
+	R_RISCV_ADD16         = 34 // 16-bit in-place addition, for local label subtraction.
+	R_RISCV_ADD32         = 35 // 32-bit in-place addition, for local label subtraction.
+	R_RISCV_ADD64         = 36 // 64-bit in-place addition, for local label subtraction.
+	R_RISCV_SUB8          = 37 // 8-bit in-place subtraction, for local label subtraction.
+	R_RISCV_SUB16         = 38 // 16-bit in-place subtraction, for local label subtraction.
+	R_RISCV_SUB32         = 39 // 32-bit in-place subtraction, for local label subtraction.
+	R_RISCV_SUB64         = 40 // 64-bit in-place subtraction, for local label subtraction.
+	R_RISCV_GNU_VTINHERIT = 41 // GNU extension for C++ vtables.
+	R_RISCV_GNU_VTENTRY   = 42 //  "      "      "   "     "
+	R_RISCV_ALIGN         = 43 // Alignment request.
+	R_RISCV_RVC_BRANCH    = 44 // 8-bit PC-relative branch offset.
+	R_RISCV_RVC_JUMP      = 45 // 11-bit PC-relative jump offset.
+	R_RISCV_RVC_LUI       = 46 // High 6 bits of 18-bit absolute address.
+	R_RISCV_GPREL_I       = 47 // High 12 bits of 32-bit load or add.
+	R_RISCV_GPREL_S       = 48 // High 12 bits of 32-bit store.
+
+	ARM_MAGIC_TRAMP_NUMBER = 0x5c000003
 )
 
 /*

@@ -68,3 +68,12 @@ var Linkppc64le = LinkArch{
 	Ptrsize:   8,
 	Regsize:   8,
 }
+
+var Linkriscv = LinkArch{
+	ByteOrder: binary.LittleEndian,
+	Name:      "riscv",
+	Thechar:   'V',
+	Minlc:     4,
+	Ptrsize:   8,
+	Regsize:   8,
+}
