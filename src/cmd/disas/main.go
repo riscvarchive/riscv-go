@@ -17,27 +17,28 @@ import (
 	"cmd/internal/obj"
 )
 
-func objdumpcmd(fname string) *exec.Cmd {
+func getobjdumpcmd(fname string) (*exec.Cmd, error) {
 	GOARCH := obj.Getgoarch()
 	switch GOARCH {
 	case "arm":
 		return exec.Command(
-			"arm-none-eabi-objdump",
-			"-b", "binary",
-			"-m", "arm",
-			"-EL",
-			"-D", fname)
+				"arm-none-eabi-objdump",
+				"-b", "binary",
+				"-m", "arm",
+				"-EL",
+				"-D", fname),
+			nil
 	case "riscv":
 		return exec.Command(
-			"riscv64-unknown-elf-objdump",
-			"-b", "binary",
-			"-m", "riscv:rv64",
-			"-EL",
-			"-D", fname)
+				"riscv64-unknown-elf-objdump",
+				"-b", "binary",
+				"-m", "riscv:rv64",
+				"-EL",
+				"-D", fname),
+			nil
 	default:
-		log.Fatalf("unsupported architecture %s", GOARCH)
+		return nil, fmt.Errorf("unsupported architecture %s", GOARCH)
 	}
-	return nil
 }
 
 func disas1(sym *goobj.Sym, data []byte) {
@@ -55,7 +56,12 @@ func disas1(sym *goobj.Sym, data []byte) {
 		return
 	}
 
-	objdumpout, err := objdumpcmd(f.Name()).Output()
+	objdumpcmd, err := getobjdumpcmd(f.Name())
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	objdumpout, err := objdumpcmd.Output()
 	if err != nil {
 		log.Println(err)
 		return
@@ -103,7 +109,10 @@ func main() {
 	log.SetPrefix("disas: ")
 
 	// Ensure that we actually support this architecture.
-	objdumpcmd("dummy")
+	_, err := getobjdumpcmd("dummy")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	flag.Parse()
 	if flag.NArg() != 1 {
