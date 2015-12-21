@@ -46,8 +46,8 @@ func disas1(sym *goobj.Sym, data []byte) {
 		log.Println(err)
 		return
 	}
-	defer f.Close()
 	defer os.Remove(f.Name())
+	defer f.Close()
 
 	_, err = f.Write(data)
 	if err != nil {
