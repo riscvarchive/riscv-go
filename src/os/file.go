@@ -52,8 +52,8 @@ var (
 	Stderr = NewFile(uintptr(syscall.Stderr), "/dev/stderr")
 )
 
-// Flags to Open wrapping those of the underlying system. Not all flags
-// may be implemented on a given system.
+// Flags to OpenFile wrapping those of the underlying system. Not all
+// flags may be implemented on a given system.
 const (
 	O_RDONLY int = syscall.O_RDONLY // open the file read-only.
 	O_WRONLY int = syscall.O_WRONLY // open the file write-only.
@@ -173,6 +173,7 @@ func (f *File) WriteAt(b []byte, off int64) (n int, err error) {
 // according to whence: 0 means relative to the origin of the file, 1 means
 // relative to the current offset, and 2 means relative to the end.
 // It returns the new offset and an error, if any.
+// The behavior of Seek on a file opened with O_APPEND is not specified.
 func (f *File) Seek(offset int64, whence int) (ret int64, err error) {
 	if f == nil {
 		return 0, ErrInvalid

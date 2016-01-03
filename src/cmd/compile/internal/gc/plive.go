@@ -92,14 +92,6 @@ type Liveness struct {
 	livepointers     []Bvec
 }
 
-func xmalloc(size uint32) interface{} {
-	result := (interface{})(make([]byte, size))
-	if result == nil {
-		Fatalf("malloc failed")
-	}
-	return result
-}
-
 // Constructs a new basic block containing a single instruction.
 func newblock(prog *obj.Prog) *BasicBlock {
 	if prog == nil {
@@ -113,13 +105,6 @@ func newblock(prog *obj.Prog) *BasicBlock {
 	result.pred = make([]*BasicBlock, 0, 2)
 	result.succ = make([]*BasicBlock, 0, 2)
 	return result
-}
-
-// Frees a basic block and all of its leaf data structures.
-func freeblock(bb *BasicBlock) {
-	if bb == nil {
-		Fatalf("freeblock: cannot free nil")
-	}
 }
 
 // Adds an edge between two basic blocks by making from a predecessor of to and
@@ -833,7 +818,7 @@ func checkparam(fn *Node, p *obj.Prog, n *Node) {
 		return
 	}
 	var a *Node
-	var class uint8
+	var class Class
 	for l := fn.Func.Dcl; l != nil; l = l.Next {
 		a = l.N
 		class = a.Class &^ PHEAP
@@ -1441,7 +1426,14 @@ func livenessepilogue(lv *Liveness) {
 						// the PCDATA must begin one instruction early too.
 						// The instruction before a call to deferreturn is always a
 						// no-op, to keep PC-specific data unambiguous.
-						splicebefore(lv, bb, newpcdataprog(p.Opt.(*obj.Prog), pos), p.Opt.(*obj.Prog))
+						prev := p.Opt.(*obj.Prog)
+						if Ctxt.Arch.Thechar == '9' {
+							// On ppc64 there is an additional instruction
+							// (another no-op or reload of toc pointer) before
+							// the call.
+							prev = prev.Opt.(*obj.Prog)
+						}
+						splicebefore(lv, bb, newpcdataprog(prev, pos), prev)
 					} else {
 						splicebefore(lv, bb, newpcdataprog(p, pos), p)
 					}

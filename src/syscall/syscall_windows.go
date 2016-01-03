@@ -8,6 +8,7 @@ package syscall
 
 import (
 	errorspkg "errors"
+	"internal/race"
 	"sync"
 	"unicode/utf16"
 	"unsafe"
@@ -304,26 +305,32 @@ func Read(fd Handle, p []byte) (n int, err error) {
 		}
 		return 0, e
 	}
-	if raceenabled {
+	if race.Enabled {
 		if done > 0 {
-			raceWriteRange(unsafe.Pointer(&p[0]), int(done))
+			race.WriteRange(unsafe.Pointer(&p[0]), int(done))
 		}
-		raceAcquire(unsafe.Pointer(&ioSync))
+		race.Acquire(unsafe.Pointer(&ioSync))
+	}
+	if msanenabled && done > 0 {
+		msanWrite(unsafe.Pointer(&p[0]), int(done))
 	}
 	return int(done), nil
 }
 
 func Write(fd Handle, p []byte) (n int, err error) {
-	if raceenabled {
-		raceReleaseMerge(unsafe.Pointer(&ioSync))
+	if race.Enabled {
+		race.ReleaseMerge(unsafe.Pointer(&ioSync))
 	}
 	var done uint32
 	e := WriteFile(fd, p, &done, nil)
 	if e != nil {
 		return 0, e
 	}
-	if raceenabled && done > 0 {
-		raceReadRange(unsafe.Pointer(&p[0]), int(done))
+	if race.Enabled && done > 0 {
+		race.ReadRange(unsafe.Pointer(&p[0]), int(done))
+	}
+	if msanenabled && done > 0 {
+		msanRead(unsafe.Pointer(&p[0]), int(done))
 	}
 	return int(done), nil
 }
