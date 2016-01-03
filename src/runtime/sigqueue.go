@@ -28,7 +28,10 @@
 
 package runtime
 
-import "unsafe"
+import (
+	"runtime/internal/atomic"
+	"unsafe"
+)
 
 var sig struct {
 	note   note
@@ -59,7 +62,7 @@ func sigsend(s uint32) bool {
 		if mask&bit != 0 {
 			return true // signal already in queue
 		}
-		if cas(&sig.mask[s/32], mask, mask|bit) {
+		if atomic.Cas(&sig.mask[s/32], mask, mask|bit) {
 			break
 		}
 	}
@@ -67,18 +70,18 @@ func sigsend(s uint32) bool {
 	// Notify receiver that queue has new bit.
 Send:
 	for {
-		switch atomicload(&sig.state) {
+		switch atomic.Load(&sig.state) {
 		default:
 			throw("sigsend: inconsistent state")
 		case sigIdle:
-			if cas(&sig.state, sigIdle, sigSending) {
+			if atomic.Cas(&sig.state, sigIdle, sigSending) {
 				break Send
 			}
 		case sigSending:
 			// notification already pending
 			break Send
 		case sigReceiving:
-			if cas(&sig.state, sigReceiving, sigIdle) {
+			if atomic.Cas(&sig.state, sigReceiving, sigIdle) {
 				notewakeup(&sig.note)
 				break Send
 			}
@@ -90,6 +93,7 @@ Send:
 
 // Called to receive the next queued signal.
 // Must only be called from a single goroutine at a time.
+//go:linkname signal_recv os/signal.signal_recv
 func signal_recv() uint32 {
 	for {
 		// Serve any signals from local copy.
@@ -103,17 +107,17 @@ func signal_recv() uint32 {
 		// Wait for updates to be available from signal sender.
 	Receive:
 		for {
-			switch atomicload(&sig.state) {
+			switch atomic.Load(&sig.state) {
 			default:
 				throw("signal_recv: inconsistent state")
 			case sigIdle:
-				if cas(&sig.state, sigIdle, sigReceiving) {
+				if atomic.Cas(&sig.state, sigIdle, sigReceiving) {
 					notetsleepg(&sig.note, -1)
 					noteclear(&sig.note)
 					break Receive
 				}
 			case sigSending:
-				if cas(&sig.state, sigSending, sigIdle) {
+				if atomic.Cas(&sig.state, sigSending, sigIdle) {
 					break Receive
 				}
 			}
@@ -121,12 +125,13 @@ func signal_recv() uint32 {
 
 		// Incorporate updates from sender into local copy.
 		for i := range sig.mask {
-			sig.recv[i] = xchg(&sig.mask[i], 0)
+			sig.recv[i] = atomic.Xchg(&sig.mask[i], 0)
 		}
 	}
 }
 
 // Must only be called from a single goroutine at a time.
+//go:linkname signal_enable os/signal.signal_enable
 func signal_enable(s uint32) {
 	if !sig.inuse {
 		// The first call to signal_enable is for us
@@ -145,6 +150,7 @@ func signal_enable(s uint32) {
 }
 
 // Must only be called from a single goroutine at a time.
+//go:linkname signal_disable os/signal.signal_disable
 func signal_disable(s uint32) {
 	if s >= uint32(len(sig.wanted)*32) {
 		return
@@ -154,6 +160,7 @@ func signal_disable(s uint32) {
 }
 
 // Must only be called from a single goroutine at a time.
+//go:linkname signal_ignore os/signal.signal_ignore
 func signal_ignore(s uint32) {
 	if s >= uint32(len(sig.wanted)*32) {
 		return

@@ -428,10 +428,15 @@ func (w *Walker) Import(name string) (*types.Package, error) {
 	}
 	w.imported[name] = &importing
 
+	root := w.root
+	if strings.HasPrefix(name, "golang.org/x/") {
+		root = filepath.Join(root, "vendor")
+	}
+
 	// Determine package files.
-	dir := filepath.Join(w.root, filepath.FromSlash(name))
+	dir := filepath.Join(root, filepath.FromSlash(name))
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-		log.Fatalf("no source in tree for package %q", pkg)
+		log.Fatalf("no source in tree for import %q: %v", name, err)
 	}
 
 	context := w.context
@@ -675,7 +680,14 @@ func (w *Walker) emitObj(obj types.Object) {
 	switch obj := obj.(type) {
 	case *types.Const:
 		w.emitf("const %s %s", obj.Name(), w.typeString(obj.Type()))
-		w.emitf("const %s = %s", obj.Name(), obj.Val())
+		x := obj.Val()
+		short := x.String()
+		exact := x.ExactString()
+		if short == exact {
+			w.emitf("const %s = %s", obj.Name(), short)
+		} else {
+			w.emitf("const %s = %s  // %s", obj.Name(), short, exact)
+		}
 	case *types.Var:
 		w.emitf("var %s %s", obj.Name(), w.typeString(obj.Type()))
 	case *types.TypeName:

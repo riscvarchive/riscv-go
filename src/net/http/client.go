@@ -10,6 +10,7 @@
 package http
 
 import (
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -82,19 +83,26 @@ var DefaultClient = &Client{}
 // goroutines.
 type RoundTripper interface {
 	// RoundTrip executes a single HTTP transaction, returning
-	// the Response for the request req.  RoundTrip should not
-	// attempt to interpret the response.  In particular,
-	// RoundTrip must return err == nil if it obtained a response,
-	// regardless of the response's HTTP status code.  A non-nil
-	// err should be reserved for failure to obtain a response.
-	// Similarly, RoundTrip should not attempt to handle
-	// higher-level protocol details such as redirects,
+	// a Response for the provided Request.
+	//
+	// RoundTrip should not attempt to interpret the response. In
+	// particular, RoundTrip must return err == nil if it obtained
+	// a response, regardless of the response's HTTP status code.
+	// A non-nil err should be reserved for failure to obtain a
+	// response. Similarly, RoundTrip should not attempt to
+	// handle higher-level protocol details such as redirects,
 	// authentication, or cookies.
 	//
 	// RoundTrip should not modify the request, except for
-	// consuming and closing the Body, including on errors. The
-	// request's URL and Header fields are guaranteed to be
-	// initialized.
+	// consuming and closing the Request's Body.
+	//
+	// RoundTrip must always close the body, including on errors,
+	// but depending on the implementation may do so in a separate
+	// goroutine even after RoundTrip returns. This means that
+	// callers wanting to reuse the body for subsequent requests
+	// must arrange to wait for the Close call before doing so.
+	//
+	// The Request's URL and Header fields must be initialized.
 	RoundTrip(*Request) (*Response, error)
 }
 
@@ -171,10 +179,11 @@ func (c *Client) send(req *Request) (*Response, error) {
 //
 // Generally Get, Post, or PostForm will be used instead of Do.
 func (c *Client) Do(req *Request) (resp *Response, err error) {
-	if req.Method == "GET" || req.Method == "HEAD" {
+	method := valueOrDefault(req.Method, "GET")
+	if method == "" || method == "GET" || method == "HEAD" {
 		return c.doFollowingRedirects(req, shouldRedirectGet)
 	}
-	if req.Method == "POST" || req.Method == "PUT" {
+	if method == "POST" || method == "PUT" {
 		return c.doFollowingRedirects(req, shouldRedirectPost)
 	}
 	return c.send(req)
@@ -221,6 +230,14 @@ func send(req *Request, t RoundTripper) (resp *Response, err error) {
 	if err != nil {
 		if resp != nil {
 			log.Printf("RoundTripper returned a response & error; ignoring response")
+		}
+		if tlsErr, ok := err.(tls.RecordHeaderError); ok {
+			// If we get a bad TLS record header, check to see if the
+			// response looks like HTTP and give a more helpful error.
+			// See golang.org/issue/11111.
+			if string(tlsErr.RecordHeader[:]) == "HTTP/" {
+				err = errors.New("http: server gave HTTP response to HTTPS client")
+			}
 		}
 		return nil, err
 	}
@@ -414,6 +431,9 @@ func (c *Client) doFollowingRedirects(ireq *Request, shouldRedirect func(int) bo
 	}
 
 	method := ireq.Method
+	if method == "" {
+		method = "GET"
+	}
 	urlErr := &url.Error{
 		Op:  method[0:1] + strings.ToLower(method[1:]),
 		URL: urlStr,
