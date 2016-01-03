@@ -63,8 +63,8 @@ type FileSystem interface {
 type File interface {
 	io.Closer
 	io.Reader
+	io.Seeker
 	Readdir(count int) ([]os.FileInfo, error)
-	Seek(offset int64, whence int) (int64, error)
 	Stat() (os.FileInfo, error)
 }
 
@@ -369,8 +369,8 @@ func serveFile(w ResponseWriter, r *Request, fs FileSystem, name string, redirec
 	}
 	defer f.Close()
 
-	d, err1 := f.Stat()
-	if err1 != nil {
+	d, err := f.Stat()
+	if err != nil {
 		msg, code := toHTTPError(err)
 		Error(w, msg, code)
 		return

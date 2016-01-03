@@ -9,7 +9,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define fd (10)
+#define fd (100)
 
 // Tests libgo2.so, which does not export any functions.
 // Read a string from the file descriptor and print it.
@@ -25,7 +25,7 @@ int main(void) {
     n = read(fd, buf, sizeof buf);
     if (n >= 0)
       break;
-    if (errno != EBADF) {
+    if (errno != EBADF && errno != EINVAL) {
       fprintf(stderr, "BUG: read: %s\n", strerror(errno));
       return 2;
     }

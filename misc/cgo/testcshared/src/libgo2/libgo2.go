@@ -21,7 +21,7 @@ import (
 // that the C code can also use.
 
 const (
-	fd = 10
+	fd = 100
 )
 
 func init() {
@@ -31,7 +31,7 @@ func init() {
 		os.Exit(2)
 	}
 
-	if e := syscall.Dup2(p[0], fd); e != nil {
+	if e := dup2(p[0], fd); e != nil {
 		fmt.Fprintf(os.Stderr, "dup2: %v\n", e)
 		os.Exit(2)
 	}

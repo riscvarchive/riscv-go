@@ -122,7 +122,7 @@ var vcsGit = &vcsCmd{
 	name: "Git",
 	cmd:  "git",
 
-	createCmd:   []string{"clone {repo} {dir}", "--git-dir={dir}/.git submodule update --init --recursive"},
+	createCmd:   []string{"clone {repo} {dir}", "-C {dir} submodule update --init --recursive"},
 	downloadCmd: []string{"pull --ff-only", "submodule update --init --recursive"},
 
 	tagCmd: []tagCmd{
@@ -567,16 +567,8 @@ func repoRootForImportPath(importPath string, security securityMode) (*repoRoot,
 			lookup = lookup[:i]
 		}
 		rr, err = repoRootForImportDynamic(lookup, security)
-
-		// repoRootForImportDynamic returns error detail
-		// that is irrelevant if the user didn't intend to use a
-		// dynamic import in the first place.
-		// Squelch it.
 		if err != nil {
-			if buildV {
-				log.Printf("import %q: %v", importPath, err)
-			}
-			err = fmt.Errorf("unrecognized import path %q", importPath)
+			err = fmt.Errorf("unrecognized import path %q (%v)", importPath, err)
 		}
 	}
 	if err != nil {
@@ -891,7 +883,7 @@ var vcsPaths = []*vcsPath{
 	// General syntax for any server.
 	// Must be last.
 	{
-		re:   `^(?P<root>(?P<repo>([a-z0-9.\-]+\.)+[a-z0-9.\-]+(:[0-9]+)?/[A-Za-z0-9_.\-/]*?)\.(?P<vcs>bzr|git|hg|svn))(/[A-Za-z0-9_.\-]+)*$`,
+		re:   `^(?P<root>(?P<repo>([a-z0-9.\-]+\.)+[a-z0-9.\-]+(:[0-9]+)?(/~?[A-Za-z0-9_.\-]+)+?)\.(?P<vcs>bzr|git|hg|svn))(/~?[A-Za-z0-9_.\-]+)*$`,
 		ping: true,
 	},
 }

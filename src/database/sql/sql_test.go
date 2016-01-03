@@ -142,6 +142,20 @@ func (db *DB) numFreeConns() int {
 	return len(db.freeConn)
 }
 
+// clearAllConns closes all connections in db.
+func (db *DB) clearAllConns(t *testing.T) {
+	db.SetMaxIdleConns(0)
+
+	if g, w := db.numFreeConns(), 0; g != w {
+		t.Errorf("free conns = %d; want %d", g, w)
+	}
+
+	if n := db.numDepsPollUntil(0, time.Second); n > 0 {
+		t.Errorf("number of dependencies = %d; expected 0", n)
+		db.dumpDeps(t)
+	}
+}
+
 func (db *DB) dumpDeps(t *testing.T) {
 	for fc := range db.dep {
 		db.dumpDep(t, 0, fc, map[finalCloser]bool{})
@@ -352,6 +366,44 @@ func TestStatementQueryRow(t *testing.T) {
 			t.Errorf("%d: on %q, QueryRow/Scan: %v", n, tt.name, err)
 		} else if age != tt.want {
 			t.Errorf("%d: age=%d, want %d", n, age, tt.want)
+		}
+	}
+}
+
+type stubDriverStmt struct {
+	err error
+}
+
+func (s stubDriverStmt) Close() error {
+	return s.err
+}
+
+func (s stubDriverStmt) NumInput() int {
+	return -1
+}
+
+func (s stubDriverStmt) Exec(args []driver.Value) (driver.Result, error) {
+	return nil, nil
+}
+
+func (s stubDriverStmt) Query(args []driver.Value) (driver.Rows, error) {
+	return nil, nil
+}
+
+// golang.org/issue/12798
+func TestStatementClose(t *testing.T) {
+	want := errors.New("STMT ERROR")
+
+	tests := []struct {
+		stmt *Stmt
+		msg  string
+	}{
+		{&Stmt{stickyErr: want}, "stickyErr not propagated"},
+		{&Stmt{tx: &Tx{}, txsi: &driverStmt{&sync.Mutex{}, stubDriverStmt{want}}}, "driverStmt.Close() error not propagated"},
+	}
+	for _, test := range tests {
+		if err := test.stmt.Close(); err != want {
+			t.Errorf("%s. Got stmt.Close() = %v, want = %v", test.msg, err, want)
 		}
 	}
 }
@@ -953,16 +1005,7 @@ func TestMaxOpenConns(t *testing.T) {
 
 	// Force the number of open connections to 0 so we can get an accurate
 	// count for the test
-	db.SetMaxIdleConns(0)
-
-	if g, w := db.numFreeConns(), 0; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
-
-	if n := db.numDepsPollUntil(0, time.Second); n > 0 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
-	}
+	db.clearAllConns(t)
 
 	driver.mu.Lock()
 	opens0 := driver.openCount
@@ -1058,16 +1101,7 @@ func TestMaxOpenConns(t *testing.T) {
 		db.dumpDeps(t)
 	}
 
-	db.SetMaxIdleConns(0)
-
-	if g, w := db.numFreeConns(), 0; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
-
-	if n := db.numDepsPollUntil(0, time.Second); n > 0 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
-	}
+	db.clearAllConns(t)
 }
 
 // Issue 9453: tests that SetMaxOpenConns can be lowered at runtime
@@ -1121,6 +1155,67 @@ func TestMaxOpenConnsOnBusy(t *testing.T) {
 	}
 }
 
+// Issue 10886: tests that all connection attempts return when more than
+// DB.maxOpen connections are in flight and the first DB.maxOpen fail.
+func TestPendingConnsAfterErr(t *testing.T) {
+	const (
+		maxOpen = 2
+		tryOpen = maxOpen*2 + 2
+	)
+
+	db := newTestDB(t, "people")
+	defer closeDB(t, db)
+	defer func() {
+		for k, v := range db.lastPut {
+			t.Logf("%p: %v", k, v)
+		}
+	}()
+
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(0)
+
+	errOffline := errors.New("db offline")
+	defer func() { setHookOpenErr(nil) }()
+
+	errs := make(chan error, tryOpen)
+
+	unblock := make(chan struct{})
+	setHookOpenErr(func() error {
+		<-unblock // block until all connections are in flight
+		return errOffline
+	})
+
+	var opening sync.WaitGroup
+	opening.Add(tryOpen)
+	for i := 0; i < tryOpen; i++ {
+		go func() {
+			opening.Done() // signal one connection is in flight
+			_, err := db.Exec("INSERT|people|name=Julia,age=19")
+			errs <- err
+		}()
+	}
+
+	opening.Wait()                    // wait for all workers to begin running
+	time.Sleep(10 * time.Millisecond) // make extra sure all workers are blocked
+	close(unblock)                    // let all workers proceed
+
+	const timeout = 100 * time.Millisecond
+	to := time.NewTimer(timeout)
+	defer to.Stop()
+
+	// check that all connections fail without deadlock
+	for i := 0; i < tryOpen; i++ {
+		select {
+		case err := <-errs:
+			if got, want := err, errOffline; got != want {
+				t.Errorf("unexpected err: got %v, want %v", got, want)
+			}
+		case <-to.C:
+			t.Fatalf("orphaned connection request(s), still waiting after %v", timeout)
+		}
+	}
+}
+
 func TestSingleOpenConn(t *testing.T) {
 	db := newTestDB(t, "people")
 	defer closeDB(t, db)
@@ -1161,6 +1256,90 @@ func TestStats(t *testing.T) {
 	stats = db.Stats()
 	if got := stats.OpenConnections; got != 0 {
 		t.Errorf("stats.OpenConnections = %d; want 0", got)
+	}
+}
+
+func TestConnMaxLifetime(t *testing.T) {
+	t0 := time.Unix(1000000, 0)
+	offset := time.Duration(0)
+
+	nowFunc = func() time.Time { return t0.Add(offset) }
+	defer func() { nowFunc = time.Now }()
+
+	db := newTestDB(t, "magicquery")
+	defer closeDB(t, db)
+
+	driver := db.driver.(*fakeDriver)
+
+	// Force the number of open connections to 0 so we can get an accurate
+	// count for the test
+	db.clearAllConns(t)
+
+	driver.mu.Lock()
+	opens0 := driver.openCount
+	closes0 := driver.closeCount
+	driver.mu.Unlock()
+
+	db.SetMaxIdleConns(10)
+	db.SetMaxOpenConns(10)
+
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	offset = time.Second
+	tx2, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx.Commit()
+	tx2.Commit()
+
+	driver.mu.Lock()
+	opens := driver.openCount - opens0
+	closes := driver.closeCount - closes0
+	driver.mu.Unlock()
+
+	if opens != 2 {
+		t.Errorf("opens = %d; want 2", opens)
+	}
+	if closes != 0 {
+		t.Errorf("closes = %d; want 0", closes)
+	}
+	if g, w := db.numFreeConns(), 2; g != w {
+		t.Errorf("free conns = %d; want %d", g, w)
+	}
+
+	// Expire first conn
+	offset = time.Second * 11
+	db.SetConnMaxLifetime(time.Second * 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err = db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx2, err = db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.Commit()
+	tx2.Commit()
+
+	driver.mu.Lock()
+	opens = driver.openCount - opens0
+	closes = driver.closeCount - closes0
+	driver.mu.Unlock()
+
+	if opens != 3 {
+		t.Errorf("opens = %d; want 3", opens)
+	}
+	if closes != 1 {
+		t.Errorf("closes = %d; want 1", closes)
 	}
 }
 
@@ -1257,16 +1436,7 @@ func TestStmtCloseDeps(t *testing.T) {
 		db.dumpDeps(t)
 	}
 
-	db.SetMaxIdleConns(0)
-
-	if g, w := db.numFreeConns(), 0; g != w {
-		t.Errorf("free conns = %d; want %d", g, w)
-	}
-
-	if n := db.numDepsPollUntil(0, time.Second); n > 0 {
-		t.Errorf("number of dependencies = %d; expected 0", n)
-		db.dumpDeps(t)
-	}
+	db.clearAllConns(t)
 }
 
 // golang.org/issue/5046

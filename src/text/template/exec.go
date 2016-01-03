@@ -135,8 +135,6 @@ func errRecover(errp *error) {
 			*errp = err.Err // Strip the wrapper.
 		case ExecError:
 			*errp = err // Keep the wrapper.
-		case error: // TODO: This should never happen, but it does. Understand and/or fix.
-			*errp = err
 		default:
 			panic(e)
 		}
@@ -182,7 +180,7 @@ func (t *Template) Execute(wr io.Writer, data interface{}) (err error) {
 }
 
 // DefinedTemplates returns a string listing the defined templates,
-// prefixed by the string "defined templates are: ". If there are none,
+// prefixed by the string "; defined templates are: ". If there are none,
 // it returns the empty string. For generating an error message here
 // and in html/template.
 func (t *Template) DefinedTemplates() string {
@@ -259,8 +257,13 @@ func (s *state) walkIfOrWith(typ parse.NodeType, dot reflect.Value, pipe *parse.
 	}
 }
 
-// isTrue reports whether the value is 'true', in the sense of not the zero of its type,
-// and whether the value has a meaningful truth value.
+// IsTrue reports whether the value is 'true', in the sense of not the zero of its type,
+// and whether the value has a meaningful truth value. This is the definition of
+// truth used by if and other such actions.
+func IsTrue(val interface{}) (truth, ok bool) {
+	return isTrue(reflect.ValueOf(val))
+}
+
 func isTrue(val reflect.Value) (truth, ok bool) {
 	if !val.IsValid() {
 		// Something like var x interface{}, never set. It's a form of nil.
@@ -520,7 +523,7 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 		return zero
 	}
 	typ := receiver.Type()
-	receiver, _ = indirect(receiver)
+	receiver, isNil := indirect(receiver)
 	// Unless it's an interface, need to get to a value of type *T to guarantee
 	// we see all methods of T and *T.
 	ptr := receiver
@@ -532,7 +535,6 @@ func (s *state) evalField(dot reflect.Value, fieldName string, node parse.Node, 
 	}
 	hasArgs := len(args) > 1 || final.IsValid()
 	// It's not a method; must be a field of a struct or an element of a map. The receiver must not be nil.
-	receiver, isNil := indirect(receiver)
 	if isNil {
 		s.errorf("nil pointer evaluating %s.%s", typ, fieldName)
 	}
@@ -826,15 +828,10 @@ func (s *state) evalEmptyInterface(dot reflect.Value, n parse.Node) reflect.Valu
 }
 
 // indirect returns the item at the end of indirection, and a bool to indicate if it's nil.
-// We indirect through pointers and empty interfaces (only) because
-// non-empty interfaces have methods we might need.
 func indirect(v reflect.Value) (rv reflect.Value, isNil bool) {
 	for ; v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface; v = v.Elem() {
 		if v.IsNil() {
 			return v, true
-		}
-		if v.Kind() == reflect.Interface && v.NumMethod() > 0 {
-			break
 		}
 	}
 	return v, false

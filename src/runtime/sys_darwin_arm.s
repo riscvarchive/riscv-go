@@ -24,9 +24,9 @@
 #define	SYS_kill           37
 #define	SYS_getpid         20
 #define	SYS___pthread_kill 328
+#define	SYS_pthread_sigmask 329
 #define	SYS_setitimer      83
 #define	SYS___sysctl       202
-#define	SYS_sigprocmask    48
 #define	SYS_sigaction      46
 #define	SYS_sigreturn      184
 #define	SYS_select         93
@@ -194,6 +194,18 @@ TEXT runtime·nanotime(SB),NOSPLIT,$32
 	MOVW	R1, ret_hi+4(FP)
 	RET
 
+TEXT runtime·sigfwd(SB),NOSPLIT,$0-16
+	MOVW	sig+4(FP), R0
+	MOVW	info+8(FP), R1
+	MOVW	ctx+12(FP), R2
+	MOVW	fn+0(FP), R11
+	MOVW	R13, R4
+	SUB	$24, R13
+	BIC	$0x7, R13 // alignment for ELF ABI
+	BL	(R11)
+	MOVW	R4, R13
+	RET
+
 // Sigtramp's job is to call the actual signal handler.
 // It is called with the following arguments on the stack:
 //	 LR  	"return address" - ignored
@@ -268,7 +280,7 @@ TEXT runtime·sigprocmask(SB),NOSPLIT,$0
 	MOVW	sig+0(FP), R0
 	MOVW	new+4(FP), R1
 	MOVW	old+8(FP), R2
-	MOVW	$SYS_sigprocmask, R12
+	MOVW	$SYS_pthread_sigmask, R12
 	SWI	$0x80
 	BL.CS	notok<>(SB)
 	RET
@@ -296,12 +308,6 @@ TEXT runtime·usleep(SB),NOSPLIT,$12
 	MOVW	$SYS_select, R12
 	SWI	$0x80
 	RET
-
-TEXT runtime·cas(SB),NOSPLIT,$0
-	B	runtime·armcas(SB)
-
-TEXT runtime·casp1(SB),NOSPLIT,$0
-	B	runtime·cas(SB)
 
 TEXT ·publicationBarrier(SB),NOSPLIT,$-4-0
 	B	runtime·armPublicationBarrier(SB)
