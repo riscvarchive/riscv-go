@@ -79,6 +79,14 @@ internally at Google all begin with 'google', and paths
 denoting remote repositories begin with the path to the code,
 such as 'github.com/user/repo'.
 
+Packages in a program need not have unique package names,
+but there are two reserved package names with special meaning.
+The name main indicates a command, not a library.
+Commands are built into binaries and cannot be imported.
+The name documentation indicates documentation for
+a non-Go program in the directory. Files in package documentation
+are ignored by the go command.
+
 As a special case, if the package list is a list of .go files from a
 single directory, the command is applied to a single synthesized
 package made up of exactly those files, ignoring any build constraints
@@ -307,7 +315,7 @@ DIR/bin/quux, not DIR/bin/foo/quux.  The "foo/" prefix is stripped
 so that you can add DIR/bin to your PATH to get at the
 installed commands.  If the GOBIN environment variable is
 set, commands are installed to the directory it names instead
-of DIR/bin.
+of DIR/bin. GOBIN must be an absolute path.
 
 Here's an example directory layout:
 
@@ -576,5 +584,10 @@ are:
 	-buildmode=exe
 		Build the listed main packages and everything they import into
 		executables. Packages not named main are ignored.
+
+	-buildmode=pie
+		Build the listed main packages and everything they import into
+		position independent executables (PIE). Packages not named
+		main are ignored.
 `,
 }

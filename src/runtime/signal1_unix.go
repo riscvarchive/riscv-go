@@ -6,6 +6,8 @@
 
 package runtime
 
+import "runtime/internal/sys"
+
 const (
 	_SIG_DFL uintptr = 0
 	_SIG_IGN uintptr = 1
@@ -16,7 +18,7 @@ const (
 // handle a particular signal (e.g., signal occurred on a non-Go thread).
 // See sigfwdgo() for more information on when the signals are forwarded.
 //
-// Signal forwarding is currently available only on Linux.
+// Signal forwarding is currently available only on Darwin and Linux.
 var fwdSig [_NSIG]uintptr
 
 // sigmask represents a general signal mask compatible with the GOOS
@@ -59,6 +61,14 @@ func initsig() {
 		}
 
 		if t.flags&_SigSetStack != 0 {
+			setsigstack(i)
+			continue
+		}
+
+		// When built using c-archive or c-shared, only
+		// install signal handlers for synchronous signals.
+		// Set SA_ONSTACK for other signals if necessary.
+		if (isarchive || islibrary) && t.flags&_SigPanic == 0 {
 			setsigstack(i)
 			continue
 		}
@@ -185,7 +195,7 @@ func crash() {
 		// this means the OS X core file will be >128 GB and even on a zippy
 		// workstation can take OS X well over an hour to write (uninterruptible).
 		// Save users from making that mistake.
-		if ptrSize == 8 {
+		if sys.PtrSize == 8 {
 			return
 		}
 	}
@@ -195,7 +205,7 @@ func crash() {
 	raise(_SIGABRT)
 }
 
-// createSigM starts one global, sleeping thread to make sure at least one thread
+// ensureSigM starts one global, sleeping thread to make sure at least one thread
 // is available to catch signals enabled for os/signal.
 func ensureSigM() {
 	if maskUpdatedChan != nil {
@@ -226,11 +236,11 @@ func ensureSigM() {
 		for {
 			select {
 			case sig := <-enableSigChan:
-				if b := sig - 1; b >= 0 {
+				if b := sig - 1; sig > 0 {
 					sigBlocked[b/32] &^= (1 << (b & 31))
 				}
 			case sig := <-disableSigChan:
-				if b := sig - 1; b >= 0 {
+				if b := sig - 1; sig > 0 {
 					sigBlocked[b/32] |= (1 << (b & 31))
 				}
 			}
@@ -238,4 +248,20 @@ func ensureSigM() {
 			maskUpdatedChan <- struct{}{}
 		}
 	}()
+}
+
+// This is called when we receive a signal when there is no signal stack.
+// This can only happen if non-Go code calls sigaltstack to disable the
+// signal stack.  This is called via cgocallback to establish a stack.
+func noSignalStack(sig uint32) {
+	println("signal", sig, "received on thread with no signal stack")
+	throw("non-Go code disabled sigaltstack")
+}
+
+// This is called if we receive a signal when there is a signal stack
+// but we are not on it.  This can only happen if non-Go code called
+// sigaction without setting the SS_ONSTACK flag.
+func sigNotOnStack(sig uint32) {
+	println("signal", sig, "received but handler not on signal stack")
+	throw("non-Go code set up signal handler without SA_ONSTACK flag")
 }

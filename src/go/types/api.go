@@ -22,6 +22,8 @@
 // and checks for compliance with the language specification.
 // Use Info.Types[expr].Type for the results of type inference.
 //
+// For a tutorial, see https://golang.org/s/types-tutorial.
+//
 package types // import "go/types"
 
 import (
@@ -142,7 +144,7 @@ type Info struct {
 	//
 	//	*ast.ImportSpec    *PkgName for dot-imports and imports without renames
 	//	*ast.CaseClause    type-specific *Var for each type switch case clause (incl. default)
-	//      *ast.Field         anonymous struct field or parameter *Var
+	//      *ast.Field         anonymous parameter *Var
 	//
 	Implicits map[ast.Node]Object
 
@@ -297,8 +299,10 @@ func (init *Initializer) String() string {
 	return buf.String()
 }
 
-// Check type-checks a package and returns the resulting package object,
-// the first error if any, and if info != nil, additional type information.
+// Check type-checks a package and returns the resulting package object and
+// the first error if any. Additionally, if info != nil, Check populates each
+// of the non-nil maps in the Info struct.
+//
 // The package is marked as complete if no errors occurred, otherwise it is
 // incomplete. See Config.Error for controlling behavior in the presence of
 // errors.
@@ -320,7 +324,7 @@ func AssertableTo(V *Interface, T Type) bool {
 // AssignableTo reports whether a value of type V is assignable to a variable of type T.
 func AssignableTo(V, T Type) bool {
 	x := operand{mode: value, typ: V}
-	return x.assignableTo(nil, T) // config not needed for non-constant x
+	return x.assignableTo(nil, T, nil) // config not needed for non-constant x
 }
 
 // ConvertibleTo reports whether a value of type V is convertible to a value of type T.
