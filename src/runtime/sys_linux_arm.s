@@ -339,7 +339,11 @@ TEXT runtime·sigfwd(SB),NOSPLIT,$0-16
 	MOVW	info+8(FP), R1
 	MOVW	ctx+12(FP), R2
 	MOVW	fn+0(FP), R11
+	MOVW	R13, R4
+	SUB	$24, R13
+	BIC	$0x7, R13 // alignment for ELF ABI
 	BL	(R11)
+	MOVW	R4, R13
 	RET
 
 TEXT runtime·sigtramp(SB),NOSPLIT,$12
@@ -389,35 +393,6 @@ TEXT runtime·usleep(SB),NOSPLIT,$12
 	MOVW	$SYS_select, R7
 	SWI	$0
 	RET
-
-// Use kernel version instead of native armcas in asm_arm.s.
-// See ../sync/atomic/asm_linux_arm.s for details.
-TEXT cas<>(SB),NOSPLIT,$0
-	MOVW	$0xffff0fc0, R15 // R15 is hardware PC.
-
-TEXT runtime·cas(SB),NOSPLIT,$0
-	MOVW	ptr+0(FP), R2
-	MOVW	old+4(FP), R0
-loop:
-	MOVW	new+8(FP), R1
-	BL	cas<>(SB)
-	BCC	check
-	MOVW	$1, R0
-	MOVB	R0, ret+12(FP)
-	RET
-check:
-	// Kernel lies; double-check.
-	MOVW	ptr+0(FP), R2
-	MOVW	old+4(FP), R0
-	MOVW	0(R2), R3
-	CMP	R0, R3
-	BEQ	loop
-	MOVW	$0, R0
-	MOVB	R0, ret+12(FP)
-	RET
-
-TEXT runtime·casp1(SB),NOSPLIT,$0
-	B	runtime·cas(SB)
 
 // As for cas, memory barriers are complicated on ARM, but the kernel
 // provides a user helper. ARMv5 does not support SMP and has no

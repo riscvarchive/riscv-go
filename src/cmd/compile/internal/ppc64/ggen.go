@@ -69,13 +69,10 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 	}
 	if cnt < int64(4*gc.Widthptr) {
 		for i := int64(0); i < cnt; i += int64(gc.Widthptr) {
-			p = appendpp(p, ppc64.AMOVD, obj.TYPE_REG, ppc64.REGZERO, 0, obj.TYPE_MEM, ppc64.REGSP, 8+frame+lo+i)
+			p = appendpp(p, ppc64.AMOVD, obj.TYPE_REG, ppc64.REGZERO, 0, obj.TYPE_MEM, ppc64.REGSP, gc.Ctxt.FixedFrameSize()+frame+lo+i)
 		}
-		// TODO(dfc): https://golang.org/issue/12108
-		// If DUFFZERO is used inside a tail call (see genwrapper) it will
-		// overwrite the link register.
-	} else if false && cnt <= int64(128*gc.Widthptr) {
-		p = appendpp(p, ppc64.AADD, obj.TYPE_CONST, 0, 8+frame+lo-8, obj.TYPE_REG, ppc64.REGRT1, 0)
+	} else if cnt <= int64(128*gc.Widthptr) {
+		p = appendpp(p, ppc64.AADD, obj.TYPE_CONST, 0, gc.Ctxt.FixedFrameSize()+frame+lo-8, obj.TYPE_REG, ppc64.REGRT1, 0)
 		p.Reg = ppc64.REGSP
 		p = appendpp(p, obj.ADUFFZERO, obj.TYPE_NONE, 0, 0, obj.TYPE_MEM, 0, 0)
 		f := gc.Sysfunc("duffzero")
@@ -83,7 +80,7 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 		gc.Afunclit(&p.To, f)
 		p.To.Offset = 4 * (128 - cnt/int64(gc.Widthptr))
 	} else {
-		p = appendpp(p, ppc64.AMOVD, obj.TYPE_CONST, 0, 8+frame+lo-8, obj.TYPE_REG, ppc64.REGTMP, 0)
+		p = appendpp(p, ppc64.AMOVD, obj.TYPE_CONST, 0, gc.Ctxt.FixedFrameSize()+frame+lo-8, obj.TYPE_REG, ppc64.REGTMP, 0)
 		p = appendpp(p, ppc64.AADD, obj.TYPE_REG, ppc64.REGTMP, 0, obj.TYPE_REG, ppc64.REGRT1, 0)
 		p.Reg = ppc64.REGSP
 		p = appendpp(p, ppc64.AMOVD, obj.TYPE_CONST, 0, cnt, obj.TYPE_REG, ppc64.REGTMP, 0)
@@ -130,7 +127,7 @@ var panicdiv *gc.Node
  *	res = nl % nr
  * according to op.
  */
-func dodiv(op int, nl *gc.Node, nr *gc.Node, res *gc.Node) {
+func dodiv(op gc.Op, nl *gc.Node, nr *gc.Node, res *gc.Node) {
 	// Have to be careful about handling
 	// most negative int divided by -1 correctly.
 	// The hardware will generate undefined result.
@@ -302,7 +299,7 @@ func cgen_hmul(nl *gc.Node, nr *gc.Node, res *gc.Node) {
  *	res = nl << nr
  *	res = nl >> nr
  */
-func cgen_shift(op int, bounded bool, nl *gc.Node, nr *gc.Node, res *gc.Node) {
+func cgen_shift(op gc.Op, bounded bool, nl *gc.Node, nr *gc.Node, res *gc.Node) {
 	a := int(optoas(op, nl.Type))
 
 	if nr.Op == gc.OLITERAL {
@@ -443,10 +440,7 @@ func clearfat(nl *gc.Node) {
 
 		// The loop leaves R3 on the last zeroed dword
 		boff = 8
-		// TODO(dfc): https://golang.org/issue/12108
-		// If DUFFZERO is used inside a tail call (see genwrapper) it will
-		// overwrite the link register.
-	} else if false && q >= 4 {
+	} else if q >= 4 {
 		p := gins(ppc64.ASUB, nil, &dst)
 		p.From.Type = obj.TYPE_CONST
 		p.From.Offset = 8

@@ -60,6 +60,9 @@ func TestGdbPython(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("gdb does not work on darwin")
 	}
+	if final := os.Getenv("GOROOT_FINAL"); final != "" && runtime.GOROOT() != final {
+		t.Skip("gdb test can fail with GOROOT_FINAL pending")
+	}
 
 	checkGdbPython(t)
 
@@ -84,6 +87,7 @@ func TestGdbPython(t *testing.T) {
 
 	args := []string{"-nx", "-q", "--batch", "-iex",
 		fmt.Sprintf("add-auto-load-safe-path %s/src/runtime", runtime.GOROOT()),
+		"-ex", "info auto-load python-scripts",
 		"-ex", "br main.go:10",
 		"-ex", "run",
 		"-ex", "echo BEGIN info goroutines\n",
@@ -103,7 +107,7 @@ func TestGdbPython(t *testing.T) {
 	// stack frames on RISC architectures.
 	canBackTrace := false
 	switch runtime.GOARCH {
-	case "amd64", "386", "ppc64", "ppc64le", "arm", "arm64":
+	case "amd64", "386", "ppc64", "ppc64le", "arm", "arm64", "mips64", "mips64le":
 		canBackTrace = true
 		args = append(args,
 			"-ex", "echo BEGIN goroutine 2 bt\n",
@@ -126,7 +130,10 @@ func TestGdbPython(t *testing.T) {
 			t.Skipf("skipping because GOROOT=%s does not exist", runtime.GOROOT())
 		}
 
-		t.Fatalf("failed to load Go runtime support: %s", firstLine)
+		_, file, _, _ := runtime.Caller(1)
+
+		t.Logf("package testing source file: %s", file)
+		t.Fatalf("failed to load Go runtime support: %s\n%s", firstLine, got)
 	}
 
 	// Extract named BEGIN...END blocks from output

@@ -8,6 +8,7 @@
 package runtime
 
 import (
+	"runtime/internal/atomic"
 	"unsafe"
 )
 
@@ -250,16 +251,11 @@ func mProf_Malloc(p unsafe.Pointer, size uintptr) {
 }
 
 // Called when freeing a profiled block.
-func mProf_Free(b *bucket, size uintptr, freed bool) {
+func mProf_Free(b *bucket, size uintptr) {
 	lock(&proflock)
 	mp := b.mp()
-	if freed {
-		mp.recent_frees++
-		mp.recent_free_bytes += size
-	} else {
-		mp.prev_frees++
-		mp.prev_free_bytes += size
-	}
+	mp.prev_frees++
+	mp.prev_free_bytes += size
 	unlock(&proflock)
 }
 
@@ -285,14 +281,14 @@ func SetBlockProfileRate(rate int) {
 		}
 	}
 
-	atomicstore64(&blockprofilerate, uint64(r))
+	atomic.Store64(&blockprofilerate, uint64(r))
 }
 
 func blockevent(cycles int64, skip int) {
 	if cycles <= 0 {
 		cycles = 1
 	}
-	rate := int64(atomicload64(&blockprofilerate))
+	rate := int64(atomic.Load64(&blockprofilerate))
 	if rate <= 0 || (rate > cycles && int64(fastrand1())%rate > cycles) {
 		return
 	}
@@ -372,6 +368,9 @@ func (r *MemProfileRecord) Stack() []uintptr {
 	return r.Stack0[0:]
 }
 
+// MemProfile returns a profile of memory allocated and freed per allocation
+// site.
+//
 // MemProfile returns n, the number of records in the current memory profile.
 // If len(p) >= n, MemProfile copies the profile into p and returns n, true.
 // If len(p) < n, MemProfile does not change p and returns n, false.
@@ -380,6 +379,12 @@ func (r *MemProfileRecord) Stack() []uintptr {
 // where r.AllocBytes > 0 but r.AllocBytes == r.FreeBytes.
 // These are sites where memory was allocated, but it has all
 // been released back to the runtime.
+//
+// The returned profile may be up to two garbage collection cycles old.
+// This is to avoid skewing the profile toward allocations; because
+// allocations happen in real time but frees are delayed until the garbage
+// collector performs sweeping, the profile only accounts for allocations
+// that have had a chance to be freed by the garbage collector.
 //
 // Most clients should use the runtime/pprof package or
 // the testing package's -test.memprofile flag instead
@@ -493,7 +498,7 @@ func BlockProfile(p []BlockProfileRecord) (n int, ok bool) {
 // Most clients should use the runtime/pprof package instead
 // of calling ThreadCreateProfile directly.
 func ThreadCreateProfile(p []StackRecord) (n int, ok bool) {
-	first := (*m)(atomicloadp(unsafe.Pointer(&allm)))
+	first := (*m)(atomic.Loadp(unsafe.Pointer(&allm)))
 	for mp := first; mp != nil; mp = mp.alllink {
 		n++
 	}

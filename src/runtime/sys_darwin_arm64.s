@@ -24,9 +24,9 @@
 #define	SYS_kill           37
 #define	SYS_getpid         20
 #define	SYS___pthread_kill 328
+#define	SYS_pthread_sigmask 329
 #define	SYS_setitimer      83
 #define	SYS___sysctl       202
-#define	SYS_sigprocmask    48
 #define	SYS_sigaction      46
 #define	SYS_sigreturn      184
 #define	SYS_select         93
@@ -180,6 +180,14 @@ TEXT runtime·nanotime(SB),NOSPLIT,$40
 	MOVD	R0, ret+0(FP)
 	RET
 
+TEXT runtime·sigfwd(SB),NOSPLIT,$0-32
+	MOVW	sig+8(FP), R0
+	MOVD	info+16(FP), R1
+	MOVD	ctx+24(FP), R2
+	MOVD	fn+0(FP), R11
+	BL	(R11)
+	RET
+
 // Sigtramp's job is to call the actual signal handler.
 // It is called with the following arguments on the stack:
 //	LR	"return address" - ignored
@@ -256,7 +264,7 @@ TEXT runtime·sigprocmask(SB),NOSPLIT,$0
 	MOVW	sig+0(FP), R0
 	MOVD	new+8(FP), R1
 	MOVD	old+16(FP), R2
-	MOVW	$SYS_sigprocmask, R16
+	MOVW	$SYS_pthread_sigmask, R16
 	SVC	$0x80
 	BCC	2(PC)
 	BL	notok<>(SB)
