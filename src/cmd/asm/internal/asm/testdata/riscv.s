@@ -3,30 +3,31 @@
 // license that can be found in the LICENSE file.
 
 // This input was created by hand.
+// Modified to fit what plan 9 assemblers tend to look
+// like, with 'destination' last, be it register target,
+// or location.
 
 TEXT memcpy(SB),0,$-24
-	// TODO(prattmic): RISCV gas assembly does register first, memory second
-	// for load/store. The same is done here for now, for consistency with gas,
-	// but we should probably switch to source first, destination second.
-	// N.B. Even ARM, which typically uses destination first, source second
-	// does the opposite in Go assembly.
-	LD	T0, dst+0(FB)
-	LD	T1, src+8(FB)
-	LD	T2, size+16(FB)
+	LD	dst+0(FB), T0
+	LD	src+8(FB), T1
+	LD	size+16(FB), T2
 
 loop:
-	BGE	ZERO, T2, done
+	BGE	T2, ZERO, done
 
-	LBU	T4, (T1)
-	SB	T4, (T0)
+	LBU	(T1), T4
+	SB	(T0), T4
 
-	ADDI	T0, T0, $1
-	ADDI	T1, T1, $1
-	ADDI	T2, T2, $-1
+	// Plan 9 assemblers tend not to have data type attributes
+	// in the instruction if they are well defined in the operand.
+	// Skip the "I" since it's clearly immediate.
+	ADD	T0, $1, T0
+	ADD	T1, $1, T1
+	ADD	T2, $-1, T2
 
 	// Unconditional jump, discard link.
 	// Should be pseudo-op 'J'.
-	JAL	loop, ZERO
+	J	loop
 
 done:
 	RET
