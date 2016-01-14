@@ -26,6 +26,11 @@ import (
 	"cmd/internal/obj"
 )
 
+// TODO(bbaren)
+type Optab struct {
+	size int8
+}
+
 // progedit is called individually for each Prog.
 // TODO(myenik)
 func progedit(ctxt *obj.Link, p *obj.Prog) {
@@ -68,11 +73,64 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
-// TODO(myenik)
+// TODO(bbaren): Looks up an operation in the (currently nonexistent) operation
+// table.
+func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
+	log.Printf("oplook: ctxt: %+v p: %+v", ctxt, p)
+	return nil
+}
+
+// TODO(bbaren): Encodes a machine instruction.
+func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
+	log.Printf("asmout: ctxt: %+v p: %+v o: %+v", ctxt, p, o)
+	return 0
+}
+
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	log.Printf("assemble: ctxt: %+v", ctxt)
 
-	for ; cursym != nil; cursym = cursym.Next {
-		log.Printf("cursym: %+v", cursym)
+	if cursym.Text == nil || cursym.Text.Link == nil {
+		// We're being asked to assemble an external function or an ELF
+		// section symbol.  Do nothing.
+		return
 	}
+
+	ctxt.Cursym = cursym
+
+	// Lay out code, keeping track of how many bytes this symbol will wind
+	// up using.
+	pc := int64(0) // program counter relative to the start of the symbol
+	ctxt.Autosize = int32(cursym.Text.To.Offset + 4)
+	bp := cursym.P // output pointer
+	for p := cursym.Text; p != nil; p = p.Link {
+		ctxt.Curp = p
+		ctxt.Pc = pc
+		p.Pc = pc
+
+		o := oplook(ctxt, p)
+		m := o.size
+
+		// All operations should be 32 bits wide.
+		if m%4 != 0 || p.Pc%4 != 0 {
+			ctxt.Diag("!pc invalid: %v size=%d", p, m)
+		}
+
+		if m == 0 {
+			ctxt.Diag("zero-width instruction\n%v", p)
+			continue
+		}
+
+		out := asmout(ctxt, p, o)
+		bp[0] = byte(out)
+		bp = bp[1:]
+		bp[0] = byte(out >> 8)
+		bp = bp[1:]
+		bp[0] = byte(out >> 16)
+		bp = bp[1:]
+		bp[0] = byte(out >> 24)
+		bp = bp[1:]
+
+		pc += int64(m)
+	}
+	cursym.Size = pc // remember the size of this symbol
 }
