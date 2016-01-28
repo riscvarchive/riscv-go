@@ -199,31 +199,83 @@ const (
 
 // TODO(rsc): Describe prog.
 // TODO(rsc): Describe TEXT/GLOBL flag in from3, DATA width in from3.
+//
+// Note: Usage of From, From3, To, Reg, and RegTo2 for instruction
+// input/output operands varies from one arch to another.
 type Prog struct {
-	Ctxt   *Link
-	Link   *Prog
-	From   Addr
-	From3  *Addr // optional
-	To     Addr
-	Opt    interface{}
-	Forwd  *Prog
-	Pcond  *Prog
-	Rel    *Prog // Source of forward jumps on x86; pcrel on arm
-	Pc     int64
-	Lineno int32
-	Spadj  int32
-	As     int16
-	Reg    int16
-	RegTo2 int16 // 2nd register output operand
-	Mark   uint16
-	Optab  uint16
-	Scond  uint8
-	Back   uint8
-	Ft     uint8
-	Tt     uint8
-	Isize  uint8
-	Mode   int8
+	// Ctxt is the linker context.
+	Ctxt *Link
 
+	// Link is the next Prog in the linked list.
+	Link *Prog
+
+	// From is an instruction source operand.
+	From Addr
+
+	// From3 is another (optional) instruction source operand.
+	From3 *Addr
+
+	// To is an instruction destination operand.
+	To Addr
+
+	// Opt provides an empty context interface used by various parts
+	// of the compiler.
+	Opt interface{}
+
+	// Forwd is the target of a forward jump.
+	Forwd *Prog
+
+	// Pcond is the target of a conditional jump.
+	Pcond *Prog
+
+	// Rel is the source of forward jumps on x86; pcrel on arm.
+	Rel *Prog
+
+	// Pc is the instruction address.
+	Pc int64
+
+	// Lineno is the line number of this instruction in the source file.
+	Lineno int32
+
+	// Spadj is the amount this instruction adjusts SP by (e.g., a PUSH
+	// instruction may adjust SP -4).
+	Spadj int32
+
+	// As is one of the arch (or obj) instruction constants.
+	As int16
+
+	// Reg is an instruction output register.
+	Reg int16
+
+	// RegTo2 is an second instruction output register.
+	RegTo2 int16
+
+	// Mark contains arch-specific instruction flags.
+	Mark uint16
+
+	// Optab is the arch-specific opcode index.
+	Optab uint16
+
+	// Scond are conditional instruction condition bits.
+	Scond uint8
+
+	// Back is a special branch type field used only for x86.
+	Back uint8
+
+	// Ft is the Ytype for Prog.From, used only on x86.
+	Ft uint8
+
+	// Ft is the Ytype for Prog.To, used only on x86.
+	Tt uint8
+
+	// Isize is the instruction size, used only on x86.
+	// FIXME(prattmic): I think??
+	Isize uint8
+
+	// Instruction in 32 or 64-bit mode, used only on x86.
+	Mode int8
+
+	// Info holds information for clients. See ProgInfo.
 	Info ProgInfo
 }
 
