@@ -395,3 +395,10 @@ const (
 	AFCVTDLU
 	AFMVDX
 )
+
+// Operands
+const (
+	// No operand.  This constant goes in any operand slot which is unused
+	// (e.g., the two source register slots in RDCYCLE).
+	C_NONE = iota
+)
