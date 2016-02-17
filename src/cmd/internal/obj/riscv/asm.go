@@ -183,11 +183,26 @@ func reg(r int16) uint32 {
 
 // Encodes an R-type instruction.
 func instr_r(funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+	if funct7>>7 != 0 {
+		log.Fatalf("instr_r: too large funct7 %#x", funct7)
+	}
+	if funct3>>3 != 0 {
+		log.Fatalf("instr_r: too large funct3 %#x", funct3)
+	}
+	if opcode>>7 != 0 {
+		log.Fatalf("instr_r: too large opcode %#x", opcode)
+	}
 	return funct7<<25 | reg(rs2)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
 // Encodes an I-type instruction.
 func instr_i(imm uint32, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+	if funct3>>3 != 0 {
+		log.Fatalf("instr_i: too large funct3 %#x", funct3)
+	}
+	if opcode>>7 != 0 {
+		log.Fatalf("instr_i: too large opcode %#x", opcode)
+	}
 	return imm<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
