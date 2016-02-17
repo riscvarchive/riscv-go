@@ -33,6 +33,7 @@ var LinkRISCV = obj.LinkArch{
 	Assemble:   assemble,
 	Follow:     follow,
 	Progedit:   progedit,
+	UnaryDst:   unaryDst,
 	Minlc:      4, // This is the instruction width.
 	Ptrsize:    8,
 	Regsize:    8,

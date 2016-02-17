@@ -395,3 +395,12 @@ const (
 	AFCVTDLU
 	AFMVDX
 )
+
+var unaryDst = map[int]bool{
+	ARDCYCLE:    true,
+	ARDCYCLEH:   true,
+	ARDTIME:     true,
+	ARDTIMEH:    true,
+	ARDINSTRET:  true,
+	ARDINSTRETH: true,
+}
