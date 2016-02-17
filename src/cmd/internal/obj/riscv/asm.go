@@ -31,6 +31,10 @@ const (
 	// correspond to actual RISC-V instructions (e.g., the TEXT directive at
 	// the start of each symbol).
 	type_pseudo = iota
+
+	// System instructions (read counters).  These are encoded using a
+	// variant of the I-type encoding.
+	type_system
 )
 
 type Optab struct {
@@ -50,6 +54,8 @@ var optab = []Optab{
 	// TODO(bbaren, mpratt): Can we strip these out in progedit or
 	// preprocess?
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
+
+	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 }
 
 // progedit is called individually for each Prog.
@@ -150,7 +156,29 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 // Looks up an operation in the operation table.
 func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
 	log.Printf("oplook: ctxt: %+v p: %+v", ctxt, p)
-	return &optab[0] // Just make everything a NOP.
+
+	for i := 0; i < len(optab); i++ {
+		if optab[i].as == p.As {
+			return &optab[i]
+		}
+	}
+
+	// No instruction found, so just return a placeholder NOP.
+	log.Printf("oplook: could not find op, returning NOP")
+	return &optab[0]
+}
+
+// Encodes a register.
+func reg(r int16) uint32 {
+	if r < REG_X0 || REG_END <= r {
+		log.Fatalf("reg: invalid register %d", r)
+	}
+	return uint32(r - obj.RBaseRISCV)
+}
+
+// Encodes an I-type instruction.
+func instr_i(imm uint32, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+	return imm<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
 // Encodes a machine instruction.
@@ -163,6 +191,9 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		ctxt.Diag("unknown type %d", o.type_)
 	case type_pseudo:
 		break
+	case type_system:
+		encoded := encode(o.as)
+		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
 	}
 	return result
 }

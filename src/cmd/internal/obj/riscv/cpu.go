@@ -416,4 +416,8 @@ const (
 	// No operand.  This constant goes in any operand slot which is unused
 	// (e.g., the two source register slots in RDCYCLE).
 	C_NONE = iota
+
+	// An integer register, either numbered (e.g., R12) or with an ABI name
+	// (e.g., T2).
+	C_REGI
 )
