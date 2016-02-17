@@ -32,6 +32,9 @@ const (
 	// the start of each symbol).
 	type_pseudo = iota
 
+	// Integer register-register instructions, such as ADD.
+	type_regi2
+
 	// System instructions (read counters).  These are encoded using a
 	// variant of the I-type encoding.
 	type_system
@@ -54,6 +57,8 @@ var optab = []Optab{
 	// TODO(bbaren, mpratt): Can we strip these out in progedit or
 	// preprocess?
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
+
+	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 }
@@ -176,6 +181,11 @@ func reg(r int16) uint32 {
 	return uint32(r - obj.RBaseRISCV)
 }
 
+// Encodes an R-type instruction.
+func instr_r(funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+	return funct7<<25 | reg(rs2)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
+}
+
 // Encodes an I-type instruction.
 func instr_i(imm uint32, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
 	return imm<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
@@ -191,6 +201,9 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		ctxt.Diag("unknown type %d", o.type_)
 	case type_pseudo:
 		break
+	case type_regi2:
+		encoded := encode(o.as)
+		result = instr_r(encoded.funct7, p.From3.Reg, p.From.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
 		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
