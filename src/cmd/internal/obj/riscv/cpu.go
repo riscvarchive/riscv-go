@@ -395,3 +395,8 @@ const (
 	AFCVTDLU
 	AFMVDX
 )
+
+// Operands
+const (
+	C_NONE = iota
+)

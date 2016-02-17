@@ -26,9 +26,24 @@ import (
 	"cmd/internal/obj"
 )
 
-// TODO(bbaren)
+const (
+	type_pseudo = iota
+)
+
 type Optab struct {
-	size int8
+	as    int16
+	op1   uint8
+	op2   uint8
+	op3   uint8
+	type_ int8 // internal instruction type used to dispatch in asmout
+	size  int8 // bytes
+}
+
+var optab = []Optab{
+	// This is a Go (liblink) NOP, not a RISC-V NOP; it's only used to make
+	// the assembler happy with otherwise empty symbols.  It thus occupies
+	// zero bytes.  (RISC-V NOPs are not currently supported.)
+	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
 }
 
 // progedit is called individually for each Prog.
@@ -126,17 +141,24 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
-// TODO(bbaren): Looks up an operation in the (currently nonexistent) operation
-// table.
+// Looks up an operation in the operation table.
 func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
 	log.Printf("oplook: ctxt: %+v p: %+v", ctxt, p)
-	return nil
+	return &optab[0] // Just make everything a NOP.
 }
 
-// TODO(bbaren): Encodes a machine instruction.
+// Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	log.Printf("asmout: ctxt: %+v p: %+v o: %+v", ctxt, p, o)
-	return 0
+
+	result := uint32(0)
+	switch o.type_ {
+	default:
+		ctxt.Diag("unknown type %d", o.type_)
+	case type_pseudo:
+		break
+	}
+	return result
 }
 
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
@@ -169,7 +191,10 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 		}
 
 		if m == 0 {
-			ctxt.Diag("zero-width instruction\n%v", p)
+			// TODO(bbaren): Once everything's all done, do something like
+			//   if not a nop {
+			//     bail out
+			//   }
 			continue
 		}
 
