@@ -48,9 +48,23 @@ var (
 		// General registers with ABI names.
 		REG_ZERO: "ZERO",
 		REG_RA:   "RA",
-		REG_FP:   "FP",
-		// REG_S0 is REG_FP.
+		REG_SP:   "SP",
+		REG_GP:   "GP",
+		REG_TP:   "TP",
+		REG_T0:   "T0",
+		REG_T1:   "T1",
+		REG_T2:   "T2",
+		REG_S0:   "S0",
+		// REG_FP is REG_S0.
 		// REG_S1 is REG_SB.
+		REG_A0: "A0",
+		REG_A1: "A1",
+		REG_A2: "A2",
+		REG_A3: "A3",
+		REG_A4: "A4",
+		REG_A5: "A5",
+		REG_A6: "A6",
+		REG_A7: "A7",
 		// REG_S2 is REG_RT1.
 		// REG_S3 is REG_RT2.
 		// REG_S4 is REG_CTXT.
@@ -61,24 +75,10 @@ var (
 		REG_S9:  "S9",
 		REG_S10: "S10",
 		REG_S11: "S11",
-		REG_SP:  "SP",
-		REG_TP:  "TP",
-		REG_V0:  "V0",
-		REG_V1:  "V1",
-		REG_A0:  "A0",
-		REG_A1:  "A1",
-		REG_A2:  "A2",
-		REG_A3:  "A3",
-		REG_A4:  "A4",
-		REG_A5:  "A5",
-		REG_A6:  "A6",
-		REG_A7:  "A7",
-		REG_T0:  "T0",
-		REG_T1:  "T1",
-		REG_T2:  "T2",
 		REG_T3:  "T3",
 		REG_T4:  "T4",
-		REG_GP:  "GP",
+		REG_T5:  "T5",
+		REG_T6:  "T6",
 
 		// Golang runtime register names.
 		REG_SB:   "SB",
@@ -88,8 +88,24 @@ var (
 		REG_G:    "G",
 
 		// ABI names for floating point registers.
+		REG_FT0:  "FT0",
+		REG_FT1:  "FT1",
+		REG_FT2:  "FT2",
+		REG_FT3:  "FT3",
+		REG_FT4:  "FT4",
+		REG_FT5:  "FT5",
+		REG_FT6:  "FT6",
+		REG_FT7:  "FT7",
 		REG_FS0:  "FS0",
 		REG_FS1:  "FS1",
+		REG_FA0:  "FA0",
+		REG_FA1:  "FA1",
+		REG_FA2:  "FA2",
+		REG_FA3:  "FA3",
+		REG_FA4:  "FA4",
+		REG_FA5:  "FA5",
+		REG_FA6:  "FA6",
+		REG_FA7:  "FA7",
 		REG_FS2:  "FS2",
 		REG_FS3:  "FS3",
 		REG_FS4:  "FS4",
@@ -100,26 +116,10 @@ var (
 		REG_FS9:  "FS9",
 		REG_FS10: "FS10",
 		REG_FS11: "FS11",
-		REG_FS12: "FS12",
-		REG_FS13: "FS13",
-		REG_FS14: "FS14",
-		REG_FS15: "FS15",
-		REG_FV0:  "FV0",
-		REG_FV1:  "FV1",
-		REG_FA0:  "FA0",
-		REG_FA1:  "FA1",
-		REG_FA2:  "FA2",
-		REG_FA3:  "FA3",
-		REG_FA4:  "FA4",
-		REG_FA5:  "FA5",
-		REG_FA6:  "FA6",
-		REG_FA7:  "FA7",
-		REG_FT0:  "FT0",
-		REG_FT1:  "FT1",
-		REG_FT2:  "FT2",
-		REG_FT3:  "FT3",
-		REG_FT4:  "FT4",
-		REG_FT5:  "FT5",
+		REG_FT8:  "FT8",
+		REG_FT9:  "FT9",
+		REG_FT10: "FT10",
+		REG_FT11: "FT11",
 	}
 )
 
@@ -135,11 +135,26 @@ func initRegisters() {
 	}
 
 	// General registers with ABI names.
+
 	Registers["ZERO"] = REG_ZERO
 	Registers["RA"] = REG_RA
-	Registers["FP"] = REG_FP
+	Registers["SP"] = REG_SP
+	Registers["GP"] = REG_GP
+	Registers["TP"] = REG_TP
+	Registers["T0"] = REG_T0
+	Registers["T1"] = REG_T1
+	Registers["T2"] = REG_T2
 	Registers["S0"] = REG_S0
+	Registers["FP"] = REG_FP
 	Registers["S1"] = REG_S1
+	Registers["A0"] = REG_A0
+	Registers["A1"] = REG_A1
+	Registers["A2"] = REG_A2
+	Registers["A3"] = REG_A3
+	Registers["A4"] = REG_A4
+	Registers["A5"] = REG_A5
+	Registers["A6"] = REG_A6
+	Registers["A7"] = REG_A7
 	Registers["S2"] = REG_S2
 	Registers["S3"] = REG_S3
 	Registers["S4"] = REG_S4
@@ -150,24 +165,10 @@ func initRegisters() {
 	Registers["S9"] = REG_S9
 	Registers["S10"] = REG_S10
 	Registers["S11"] = REG_S11
-	Registers["SP"] = REG_SP
-	Registers["TP"] = REG_TP
-	Registers["V0"] = REG_V0
-	Registers["V1"] = REG_V1
-	Registers["A0"] = REG_A0
-	Registers["A1"] = REG_A1
-	Registers["A2"] = REG_A2
-	Registers["A3"] = REG_A3
-	Registers["A4"] = REG_A4
-	Registers["A5"] = REG_A5
-	Registers["A6"] = REG_A6
-	Registers["A7"] = REG_A7
-	Registers["T0"] = REG_T0
-	Registers["T1"] = REG_T1
-	Registers["T2"] = REG_T2
 	Registers["T3"] = REG_T3
 	Registers["T4"] = REG_T4
-	Registers["GP"] = REG_GP
+	Registers["T5"] = REG_T5
+	Registers["T6"] = REG_T6
 
 	// Golang runtime register names.
 	Registers["SB"] = REG_SB
@@ -177,8 +178,24 @@ func initRegisters() {
 	Registers["G"] = REG_G
 
 	// ABI names for floating point registers.
+	Registers["FT0"] = REG_FT0
+	Registers["FT1"] = REG_FT1
+	Registers["FT2"] = REG_FT2
+	Registers["FT3"] = REG_FT3
+	Registers["FT4"] = REG_FT4
+	Registers["FT5"] = REG_FT5
+	Registers["FT6"] = REG_FT6
+	Registers["FT7"] = REG_FT7
 	Registers["FS0"] = REG_FS0
 	Registers["FS1"] = REG_FS1
+	Registers["FA0"] = REG_FA0
+	Registers["FA1"] = REG_FA1
+	Registers["FA2"] = REG_FA2
+	Registers["FA3"] = REG_FA3
+	Registers["FA4"] = REG_FA4
+	Registers["FA5"] = REG_FA5
+	Registers["FA6"] = REG_FA6
+	Registers["FA7"] = REG_FA7
 	Registers["FS2"] = REG_FS2
 	Registers["FS3"] = REG_FS3
 	Registers["FS4"] = REG_FS4
@@ -189,26 +206,10 @@ func initRegisters() {
 	Registers["FS9"] = REG_FS9
 	Registers["FS10"] = REG_FS10
 	Registers["FS11"] = REG_FS11
-	Registers["FS12"] = REG_FS12
-	Registers["FS13"] = REG_FS13
-	Registers["FS14"] = REG_FS14
-	Registers["FS15"] = REG_FS15
-	Registers["FV0"] = REG_FV0
-	Registers["FV1"] = REG_FV1
-	Registers["FA0"] = REG_FA0
-	Registers["FA1"] = REG_FA1
-	Registers["FA2"] = REG_FA2
-	Registers["FA3"] = REG_FA3
-	Registers["FA4"] = REG_FA4
-	Registers["FA5"] = REG_FA5
-	Registers["FA6"] = REG_FA6
-	Registers["FA7"] = REG_FA7
-	Registers["FT0"] = REG_FT0
-	Registers["FT1"] = REG_FT1
-	Registers["FT2"] = REG_FT2
-	Registers["FT3"] = REG_FT3
-	Registers["FT4"] = REG_FT4
-	Registers["FT5"] = REG_FT5
+	Registers["FT8"] = REG_FT8
+	Registers["FT9"] = REG_FT9
+	Registers["FT10"] = REG_FT10
+	Registers["FT11"] = REG_FT11
 }
 
 // checkRegNames asserts that regNames includes all registers.
