@@ -395,3 +395,18 @@ const (
 	AFCVTDLU
 	AFMVDX
 )
+
+// All unary instructions which write to their arguments (as opposed to reading
+// from them) go here.  The assembly parser uses this information to populate
+// its AST in a semantically reasonable way.
+//
+// Any instructions not listed here is assumed to either be non-unary or to read
+// from its argument.
+var unaryDst = map[int]bool{
+	ARDCYCLE:    true,
+	ARDCYCLEH:   true,
+	ARDTIME:     true,
+	ARDTIMEH:    true,
+	ARDINSTRET:  true,
+	ARDINSTRETH: true,
+}
