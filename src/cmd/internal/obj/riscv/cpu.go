@@ -203,6 +203,8 @@ const (
 // Instructions that are commented out were duplicates in other sections of the
 // table.
 // TODO(myenik) remove these duplicates if they are not needed.
+//
+// If you modify this table, you MUST run 'go generate' to regenerate anames.go!
 const (
 	// RV32I
 	ALUI = obj.ABaseRISCV + obj.A_ARCHSPECIFIC + iota
