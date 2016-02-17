@@ -178,18 +178,15 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 
 	ctxt.Cursym = cursym
 
-	// Lay out code, keeping track of how many bytes this symbol will wind
-	// up using.
+	// Determine how many bytes this symbol will wind up using.
 	pc := int64(0) // program counter relative to the start of the symbol
 	ctxt.Autosize = int32(cursym.Text.To.Offset + 4)
-	bp := cursym.P // output pointer
 	for p := cursym.Text; p != nil; p = p.Link {
 		ctxt.Curp = p
 		ctxt.Pc = pc
 		p.Pc = pc
 
-		o := oplook(ctxt, p)
-		m := o.size
+		m := oplook(ctxt, p).size
 
 		// All operations should be 32 bits wide.
 		if m%4 != 0 || p.Pc%4 != 0 {
@@ -204,17 +201,23 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 			continue
 		}
 
-		out := asmout(ctxt, p, o)
-		bp[0] = byte(out)
-		bp = bp[1:]
-		bp[0] = byte(out >> 8)
-		bp = bp[1:]
-		bp[0] = byte(out >> 16)
-		bp = bp[1:]
-		bp[0] = byte(out >> 24)
-		bp = bp[1:]
-
 		pc += int64(m)
 	}
 	cursym.Size = pc // remember the size of this symbol
+
+	// Allocate for the symbol.
+	obj.Symgrow(ctxt, cursym, cursym.Size)
+
+	// Lay out code.
+	bp := cursym.P
+	for p := cursym.Text; p != nil; p = p.Link {
+		ctxt.Curp = p
+		ctxt.Pc = p.Pc
+
+		o := oplook(ctxt, p)
+		if o.size != 0 {
+			ctxt.Arch.ByteOrder.PutUint32(bp, asmout(ctxt, p, o))
+			bp = bp[4:]
+		}
+	}
 }
