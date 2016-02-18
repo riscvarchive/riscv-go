@@ -58,6 +58,7 @@ var okgoarch = []string{
 	"mips64le",
 	"ppc64",
 	"ppc64le",
+	"riscv",
 }
 
 // The known operating systems.
