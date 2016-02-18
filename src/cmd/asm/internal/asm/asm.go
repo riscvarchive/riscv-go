@@ -381,6 +381,14 @@ func (p *Parser) asmJump(op int, cond string, a []obj.Addr) {
 			prog.Reg = p.getRegister(prog, op, &a[1])
 			break
 		}
+		if p.arch.Thechar == 'V' {
+			// 3-operand jumps.
+			// First two must be registers
+			target = &a[2]
+			prog.From = a[0]
+			prog.Reg = p.getRegister(prog, op, &a[1])
+			break
+		}
 		fallthrough
 	default:
 		p.errorf("wrong number of arguments to %s instruction", obj.Aconv(op))
@@ -593,6 +601,10 @@ func (p *Parser) asmInstruction(op int, cond string, a []obj.Addr) {
 				p.errorf("invalid addressing modes for %s instruction", obj.Aconv(op))
 				return
 			}
+		case 'V':
+			prog.From = a[0]
+			prog.From3 = newAddr(a[1])
+			prog.To = a[2]
 		default:
 			p.errorf("TODO: implement three-operand instructions for this architecture")
 			return
