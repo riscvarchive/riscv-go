@@ -35,9 +35,9 @@ const (
 
 type Optab struct {
 	as    int16
-	op1   uint8
-	op2   uint8
-	op3   uint8
+	src1  uint8
+	src2  uint8
+	dest  uint8
 	type_ int8 // internal instruction type used to dispatch in asmout
 	size  int8 // bytes
 }
