@@ -121,3 +121,29 @@ func TestCgoDLLImports(t *testing.T) {
 		t.Fatalf("expected %q, but got %v", want, got)
 	}
 }
+
+func TestCgoExecSignalMask(t *testing.T) {
+	// Test issue 13164.
+	switch runtime.GOOS {
+	case "windows", "plan9":
+		t.Skipf("skipping signal mask test on %s", runtime.GOOS)
+	}
+	got := runTestProg(t, "testprogcgo", "CgoExecSignalMask")
+	want := "OK\n"
+	if got != want {
+		t.Errorf("expected %q, got %v", want, got)
+	}
+}
+
+func TestEnsureDropM(t *testing.T) {
+	// Test for issue 13881.
+	switch runtime.GOOS {
+	case "windows", "plan9":
+		t.Skipf("skipping dropm test on %s", runtime.GOOS)
+	}
+	got := runTestProg(t, "testprogcgo", "EnsureDropM")
+	want := "OK\n"
+	if got != want {
+		t.Errorf("expected %q, got %v", want, got)
+	}
+}

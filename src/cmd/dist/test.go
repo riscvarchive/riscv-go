@@ -9,7 +9,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -337,7 +336,11 @@ func (t *tester) registerTests() {
 	} else {
 		// Use a format string to only list packages and commands that have tests.
 		const format = "{{if (or .TestGoFiles .XTestGoFiles)}}{{.ImportPath}}{{end}}"
-		cmd := exec.Command("go", "list", "-f", format, "std")
+		cmd := exec.Command("go", "list", "-f", format)
+		if t.race {
+			cmd.Args = append(cmd.Args, "-tags", "race")
+		}
+		cmd.Args = append(cmd.Args, "std")
 		if !t.race {
 			cmd.Args = append(cmd.Args, "cmd")
 		}
@@ -502,25 +505,12 @@ func (t *tester) registerTests() {
 		}
 	}
 
-	// Doc and shootout tests only run on builders.
+	// Doc tests only run on builders.
 	// They find problems approximately never.
 	if t.hasBash() && t.goos != "nacl" && t.goos != "android" && !t.iOS() && os.Getenv("GO_BUILDER_NAME") != "" {
 		t.registerTest("doc_progs", "../doc/progs", "time", "go", "run", "run.go")
 		t.registerTest("wiki", "../doc/articles/wiki", "./test.bash")
 		t.registerTest("codewalk", "../doc/codewalk", "time", "./run")
-		for _, name := range t.shootoutTests() {
-			if name == "spectralnorm" {
-				switch os.Getenv("GO_BUILDER_NAME") {
-				case "linux-arm-arm5", "linux-mips64-minux":
-					// Heavy on floating point and takes over 20 minutes with
-					// softfloat on arm5 builder and over 33 minutes on MIPS64
-					// builder with kernel FPU emulator.
-					// Disabled per Issue 12688.
-					continue
-				}
-			}
-			t.registerSeqTest("shootout:"+name, "../test/bench/shootout", "time", "./timing.sh", "-test", name)
-		}
 	}
 
 	if t.goos != "android" && !t.iOS() {
@@ -670,7 +660,7 @@ func (t *tester) supportedBuildmode(mode string) bool {
 	case "c-shared":
 		switch pair {
 		case "linux-386", "linux-amd64", "linux-arm", "linux-arm64",
-			"darwin-amd64",
+			"darwin-amd64", "darwin-386",
 			"android-arm", "android-arm64", "android-386":
 			return true
 		}
@@ -927,6 +917,12 @@ func (t *tester) cgoTestSO(dt *distTest, testpath string) error {
 			s = "DYLD_LIBRARY_PATH"
 		}
 		cmd.Env = mergeEnvLists([]string{s + "=."}, os.Environ())
+
+		// On FreeBSD 64-bit architectures, the 32-bit linker looks for
+		// different environment variables.
+		if t.goos == "freebsd" && t.gohostarch == "386" {
+			cmd.Env = mergeEnvLists([]string{"LD_32_LIBRARY_PATH=."}, cmd.Env)
+		}
 	}
 	return cmd.Run()
 }
@@ -951,6 +947,11 @@ func (t *tester) raceTest(dt *distTest) error {
 	t.addCmd(dt, "src", "go", "test", "-race", "-i", "runtime/race", "flag", "os/exec")
 	t.addCmd(dt, "src", "go", "test", "-race", "-run=Output", "runtime/race")
 	t.addCmd(dt, "src", "go", "test", "-race", "-short", "-run=TestParse|TestEcho", "flag", "os/exec")
+	// We don't want the following line, because it
+	// slows down all.bash (by 10 seconds on my laptop).
+	// The race builder should catch any error here, but doesn't.
+	// TODO(iant): Figure out how to catch this.
+	// t.addCmd(dt, "src", "go", "test", "-race", "-run=TestParallelTest", "cmd/go")
 	if t.cgoEnabled {
 		env := mergeEnvLists([]string{"GOTRACEBACK=2"}, os.Environ())
 		cmd := t.addCmd(dt, "misc/cgo/test", "go", "test", "-race", "-short")
@@ -992,18 +993,6 @@ func (t *tester) testDirTest(dt *distTest, shard, shards int) error {
 		fmt.Sprintf("--shards=%d", shards),
 	)
 	return nil
-}
-
-func (t *tester) shootoutTests() []string {
-	sh, err := ioutil.ReadFile(filepath.Join(t.goroot, "test", "bench", "shootout", "timing.sh"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	m := regexp.MustCompile(`(?m)^\s+run="([\w+ ]+)"\s*$`).FindSubmatch(sh)
-	if m == nil {
-		log.Fatal("failed to find run=\"...\" line in test/bench/shootout/timing.sh")
-	}
-	return strings.Fields(string(m[1]))
 }
 
 // mergeEnvLists merges the two environment lists such that

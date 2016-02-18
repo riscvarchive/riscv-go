@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"reflect"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -1038,12 +1039,30 @@ func TestAutomaticHTTP2_Serve(t *testing.T) {
 }
 
 func TestAutomaticHTTP2_ListenAndServe(t *testing.T) {
-	defer afterTest(t)
-	defer SetTestHookServerServe(nil)
 	cert, err := tls.X509KeyPair(internal.LocalhostCert, internal.LocalhostKey)
 	if err != nil {
 		t.Fatal(err)
 	}
+	testAutomaticHTTP2_ListenAndServe(t, &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	})
+}
+
+func TestAutomaticHTTP2_ListenAndServe_GetCertificate(t *testing.T) {
+	cert, err := tls.X509KeyPair(internal.LocalhostCert, internal.LocalhostKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testAutomaticHTTP2_ListenAndServe(t, &tls.Config{
+		GetCertificate: func(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
+	})
+}
+
+func testAutomaticHTTP2_ListenAndServe(t *testing.T, tlsConf *tls.Config) {
+	defer afterTest(t)
+	defer SetTestHookServerServe(nil)
 	var ok bool
 	var s *Server
 	const maxTries = 5
@@ -1059,10 +1078,8 @@ Try:
 			lnc <- ln
 		})
 		s = &Server{
-			Addr: addr,
-			TLSConfig: &tls.Config{
-				Certificates: []tls.Certificate{cert},
-			},
+			Addr:      addr,
+			TLSConfig: tlsConf,
 		}
 		errc := make(chan error, 1)
 		go func() { errc <- s.ListenAndServeTLS("", "") }()
@@ -1077,7 +1094,7 @@ Try:
 		}
 	}
 	if !ok {
-		t.Fatal("Failed to start up after %d tries", maxTries)
+		t.Fatalf("Failed to start up after %d tries", maxTries)
 	}
 	defer ln.Close()
 	c, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{
@@ -1905,6 +1922,41 @@ func TestRedirectBadPath(t *testing.T) {
 	}
 }
 
+// Test different URL formats and schemes
+func TestRedirectURLFormat(t *testing.T) {
+	req, _ := NewRequest("GET", "http://example.com/qux/", nil)
+
+	var tests = []struct {
+		in   string
+		want string
+	}{
+		// normal http
+		{"http://foobar.com/baz", "http://foobar.com/baz"},
+		// normal https
+		{"https://foobar.com/baz", "https://foobar.com/baz"},
+		// custom scheme
+		{"test://foobar.com/baz", "test://foobar.com/baz"},
+		// schemeless
+		{"//foobar.com/baz", "//foobar.com/baz"},
+		// relative to the root
+		{"/foobar.com/baz", "/foobar.com/baz"},
+		// relative to the current path
+		{"foobar.com/baz", "/qux/foobar.com/baz"},
+		// relative to the current path (+ going upwards)
+		{"../quux/foobar.com/baz", "/quux/foobar.com/baz"},
+		// incorrect number of slashes
+		{"///foobar.com/baz", "/foobar.com/baz"},
+	}
+
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		Redirect(rec, req, tt.in, 302)
+		if got := rec.Header().Get("Location"); got != tt.want {
+			t.Errorf("Redirect(%q) generated Location header %q; want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 // TestZeroLengthPostAndResponse exercises an optimization done by the Transport:
 // when there is no body (either because the method doesn't permit a body, or an
 // explicit Content-Length of zero is present), then the transport can re-use the
@@ -2380,7 +2432,7 @@ func TestCloseNotifierPipelined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error dialing: %v", err)
 	}
-	diec := make(chan bool, 2)
+	diec := make(chan bool, 1)
 	go func() {
 		const req = "GET / HTTP/1.1\r\nConnection: keep-alive\r\nHost: foo\r\n\r\n"
 		_, err = io.WriteString(conn, req+req) // two requests
@@ -2390,13 +2442,23 @@ func TestCloseNotifierPipelined(t *testing.T) {
 		<-diec
 		conn.Close()
 	}()
+	reqs := 0
+	closes := 0
 For:
 	for {
 		select {
 		case <-gotReq:
-			diec <- true
+			reqs++
+			if reqs > 2 {
+				t.Fatal("too many requests")
+			} else if reqs > 1 {
+				diec <- true
+			}
 		case <-sawClose:
-			break For
+			closes++
+			if closes > 1 {
+				break For
+			}
 		case <-time.After(5 * time.Second):
 			ts.CloseClientConnections()
 			t.Fatal("timeout")
@@ -2496,7 +2558,7 @@ func TestHijackBeforeRequestBodyRead(t *testing.T) {
 		gone := w.(CloseNotifier).CloseNotify()
 		slurp, err := ioutil.ReadAll(reqBody)
 		if err != nil {
-			t.Error("Body read: %v", err)
+			t.Errorf("Body read: %v", err)
 			return
 		}
 		if len(slurp) != len(requestBody) {
@@ -2684,7 +2746,7 @@ func TestHeaderToWire(t *testing.T) {
 					return errors.New("header appeared from after WriteHeader")
 				}
 				if !strings.Contains(got, "Content-Type: some/type") {
-					return errors.New("wrong content-length")
+					return errors.New("wrong content-type")
 				}
 				return nil
 			},
@@ -2697,7 +2759,7 @@ func TestHeaderToWire(t *testing.T) {
 			},
 			check: func(got string) error {
 				if !strings.Contains(got, "Content-Type: text/html") {
-					return errors.New("wrong content-length; want html")
+					return errors.New("wrong content-type; want html")
 				}
 				return nil
 			},
@@ -2710,7 +2772,7 @@ func TestHeaderToWire(t *testing.T) {
 			},
 			check: func(got string) error {
 				if !strings.Contains(got, "Content-Type: some/type") {
-					return errors.New("wrong content-length; want html")
+					return errors.New("wrong content-type; want html")
 				}
 				return nil
 			},
@@ -2721,7 +2783,7 @@ func TestHeaderToWire(t *testing.T) {
 			},
 			check: func(got string) error {
 				if !strings.Contains(got, "Content-Type: text/plain") {
-					return errors.New("wrong content-length; want text/plain")
+					return errors.New("wrong content-type; want text/plain")
 				}
 				if !strings.Contains(got, "Content-Length: 0") {
 					return errors.New("want 0 content-length")
@@ -3038,7 +3100,6 @@ func TestTransportAndServerSharedBodyRace_h1(t *testing.T) {
 	testTransportAndServerSharedBodyRace(t, h1Mode)
 }
 func TestTransportAndServerSharedBodyRace_h2(t *testing.T) {
-	t.Skip("failing in http2 mode; golang.org/issue/13556")
 	testTransportAndServerSharedBodyRace(t, h2Mode)
 }
 func testTransportAndServerSharedBodyRace(t *testing.T, h2 bool) {
@@ -3046,11 +3107,40 @@ func testTransportAndServerSharedBodyRace(t *testing.T, h2 bool) {
 
 	const bodySize = 1 << 20
 
+	// errorf is like t.Errorf, but also writes to println.  When
+	// this test fails, it hangs. This helps debugging and I've
+	// added this enough times "temporarily".  It now gets added
+	// full time.
+	errorf := func(format string, args ...interface{}) {
+		v := fmt.Sprintf(format, args...)
+		println(v)
+		t.Error(v)
+	}
+
 	unblockBackend := make(chan bool)
 	backend := newClientServerTest(t, h2, HandlerFunc(func(rw ResponseWriter, req *Request) {
-		io.CopyN(rw, req.Body, bodySize)
+		gone := rw.(CloseNotifier).CloseNotify()
+		didCopy := make(chan interface{})
+		go func() {
+			n, err := io.CopyN(rw, req.Body, bodySize)
+			didCopy <- []interface{}{n, err}
+		}()
+		isGone := false
+	Loop:
+		for {
+			select {
+			case <-didCopy:
+				break Loop
+			case <-gone:
+				isGone = true
+			case <-time.After(time.Second):
+				println("1 second passes in backend, proxygone=", isGone)
+			}
+		}
 		<-unblockBackend
 	}))
+	var quitTimer *time.Timer
+	defer func() { quitTimer.Stop() }()
 	defer backend.close()
 
 	backendRespc := make(chan *Response, 1)
@@ -3063,17 +3153,17 @@ func testTransportAndServerSharedBodyRace(t *testing.T, h2 bool) {
 
 		bresp, err := proxy.c.Do(req2)
 		if err != nil {
-			t.Errorf("Proxy outbound request: %v", err)
+			errorf("Proxy outbound request: %v", err)
 			return
 		}
 		_, err = io.CopyN(ioutil.Discard, bresp.Body, bodySize/2)
 		if err != nil {
-			t.Errorf("Proxy copy error: %v", err)
+			errorf("Proxy copy error: %v", err)
 			return
 		}
 		backendRespc <- bresp // to close later
 
-		// Try to cause a race: Both the DefaultTransport and the proxy handler's Server
+		// Try to cause a race: Both the Transport and the proxy handler's Server
 		// will try to read/close req.Body (aka req2.Body)
 		if h2 {
 			close(cancel)
@@ -3083,6 +3173,20 @@ func testTransportAndServerSharedBodyRace(t *testing.T, h2 bool) {
 		rw.Write([]byte("OK"))
 	}))
 	defer proxy.close()
+	defer func() {
+		// Before we shut down our two httptest.Servers, start a timer.
+		// We choose 7 seconds because httptest.Server starts logging
+		// warnings to stderr at 5 seconds. If we don't disarm this bomb
+		// in 7 seconds (after the two httptest.Server.Close calls above),
+		// then we explode with stacks.
+		quitTimer = time.AfterFunc(7*time.Second, func() {
+			debug.SetTraceback("ALL")
+			stacks := make([]byte, 1<<20)
+			stacks = stacks[:runtime.Stack(stacks, true)]
+			fmt.Fprintf(os.Stderr, "%s", stacks)
+			log.Fatalf("Timeout.")
+		})
+	}()
 
 	defer close(unblockBackend)
 	req, _ := NewRequest("POST", proxy.ts.URL, io.LimitReader(neverEnding('a'), bodySize))
@@ -3596,6 +3700,33 @@ func TestTolerateCRLFBeforeRequestLine(t *testing.T) {
 	}
 }
 
+func TestIssue13893_Expect100(t *testing.T) {
+	// test that the Server doesn't filter out Expect headers.
+	req := reqBytes(`PUT /readbody HTTP/1.1
+User-Agent: PycURL/7.22.0
+Host: 127.0.0.1:9000
+Accept: */*
+Expect: 100-continue
+Content-Length: 10
+
+HelloWorld
+
+`)
+	var buf bytes.Buffer
+	conn := &rwTestConn{
+		Reader: bytes.NewReader(req),
+		Writer: &buf,
+		closec: make(chan bool, 1),
+	}
+	ln := &oneConnListener{conn: conn}
+	go Serve(ln, HandlerFunc(func(w ResponseWriter, r *Request) {
+		if _, ok := r.Header["Expect"]; !ok {
+			t.Error("Expect header should not be filtered out")
+		}
+	}))
+	<-conn.closec
+}
+
 func TestIssue11549_Expect100(t *testing.T) {
 	req := reqBytes(`PUT /readbody HTTP/1.1
 User-Agent: PycURL/7.22.0
@@ -3722,7 +3853,7 @@ func TestServerValidatesHostHeader(t *testing.T) {
 		{"HTTP/1.0", "Host: \xff\r\n", 400},
 	}
 	for _, tt := range tests {
-		conn := &testConn{closec: make(chan bool)}
+		conn := &testConn{closec: make(chan bool, 1)}
 		io.WriteString(&conn.readBuf, "GET / "+tt.proto+"\r\n"+tt.host+"\r\n")
 
 		ln := &oneConnListener{conn}
@@ -3755,11 +3886,14 @@ func TestServerValidatesHeaders(t *testing.T) {
 		{"foo\xffbar: foo\r\n", 400}, // binary in header
 		{"foo\x00bar: foo\r\n", 400}, // binary in header
 
-		{"foo: foo\x00foo\r\n", 400}, // binary in value
-		{"foo: foo\xfffoo\r\n", 400}, // binary in value
+		{"foo: foo foo\r\n", 200},    // LWS space is okay
+		{"foo: foo\tfoo\r\n", 200},   // LWS tab is okay
+		{"foo: foo\x00foo\r\n", 400}, // CTL 0x00 in value is bad
+		{"foo: foo\x7ffoo\r\n", 400}, // CTL 0x7f in value is bad
+		{"foo: foo\xfffoo\r\n", 200}, // non-ASCII high octets in value are fine
 	}
 	for _, tt := range tests {
-		conn := &testConn{closec: make(chan bool)}
+		conn := &testConn{closec: make(chan bool, 1)}
 		io.WriteString(&conn.readBuf, "GET / HTTP/1.1\r\nHost: foo\r\n"+tt.header+"\r\n")
 
 		ln := &oneConnListener{conn}

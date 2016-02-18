@@ -99,7 +99,7 @@ func buildTestProg(t *testing.T, binary string) (string, error) {
 		exe = ""
 		target.err = fmt.Errorf("building %s: %v\n%s", binary, err, out)
 		testprog.target[binary] = target
-		return "", err
+		return "", target.err
 	}
 	target.exe = exe
 	testprog.target[binary] = target
@@ -315,5 +315,24 @@ func TestNetpollDeadlock(t *testing.T) {
 	want := "done\n"
 	if !strings.HasSuffix(output, want) {
 		t.Fatalf("output does not start with %q:\n%s", want, output)
+	}
+}
+
+func TestPanicTraceback(t *testing.T) {
+	output := runTestProg(t, "testprog", "PanicTraceback")
+	want := "panic: hello"
+	if !strings.HasPrefix(output, want) {
+		t.Fatalf("output does not start with %q:\n%s", want, output)
+	}
+
+	// Check functions in the traceback.
+	fns := []string{"panic", "main.pt1.func1", "panic", "main.pt2.func1", "panic", "main.pt2", "main.pt1"}
+	for _, fn := range fns {
+		re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(fn) + `\(.*\n`)
+		idx := re.FindStringIndex(output)
+		if idx == nil {
+			t.Fatalf("expected %q function in traceback:\n%s", fn, output)
+		}
+		output = output[idx[1]:]
 	}
 }

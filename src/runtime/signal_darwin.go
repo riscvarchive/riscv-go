@@ -31,7 +31,7 @@ var sigtable = [...]sigTabT{
 	/* 16 */ {_SigNotify, "SIGURG: urgent condition on socket"},
 	/* 17 */ {0, "SIGSTOP: stop"},
 	/* 18 */ {_SigNotify + _SigDefault, "SIGTSTP: keyboard stop"},
-	/* 19 */ {0, "SIGCONT: continue after stop"},
+	/* 19 */ {_SigNotify + _SigDefault, "SIGCONT: continue after stop"},
 	/* 20 */ {_SigNotify + _SigUnblock, "SIGCHLD: child status has changed"},
 	/* 21 */ {_SigNotify + _SigDefault, "SIGTTIN: background read from tty"},
 	/* 22 */ {_SigNotify + _SigDefault, "SIGTTOU: background write to tty"},
@@ -50,6 +50,7 @@ var sigtable = [...]sigTabT{
 func sigreturn(ctx unsafe.Pointer, infostyle uint32)
 
 //go:nosplit
+//go:nowritebarrierrec
 func sigtrampgo(fn uintptr, infostyle, sig uint32, info *siginfo, ctx unsafe.Pointer) {
 	if sigfwdgo(sig, info, ctx) {
 		sigreturn(ctx, infostyle)
@@ -85,6 +86,8 @@ func sigtrampgo(fn uintptr, infostyle, sig uint32, info *siginfo, ctx unsafe.Poi
 	}
 
 	setg(g.m.gsignal)
+	c := &sigctxt{info, ctx}
+	c.fixsigcode(sig)
 	sighandler(sig, info, ctx, g)
 	setg(g)
 	sigreturn(ctx, infostyle)

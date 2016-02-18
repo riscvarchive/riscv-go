@@ -93,36 +93,43 @@ type Request struct {
 	// The protocol version for incoming server requests.
 	//
 	// For client requests these fields are ignored. The HTTP
-	// transport code uses either HTTP/1.1 or HTTP/2.0 by default,
-	// depending on what the server supports.
+	// client code always uses either HTTP/1.1 or HTTP/2.
+	// See the docs on Transport for details.
 	Proto      string // "HTTP/1.0"
 	ProtoMajor int    // 1
 	ProtoMinor int    // 0
 
-	// A header maps request lines to their values.
-	// If the header says
+	// Header contains the request header fields either received
+	// by the server or to be sent by the client.
 	//
+	// If a server received a request with header lines,
+	//
+	//	Host: example.com
 	//	accept-encoding: gzip, deflate
 	//	Accept-Language: en-us
-	//	Connection: keep-alive
+	//	fOO: Bar
+	//	foo: two
 	//
 	// then
 	//
 	//	Header = map[string][]string{
 	//		"Accept-Encoding": {"gzip, deflate"},
 	//		"Accept-Language": {"en-us"},
-	//		"Connection": {"keep-alive"},
+	//		"Foo": {"Bar", "two"},
 	//	}
 	//
-	// HTTP defines that header names are case-insensitive.
-	// The request parser implements this by canonicalizing the
-	// name, making the first character and any characters
-	// following a hyphen uppercase and the rest lowercase.
+	// For incoming requests, the Host header is promoted to the
+	// Request.Host field and removed from the Header map.
 	//
-	// For client requests certain headers are automatically
-	// added and may override values in Header.
+	// HTTP defines that header names are case-insensitive. The
+	// request parser implements this by using CanonicalHeaderKey,
+	// making the first character and any characters following a
+	// hyphen uppercase and the rest lowercase.
 	//
-	// See the documentation for the Request.Write method.
+	// For client requests, certain headers such as Content-Length
+	// and Connection are automatically written when needed and
+	// values in Header may be ignored. See the documentation
+	// for the Request.Write method.
 	Header Header
 
 	// Body is the request's body.
@@ -152,8 +159,15 @@ type Request struct {
 	TransferEncoding []string
 
 	// Close indicates whether to close the connection after
-	// replying to this request (for servers) or after sending
-	// the request (for clients).
+	// replying to this request (for servers) or after sending this
+	// request and reading its response (for clients).
+	//
+	// For server requests, the HTTP server handles this automatically
+	// and this field is not needed by Handlers.
+	//
+	// For client requests, setting this field prevents re-use of
+	// TCP connections between requests to the same hosts, as if
+	// Transport.DisableKeepAlives were set.
 	Close bool
 
 	// For server requests Host specifies the host on which the
@@ -427,10 +441,8 @@ func (req *Request) write(w io.Writer, usingProxy bool, extraHeaders Header, wai
 	// Use the defaultUserAgent unless the Header contains one, which
 	// may be blank to not send the header.
 	userAgent := defaultUserAgent
-	if req.Header != nil {
-		if ua := req.Header["User-Agent"]; len(ua) > 0 {
-			userAgent = ua[0]
-		}
+	if _, ok := req.Header["User-Agent"]; ok {
+		userAgent = req.Header.Get("User-Agent")
 	}
 	if userAgent != "" {
 		_, err = fmt.Fprintf(w, "User-Agent: %s\r\n", userAgent)
@@ -1138,16 +1150,28 @@ func validHeaderName(v string) bool {
 	return strings.IndexFunc(v, isNotToken) == -1
 }
 
+// validHeaderValue reports whether v is a valid "field-value" according to
+// http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.2 :
+//
+//        message-header = field-name ":" [ field-value ]
+//        field-value    = *( field-content | LWS )
+//        field-content  = <the OCTETs making up the field-value
+//                         and consisting of either *TEXT or combinations
+//                         of token, separators, and quoted-string>
+//
+// http://www.w3.org/Protocols/rfc2616/rfc2616-sec2.html#sec2.2 :
+//
+//        TEXT           = <any OCTET except CTLs,
+//                          but including LWS>
+//        LWS            = [CRLF] 1*( SP | HT )
+//        CTL            = <any US-ASCII control character
+//                         (octets 0 - 31) and DEL (127)>
 func validHeaderValue(v string) bool {
 	for i := 0; i < len(v); i++ {
 		b := v[i]
-		if b == '\t' {
-			continue
+		if isCTL(b) && !isLWS(b) {
+			return false
 		}
-		if ' ' <= b && b <= '~' {
-			continue
-		}
-		return false
 	}
 	return true
 }

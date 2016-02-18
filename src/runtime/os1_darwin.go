@@ -125,6 +125,15 @@ func newosproc0(stacksize uintptr, fn unsafe.Pointer, fnarg uintptr) {
 var failallocatestack = []byte("runtime: failed to allocate stack for the new OS thread\n")
 var failthreadcreate = []byte("runtime: failed to create new OS thread\n")
 
+// Called to do synchronous initialization of Go code built with
+// -buildmode=c-archive or -buildmode=c-shared.
+// None of the Go runtime is initialized.
+//go:nosplit
+//go:nowritebarrierrec
+func libpreinit() {
+	initsig(true)
+}
+
 // Called to initialize a new m (including the bootstrap m).
 // Called on the parent thread (main thread in case of bootstrap), can allocate memory.
 func mpreinit(mp *m) {
@@ -138,8 +147,8 @@ func msigsave(mp *m) {
 }
 
 //go:nosplit
-func msigrestore(mp *m) {
-	sigprocmask(_SIG_SETMASK, &mp.sigmask, nil)
+func msigrestore(sigmask sigset) {
+	sigprocmask(_SIG_SETMASK, &sigmask, nil)
 }
 
 //go:nosplit
@@ -152,7 +161,27 @@ func sigblock() {
 func minit() {
 	// Initialize signal handling.
 	_g_ := getg()
-	signalstack(&_g_.m.gsignal.stack)
+
+	// The alternate signal stack is buggy on arm and arm64.
+	// The signal handler handles it directly.
+	// The sigaltstack assembly function does nothing.
+	if GOARCH != "arm" && GOARCH != "arm64" {
+		var st stackt
+		sigaltstack(nil, &st)
+		if st.ss_flags&_SS_DISABLE != 0 {
+			signalstack(&_g_.m.gsignal.stack)
+			_g_.m.newSigstack = true
+		} else {
+			// Use existing signal stack.
+			stsp := uintptr(unsafe.Pointer(st.ss_sp))
+			_g_.m.gsignal.stack.lo = stsp
+			_g_.m.gsignal.stack.hi = stsp + st.ss_size
+			_g_.m.gsignal.stackguard0 = stsp + _StackGuard
+			_g_.m.gsignal.stackguard1 = stsp + _StackGuard
+			_g_.m.gsignal.stackAlloc = st.ss_size
+			_g_.m.newSigstack = false
+		}
+	}
 
 	// restore signal mask from m.sigmask and unblock essential signals
 	nmask := _g_.m.sigmask
@@ -167,7 +196,9 @@ func minit() {
 // Called from dropm to undo the effect of an minit.
 //go:nosplit
 func unminit() {
-	signalstack(nil)
+	if getg().m.newSigstack {
+		signalstack(nil)
+	}
 }
 
 // Mach IPC, to get at semaphores
@@ -442,6 +473,8 @@ func memlimit() uintptr {
 	return 0
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func setsig(i int32, fn uintptr, restart bool) {
 	var sa sigactiont
 	sa.sa_flags = _SA_SIGINFO | _SA_ONSTACK
@@ -454,6 +487,8 @@ func setsig(i int32, fn uintptr, restart bool) {
 	sigaction(uint32(i), &sa, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func setsigstack(i int32) {
 	var osa usigactiont
 	sigaction(uint32(i), nil, &osa)
@@ -469,6 +504,8 @@ func setsigstack(i int32) {
 	sigaction(uint32(i), &sa, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func getsig(i int32) uintptr {
 	var sa usigactiont
 	sigaction(uint32(i), nil, &sa)
@@ -488,6 +525,8 @@ func signalstack(s *stack) {
 	sigaltstack(&st, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func updatesigmask(m sigmask) {
 	s := sigset(m[0])
 	sigprocmask(_SIG_SETMASK, &s, nil)

@@ -44,6 +44,13 @@ import "errors"
 //
 // The executable example for time.Format demonstrates the working
 // of the layout string in detail and is a good reference.
+//
+// Note that the RFC822, RFC850, and RFC1123 formats should be applied
+// only to local times. Applying them to UTC times will use "UTC" as the
+// time zone abbreviation, while strictly speaking those RFCs require the
+// use of "GMT" in that case.
+// In general RFC1123Z should be used instead of RFC1123 for servers
+// that insist on that format, and RFC3339 should be preferred for new protocols.
 const (
 	ANSIC       = "Mon Jan _2 15:04:05 2006"
 	UnixDate    = "Mon Jan _2 15:04:05 MST 2006"
@@ -995,7 +1002,7 @@ func parse(layout, value string, defaultLocation, local *Location) (Time, error)
 
 	// Validate the day of the month.
 	if day > daysIn(Month(month), year) {
-		return Time{}, &ParseError{alayout, avalue, "", value, ": day of month out of range"}
+		return Time{}, &ParseError{alayout, avalue, "", value, ": day out of range"}
 	}
 
 	if z != nil {

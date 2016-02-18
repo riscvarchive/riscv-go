@@ -198,8 +198,8 @@ func msigsave(mp *m) {
 }
 
 //go:nosplit
-func msigrestore(mp *m) {
-	sigprocmask(_SIG_SETMASK, &mp.sigmask, nil)
+func msigrestore(sigmask sigset) {
+	sigprocmask(_SIG_SETMASK, &sigmask, nil)
 }
 
 //go:nosplit
@@ -213,7 +213,21 @@ func minit() {
 	_g_ := getg()
 	asmcgocall(unsafe.Pointer(funcPC(miniterrno)), unsafe.Pointer(&libc____errno))
 	// Initialize signal handling
-	signalstack(&_g_.m.gsignal.stack)
+	var st sigaltstackt
+	sigaltstack(nil, &st)
+	if st.ss_flags&_SS_DISABLE != 0 {
+		signalstack(&_g_.m.gsignal.stack)
+		_g_.m.newSigstack = true
+	} else {
+		// Use existing signal stack.
+		stsp := uintptr(unsafe.Pointer(st.ss_sp))
+		_g_.m.gsignal.stack.lo = stsp
+		_g_.m.gsignal.stack.hi = stsp + uintptr(st.ss_size)
+		_g_.m.gsignal.stackguard0 = stsp + _StackGuard
+		_g_.m.gsignal.stackguard1 = stsp + _StackGuard
+		_g_.m.gsignal.stackAlloc = uintptr(st.ss_size)
+		_g_.m.newSigstack = false
+	}
 
 	// restore signal mask from m.sigmask and unblock essential signals
 	nmask := _g_.m.sigmask
@@ -227,7 +241,9 @@ func minit() {
 
 // Called from dropm to undo the effect of an minit.
 func unminit() {
-	signalstack(nil)
+	if getg().m.newSigstack {
+		signalstack(nil)
+	}
 }
 
 func memlimit() uintptr {
@@ -263,6 +279,8 @@ func memlimit() uintptr {
 
 func sigtramp()
 
+//go:nosplit
+//go:nowritebarrierrec
 func setsig(i int32, fn uintptr, restart bool) {
 	var sa sigactiont
 
@@ -279,6 +297,8 @@ func setsig(i int32, fn uintptr, restart bool) {
 	sigaction(i, &sa, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func setsigstack(i int32) {
 	var sa sigactiont
 	sigaction(i, nil, &sa)
@@ -290,6 +310,8 @@ func setsigstack(i int32) {
 	sigaction(i, &sa, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func getsig(i int32) uintptr {
 	var sa sigactiont
 	sigaction(i, nil, &sa)
@@ -312,6 +334,8 @@ func signalstack(s *stack) {
 	sigaltstack(&st, nil)
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func updatesigmask(m sigmask) {
 	var mask sigset
 	copy(mask.__sigbits[:], m[:])
@@ -418,7 +442,21 @@ func madvise(addr unsafe.Pointer, n uintptr, flags int32) {
 
 //go:nosplit
 func mmap(addr unsafe.Pointer, n uintptr, prot, flags, fd int32, off uint32) unsafe.Pointer {
-	return unsafe.Pointer(sysvicall6(&libc_mmap, uintptr(addr), uintptr(n), uintptr(prot), uintptr(flags), uintptr(fd), uintptr(off)))
+	p, err := doMmap(uintptr(addr), n, uintptr(prot), uintptr(flags), uintptr(fd), uintptr(off))
+	if p == ^uintptr(0) {
+		return unsafe.Pointer(err)
+	}
+	return unsafe.Pointer(p)
+}
+
+//go:nosplit
+func doMmap(addr, n, prot, flags, fd, off uintptr) (uintptr, uintptr) {
+	var libcall libcall
+	libcall.fn = uintptr(unsafe.Pointer(&libc_mmap))
+	libcall.n = 6
+	libcall.args = uintptr(noescape(unsafe.Pointer(&addr)))
+	asmcgocall(unsafe.Pointer(&asmsysvicall6), unsafe.Pointer(&libcall))
+	return libcall.r1, libcall.err
 }
 
 //go:nosplit
@@ -462,6 +500,8 @@ func pthread_create(thread *pthread, attr *pthreadattr, fn uintptr, arg unsafe.P
 	return int32(sysvicall4(&libc_pthread_create, uintptr(unsafe.Pointer(thread)), uintptr(unsafe.Pointer(attr)), uintptr(fn), uintptr(arg)))
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func raise(sig int32) /* int32 */ {
 	sysvicall1(&libc_raise, uintptr(sig))
 }
@@ -500,15 +540,20 @@ func setitimer(which int32, value *itimerval, ovalue *itimerval) /* int32 */ {
 	sysvicall3(&libc_setitimer, uintptr(which), uintptr(unsafe.Pointer(value)), uintptr(unsafe.Pointer(ovalue)))
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func sigaction(sig int32, act *sigactiont, oact *sigactiont) /* int32 */ {
 	sysvicall3(&libc_sigaction, uintptr(sig), uintptr(unsafe.Pointer(act)), uintptr(unsafe.Pointer(oact)))
 }
 
+//go:nosplit
+//go:nowritebarrierrec
 func sigaltstack(ss *sigaltstackt, oss *sigaltstackt) /* int32 */ {
 	sysvicall2(&libc_sigaltstack, uintptr(unsafe.Pointer(ss)), uintptr(unsafe.Pointer(oss)))
 }
 
 //go:nosplit
+//go:nowritebarrierrec
 func sigprocmask(how int32, set *sigset, oset *sigset) /* int32 */ {
 	sysvicall3(&libc_sigprocmask, uintptr(how), uintptr(unsafe.Pointer(set)), uintptr(unsafe.Pointer(oset)))
 }

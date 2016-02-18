@@ -419,7 +419,7 @@ func symfmt(s *Sym, flag int) string {
 	if s.Pkg != nil && flag&obj.FmtShort == 0 {
 		switch fmtmode {
 		case FErr: // This is for the user
-			if s.Pkg == localpkg {
+			if s.Pkg == builtinpkg || s.Pkg == localpkg {
 				return s.Name
 			}
 
@@ -748,7 +748,13 @@ func typefmt(t *Type, flag int) string {
 		if name != "" {
 			str = name + " " + typ
 		}
-		if flag&obj.FmtShort == 0 && !fmtbody && t.Note != nil {
+
+		// The fmtbody flag is intended to suppress escape analysis annotations
+		// when printing a function type used in a function body.
+		// (The escape analysis tags do not apply to func vars.)
+		// But it must not suppress struct field tags.
+		// See golang.org/issue/13777 and golang.org/issue/14331.
+		if flag&obj.FmtShort == 0 && (!fmtbody || !t.Funarg) && t.Note != nil {
 			str += " " + strconv.Quote(*t.Note)
 		}
 		return str

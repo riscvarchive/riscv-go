@@ -240,7 +240,9 @@ func TestClientRedirects(t *testing.T) {
 
 	var checkErr error
 	var lastVia []*Request
-	c = &Client{CheckRedirect: func(_ *Request, via []*Request) error {
+	var lastReq *Request
+	c = &Client{CheckRedirect: func(req *Request, via []*Request) error {
+		lastReq = req
 		lastVia = via
 		return checkErr
 	}}
@@ -258,6 +260,20 @@ func TestClientRedirects(t *testing.T) {
 	}
 	if e, g := 15, len(lastVia); e != g {
 		t.Errorf("expected lastVia to have contained %d elements; got %d", e, g)
+	}
+
+	// Test that Request.Cancel is propagated between requests (Issue 14053)
+	creq, _ := NewRequest("HEAD", ts.URL, nil)
+	cancel := make(chan struct{})
+	creq.Cancel = cancel
+	if _, err := c.Do(creq); err != nil {
+		t.Fatal(err)
+	}
+	if lastReq == nil {
+		t.Fatal("didn't see redirect")
+	}
+	if lastReq.Cancel != cancel {
+		t.Errorf("expected lastReq to have the cancel channel set on the inital req")
 	}
 
 	checkErr = errors.New("no redirects allowed")
@@ -922,10 +938,7 @@ func TestBasicAuthHeadersPreserved(t *testing.T) {
 }
 
 func TestClientTimeout_h1(t *testing.T) { testClientTimeout(t, h1Mode) }
-func TestClientTimeout_h2(t *testing.T) {
-	t.Skip("skipping in http2 mode; golang.org/issue/13540")
-	testClientTimeout(t, h2Mode)
-}
+func TestClientTimeout_h2(t *testing.T) { testClientTimeout(t, h2Mode) }
 
 func testClientTimeout(t *testing.T, h2 bool) {
 	if testing.Short() {
@@ -999,10 +1012,7 @@ func testClientTimeout(t *testing.T, h2 bool) {
 }
 
 func TestClientTimeout_Headers_h1(t *testing.T) { testClientTimeout_Headers(t, h1Mode) }
-func TestClientTimeout_Headers_h2(t *testing.T) {
-	t.Skip("skipping in http2 mode; golang.org/issue/13540")
-	testClientTimeout_Headers(t, h2Mode)
-}
+func TestClientTimeout_Headers_h2(t *testing.T) { testClientTimeout_Headers(t, h2Mode) }
 
 // Client.Timeout firing before getting to the body
 func testClientTimeout_Headers(t *testing.T, h2 bool) {

@@ -687,18 +687,6 @@ OpSwitch:
 				n.Left = l
 				n.Right = r
 			}
-		} else if n.Op == OANDAND || n.Op == OOROR {
-			if l.Type == r.Type {
-				t = l.Type
-			} else if l.Type == idealbool {
-				t = r.Type
-			} else if r.Type == idealbool {
-				t = l.Type
-			}
-		} else
-		// non-comparison operators on ideal bools should make them lose their ideal-ness
-		if t == idealbool {
-			t = Types[TBOOL]
 		}
 
 		if et == TSTRING {
@@ -1751,7 +1739,7 @@ OpSwitch:
 
 		switch n.Op {
 		case OCONVNOP:
-			if n.Left.Op == OLITERAL && n.Type != Types[TBOOL] {
+			if n.Left.Op == OLITERAL {
 				r := Nod(OXXX, nil, nil)
 				n.Op = OCONV
 				n.Orig = r
@@ -2035,7 +2023,8 @@ OpSwitch:
 		OEMPTY,
 		OGOTO,
 		OXFALL,
-		OVARKILL:
+		OVARKILL,
+		OVARLIVE:
 		ok |= Etop
 		break OpSwitch
 

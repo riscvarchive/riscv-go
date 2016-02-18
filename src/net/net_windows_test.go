@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -313,20 +314,43 @@ func TestInterfacesWithNetsh(t *testing.T) {
 	}
 }
 
-func netshInterfaceIPv4ShowAddress(name string) ([]string, error) {
-	out, err := runCmd("netsh", "interface", "ipv4", "show", "address", "name=\""+name+"\"")
-	if err != nil {
-		return nil, err
-	}
+func netshInterfaceIPv4ShowAddress(name string, netshOutput []byte) []string {
 	// adress information is listed like:
+	//
+	//Configuration for interface "Local Area Connection"
+	//    DHCP enabled:                         Yes
 	//    IP Address:                           10.0.0.2
 	//    Subnet Prefix:                        10.0.0.0/24 (mask 255.255.255.0)
 	//    IP Address:                           10.0.0.3
 	//    Subnet Prefix:                        10.0.0.0/24 (mask 255.255.255.0)
+	//    Default Gateway:                      10.0.0.254
+	//    Gateway Metric:                       0
+	//    InterfaceMetric:                      10
+	//
+	//Configuration for interface "Loopback Pseudo-Interface 1"
+	//    DHCP enabled:                         No
+	//    IP Address:                           127.0.0.1
+	//    Subnet Prefix:                        127.0.0.0/8 (mask 255.0.0.0)
+	//    InterfaceMetric:                      50
+	//
 	addrs := make([]string, 0)
 	var addr, subnetprefix string
-	lines := bytes.Split(out, []byte{'\r', '\n'})
+	var processingOurInterface bool
+	lines := bytes.Split(netshOutput, []byte{'\r', '\n'})
 	for _, line := range lines {
+		if !processingOurInterface {
+			if !bytes.HasPrefix(line, []byte("Configuration for interface")) {
+				continue
+			}
+			if !bytes.Contains(line, []byte(`"`+name+`"`)) {
+				continue
+			}
+			processingOurInterface = true
+			continue
+		}
+		if len(line) == 0 {
+			break
+		}
 		if bytes.Contains(line, []byte("Subnet Prefix:")) {
 			f := bytes.Split(line, []byte{':'})
 			if len(f) == 2 {
@@ -350,18 +374,50 @@ func netshInterfaceIPv4ShowAddress(name string) ([]string, error) {
 			}
 		}
 	}
-	return addrs, nil
+	return addrs
 }
 
-func netshInterfaceIPv6ShowAddress(name string) ([]string, error) {
+func netshInterfaceIPv6ShowAddress(name string, netshOutput []byte) []string {
+	// adress information is listed like:
+	//
+	//Address ::1 Parameters
+	//---------------------------------------------------------
+	//Interface Luid     : Loopback Pseudo-Interface 1
+	//Scope Id           : 0.0
+	//Valid Lifetime     : infinite
+	//Preferred Lifetime : infinite
+	//DAD State          : Preferred
+	//Address Type       : Other
+	//Skip as Source     : false
+	//
+	//Address XXXX::XXXX:XXXX:XXXX:XXXX%11 Parameters
+	//---------------------------------------------------------
+	//Interface Luid     : Local Area Connection
+	//Scope Id           : 0.11
+	//Valid Lifetime     : infinite
+	//Preferred Lifetime : infinite
+	//DAD State          : Preferred
+	//Address Type       : Other
+	//Skip as Source     : false
+	//
+
 	// TODO: need to test ipv6 netmask too, but netsh does not outputs it
-	out, err := runCmd("netsh", "interface", "ipv6", "show", "address", "interface=\""+name+"\"")
-	if err != nil {
-		return nil, err
-	}
+	var addr string
 	addrs := make([]string, 0)
-	lines := bytes.Split(out, []byte{'\r', '\n'})
+	lines := bytes.Split(netshOutput, []byte{'\r', '\n'})
 	for _, line := range lines {
+		if addr != "" {
+			if len(line) == 0 {
+				addr = ""
+				continue
+			}
+			if string(line) != "Interface Luid     : "+name {
+				continue
+			}
+			addrs = append(addrs, addr)
+			addr = ""
+			continue
+		}
 		if !bytes.HasPrefix(line, []byte("Address")) {
 			continue
 		}
@@ -374,9 +430,17 @@ func netshInterfaceIPv6ShowAddress(name string) ([]string, error) {
 		}
 		// remove scope ID if present
 		f = bytes.Split(f[1], []byte{'%'})
-		addrs = append(addrs, string(bytes.ToLower(bytes.TrimSpace(f[0]))))
+
+		// netsh can create IPv4-embedded IPv6 addresses, like fe80::5efe:192.168.140.1.
+		// Convert these to all hexadecimal fe80::5efe:c0a8:8c01 for later string comparisons.
+		ipv4Tail := regexp.MustCompile(`:\d+\.\d+\.\d+\.\d+$`)
+		if ipv4Tail.Match(f[0]) {
+			f[0] = []byte(ParseIP(string(f[0])).String())
+		}
+
+		addr = string(bytes.ToLower(bytes.TrimSpace(f[0])))
 	}
-	return addrs, nil
+	return addrs
 }
 
 func TestInterfaceAddrsWithNetsh(t *testing.T) {
@@ -386,11 +450,25 @@ func TestInterfaceAddrsWithNetsh(t *testing.T) {
 	if !isEnglishOS(t) {
 		t.Skip("English version of OS required for this test")
 	}
+
+	outIPV4, err := runCmd("netsh", "interface", "ipv4", "show", "address")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outIPV6, err := runCmd("netsh", "interface", "ipv6", "show", "address", "level=verbose")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	ift, err := Interfaces()
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, ifi := range ift {
+		// Skip the interface if it's down.
+		if (ifi.Flags & FlagUp) == 0 {
+			continue
+		}
 		have := make([]string, 0)
 		addrs, err := ifi.Addrs()
 		if err != nil {
@@ -418,14 +496,8 @@ func TestInterfaceAddrsWithNetsh(t *testing.T) {
 		}
 		sort.Strings(have)
 
-		want, err := netshInterfaceIPv4ShowAddress(ifi.Name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		wantIPv6, err := netshInterfaceIPv6ShowAddress(ifi.Name)
-		if err != nil {
-			t.Fatal(err)
-		}
+		want := netshInterfaceIPv4ShowAddress(ifi.Name, outIPV4)
+		wantIPv6 := netshInterfaceIPv6ShowAddress(ifi.Name, outIPV6)
 		want = append(want, wantIPv6...)
 		sort.Strings(want)
 
@@ -474,8 +546,13 @@ func TestInterfaceHardwareAddrWithGetmac(t *testing.T) {
 	//
 	//Connection Name:  Bluetooth Network Connection
 	//Network Adapter:  Bluetooth Device (Personal Area Network)
-	//Physical Address: XX-XX-XX-XX-XX-XX
-	//Transport Name:   Media disconnected
+	//Physical Address: N/A
+	//Transport Name:   Hardware not present
+	//
+	//Connection Name:  VMware Network Adapter VMnet8
+	//Network Adapter:  VMware Virtual Ethernet Adapter for VMnet8
+	//Physical Address: Disabled
+	//Transport Name:   Disconnected
 	//
 	want := make(map[string]string)
 	var name string
@@ -502,6 +579,9 @@ func TestInterfaceHardwareAddrWithGetmac(t *testing.T) {
 			addr := string(bytes.ToLower(bytes.TrimSpace(f[1])))
 			if addr == "" {
 				t.Fatal("empty address on \"Physical Address\" line: %q", line)
+			}
+			if addr == "disabled" || addr == "n/a" {
+				continue
 			}
 			addr = strings.Replace(addr, "-", ":", -1)
 			want[name] = addr
