@@ -237,9 +237,13 @@ func Ldmain() {
 	Thearch.Gentext() // trampolines, call stubs, etc.
 	textbuildid()
 	textaddress()
-	pclntab()
-	findfunctab()
-	symtab()
+	if Thearch.Thechar != 'V' {
+		// FIXME(prattmic): These steps need runtime symbols, which
+		// we can't yet generate for RISCV.
+		pclntab()
+		findfunctab()
+		symtab()
+	}
 	dodata()
 	address()
 	doweak()
