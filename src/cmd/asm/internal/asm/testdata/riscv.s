@@ -8,9 +8,9 @@
 // or location.
 
 TEXT memcpy(SB),0,$-24
-	LD	dst+0(FB), T0
-	LD	src+8(FB), T1
-	LD	size+16(FB), T2
+	LD	dst+0(FP), T0
+	LD	src+8(FP), T1
+	LD	size+16(FP), T2
 
 loop:
 	BGE	T2, ZERO, done
@@ -25,9 +25,7 @@ loop:
 	ADD	T1, $1, T1
 	ADD	T2, $-1, T2
 
-	// Unconditional jump, discard link.
-	// Should be pseudo-op 'J'.
-	J	loop
+	JMP	loop
 
 done:
 	RET
