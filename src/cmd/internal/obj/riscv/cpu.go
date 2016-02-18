@@ -420,4 +420,7 @@ const (
 	// An integer register, either numbered (e.g., R12) or with an ABI name
 	// (e.g., T2).
 	C_REGI
+
+	// An integer immediate.
+	C_IMMI
 )

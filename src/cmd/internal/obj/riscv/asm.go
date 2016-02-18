@@ -32,6 +32,9 @@ const (
 	// the start of each symbol).
 	type_pseudo = iota
 
+	// Integer register-immediate instructions, such as ADDI.
+	type_regi_immi
+
 	// Integer register-register instructions, such as ADD.
 	type_regi2
 
@@ -42,9 +45,9 @@ const (
 
 type Optab struct {
 	as    int16
-	src1  uint8
-	src2  uint8
-	dest  uint8
+	src1  int8
+	src2  int8
+	dest  int8
 	type_ int8 // internal instruction type used to dispatch in asmout
 	size  int8 // bytes
 }
@@ -59,6 +62,7 @@ var optab = []Optab{
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
 
 	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AADD, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 }
@@ -125,12 +129,12 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			// TODO(prattmic): handle calls to morestack.
 			q = p
 			q = obj.Appendp(ctxt, q)
-			q.As = AADDI
-			q.From.Type = obj.TYPE_REG
-			q.From.Reg = REG_SP
+			q.As = AADD
+			q.From.Type = obj.TYPE_CONST
+			q.From.Offset = -stackSize
 			q.From3 = &obj.Addr{}
-			q.From3.Type = obj.TYPE_CONST
-			q.From3.Offset = -stackSize
+			q.From3.Type = obj.TYPE_REG
+			q.From3.Reg = REG_SP
 			q.To.Type = obj.TYPE_REG
 			q.To.Reg = REG_SP
 			q.Spadj = int32(-stackSize)
@@ -138,12 +142,12 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			// Function exit. Stack teardown and exit.
 			q = p
 			q = obj.Appendp(ctxt, q)
-			q.As = AADDI
-			q.From.Type = obj.TYPE_REG
-			q.From.Reg = REG_SP
+			q.As = AADD
+			q.From.Type = obj.TYPE_CONST
+			q.From.Offset = stackSize
 			q.From3 = &obj.Addr{}
-			q.From3.Type = obj.TYPE_CONST
-			q.From3.Offset = stackSize
+			q.From3.Type = obj.TYPE_REG
+			q.From3.Reg = REG_SP
 			q.To.Type = obj.TYPE_REG
 			q.To.Reg = REG_SP
 			q.Spadj = int32(stackSize)
@@ -158,13 +162,48 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
+// Given an Addr, reads the Addr's high-level Type and converts it to a
+// low-level Class.
+func aclass(a *obj.Addr) {
+	switch a.Type {
+	case obj.TYPE_NONE:
+		a.Class = C_NONE
+
+	case obj.TYPE_REG:
+		if REG_X0 <= a.Reg && a.Reg <= REG_X31 {
+			a.Class = C_REGI
+		}
+
+	case obj.TYPE_CONST:
+		a.Class = C_IMMI
+	}
+	log.Printf("aclass: unsupported type")
+}
+
 // Looks up an operation in the operation table.
 func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
 	log.Printf("oplook: ctxt: %+v p: %+v", ctxt, p)
 
+	// Populate the Class field in the operands.
+	aclass(&p.From)
+	if p.From3 == nil {
+		// There is no third operand for this operation.  Create an
+		// empty one to make other code have to deal with fewer special
+		// cases.
+		p.From3 = &obj.Addr{}
+		p.From3.Class = C_NONE
+	} else {
+		aclass(p.From3)
+	}
+	aclass(&p.To)
+
 	for i := 0; i < len(optab); i++ {
-		if optab[i].as == p.As {
-			return &optab[i]
+		o := optab[i]
+		if o.as == p.As &&
+			o.src1 == p.From.Class &&
+			o.src2 == p.From3.Class &&
+			o.dest == p.To.Class {
+			return &o
 		}
 	}
 
@@ -191,6 +230,16 @@ func instr_i(imm uint32, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint
 	return imm<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
+// Encodes a signed integer immediate.
+func immi(i int64) uint32 {
+	if i < -(1<<11) || (1<<11)-1 < i {
+		// The immediate will not fit in the 12 bits allotted to it in
+		// the instruction.
+		log.Fatalf("immi: too large immediate %d", i)
+	}
+	return uint32(i)
+}
+
 // Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	log.Printf("asmout: ctxt: %+v p: %+v o: %+v", ctxt, p, o)
@@ -201,6 +250,16 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		ctxt.Diag("unknown type %d", o.type_)
 	case type_pseudo:
 		break
+	case type_regi_immi:
+		var encoded *inst
+		switch o.as {
+		case AADD:
+			encoded = encode(AADDI)
+		default:
+			ctxt.Diag("unknown instruction %d", o.as)
+		}
+		// TODO(bbaren): Do something reasonable if immediate is too large.
+		result = instr_i(immi(p.From.Offset), p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
 		if p.From3 == nil {
 			ctxt.Diag("nil From3 in register-register instruction")
