@@ -21,9 +21,9 @@ loop:
 	// Plan 9 assemblers tend not to have data type attributes
 	// in the instruction if they are well defined in the operand.
 	// Skip the "I" since it's clearly immediate.
-	ADD	T0, $1, T0
-	ADD	T1, $1, T1
-	ADD	T2, $-1, T2
+	ADD	$1, T0, T0
+	ADD	$1, T1, T1
+	ADD	$-1, T2, T2
 
 	JMP	loop
 
