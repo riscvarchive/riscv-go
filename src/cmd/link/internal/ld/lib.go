@@ -422,6 +422,10 @@ func libinit() {
 
 func Exitf(format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, os.Args[0]+": "+format+"\n", a...)
+	if Debug['K'] != 0 {
+		return
+	}
+
 	if coutbuf.f != nil {
 		coutbuf.f.Close()
 		mayberemoveoutfile()
@@ -440,7 +444,7 @@ func errorexit() {
 		}
 	}
 
-	if nerrors != 0 {
+	if nerrors != 0 && Debug['K'] == 0 {
 		if coutbuf.f != nil {
 			mayberemoveoutfile()
 		}
