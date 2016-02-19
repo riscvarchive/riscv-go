@@ -173,6 +173,7 @@ const (
 	EM_MIPS_RS4_BE       = 10
 	EM_ALPHA_STD         = 41
 	EM_ALPHA             = 0x9026
+	EM_RISCV             = 243
 	SHN_UNDEF            = 0
 	SHN_LORESERVE        = 0xff00
 	SHN_LOPROC           = 0xff00
@@ -811,7 +812,7 @@ func Elfinit() {
 		}
 		fallthrough
 
-	case '0', '6', '7':
+	case '0', '6', '7', 'V':
 		if Thearch.Thechar == '0' {
 			ehdr.flags = 0x20000000 /* MIPS 3 */
 		}
@@ -1454,7 +1455,7 @@ func elfdynhash() {
 	}
 
 	switch Thearch.Thechar {
-	case '0', '6', '7', '9':
+	case '0', '6', '7', '9', 'V':
 		sy := Linklookup(Ctxt, ".rela.plt", 0)
 		if sy.Size > 0 {
 			Elfwritedynent(s, DT_PLTREL, DT_RELA)
@@ -1594,7 +1595,7 @@ func elfshreloc(sect *Section) *ElfShdr {
 	var prefix string
 	var typ int
 	switch Thearch.Thechar {
-	case '0', '6', '7', '9':
+	case '0', '6', '7', '9', 'V':
 		prefix = ".rela"
 		typ = SHT_RELA
 	default:
@@ -1767,7 +1768,7 @@ func doelf() {
 		Debug['d'] = 1
 
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			Addstring(shstrtab, ".rela.text")
 			Addstring(shstrtab, ".rela.rodata")
 			Addstring(shstrtab, ".rela"+relro_prefix+".typelink")
@@ -1813,7 +1814,7 @@ func doelf() {
 	if hasinitarr {
 		Addstring(shstrtab, ".init_array")
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			Addstring(shstrtab, ".rela.init_array")
 		default:
 			Addstring(shstrtab, ".rel.init_array")
@@ -1840,7 +1841,7 @@ func doelf() {
 		Addstring(shstrtab, ".dynsym")
 		Addstring(shstrtab, ".dynstr")
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			Addstring(shstrtab, ".rela")
 			Addstring(shstrtab, ".rela.plt")
 		default:
@@ -1858,7 +1859,7 @@ func doelf() {
 		s.Type = obj.SELFROSECT
 		s.Reachable = true
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			s.Size += ELF64SYMSIZE
 		default:
 			s.Size += ELF32SYMSIZE
@@ -1876,7 +1877,7 @@ func doelf() {
 
 		/* relocation table */
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			s = Linklookup(Ctxt, ".rela", 0)
 		default:
 			s = Linklookup(Ctxt, ".rel", 0)
@@ -1921,7 +1922,7 @@ func doelf() {
 		Thearch.Elfsetupplt()
 
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			s = Linklookup(Ctxt, ".rela.plt", 0)
 		default:
 			s = Linklookup(Ctxt, ".rel.plt", 0)
@@ -1950,7 +1951,7 @@ func doelf() {
 
 		elfwritedynentsym(s, DT_SYMTAB, Linklookup(Ctxt, ".dynsym", 0))
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			Elfwritedynent(s, DT_SYMENT, ELF64SYMSIZE)
 		default:
 			Elfwritedynent(s, DT_SYMENT, ELF32SYMSIZE)
@@ -1958,7 +1959,7 @@ func doelf() {
 		elfwritedynentsym(s, DT_STRTAB, Linklookup(Ctxt, ".dynstr", 0))
 		elfwritedynentsymsize(s, DT_STRSZ, Linklookup(Ctxt, ".dynstr", 0))
 		switch Thearch.Thechar {
-		case '0', '6', '7', '9':
+		case '0', '6', '7', '9', 'V':
 			elfwritedynentsym(s, DT_RELA, Linklookup(Ctxt, ".rela", 0))
 			elfwritedynentsymsize(s, DT_RELASZ, Linklookup(Ctxt, ".rela", 0))
 			Elfwritedynent(s, DT_RELAENT, ELF64RELASIZE)
@@ -2069,6 +2070,8 @@ func Asmbelf(symo int64) {
 		eh.machine = EM_386
 	case '9':
 		eh.machine = EM_PPC64
+	case 'V':
+		eh.machine = EM_RISCV
 	}
 
 	elfreserve := int64(ELFRESERVE)
