@@ -72,6 +72,19 @@ var optab = []Optab{
 	{ASUB, C_REGI, C_REGI, C_REGI, type_regi2, 4},
 	{ASUB, C_REGI, C_NONE, C_REGI, type_regi2, 4},
 
+	{ASLL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASLL, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{ASLL, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASLL, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+	{ASRL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASRL, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{ASRL, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASRL, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+	{ASRA, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASRA, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{ASRA, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASRA, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
@@ -304,6 +317,12 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		switch o.as {
 		case AADD:
 			encoded = encode(AADDI)
+		case ASLL:
+			encoded = encode(ASLLI)
+		case ASRA:
+			encoded = encode(ASRAI)
+		case ASRL:
+			encoded = encode(ASRLI)
 		default:
 			ctxt.Diag("unknown instruction %d", o.as)
 		}
@@ -314,11 +333,10 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		result = instr_i(p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
 		if p.From3.Class == C_NONE {
-			*p.From3 = p.From
-			p.From.Reg = p.To.Reg
+			p.From3.Reg = p.To.Reg
 		}
 		encoded := encode(o.as)
-		result = instr_r(encoded.funct7, p.From3.Reg, p.From.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_r(encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_jal:
 		var encoded *inst
 		var rd int16
