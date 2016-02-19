@@ -95,6 +95,7 @@ func Ldmain() {
 	obj.Flagcount("f", "ignore version mismatch", &Debug['f'])
 	obj.Flagcount("g", "disable go package data checks", &Debug['g'])
 	obj.Flagcount("h", "halt on error", &Debug['h'])
+	obj.Flagcount("K", "keep going on error and keep final output", &Debug['K'])
 	obj.Flagstr("installsuffix", "set package directory `suffix`", &flag_installsuffix)
 	obj.Flagstr("k", "set field tracking `symbol`", &tracksym)
 	obj.Flagstr("libgcc", "compiler support lib for internal linking; use \"none\" to disable", &libgccfile)
