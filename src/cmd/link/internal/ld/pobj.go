@@ -224,7 +224,10 @@ func Ldmain() {
 
 	checkgo()
 	checkstrdata()
-	deadcode()
+	if Thearch.Thechar != 'V' {
+		// FIXME(prattmic): This eliminates our test code.
+		deadcode()
+	}
 	callgraph()
 
 	doelf()
