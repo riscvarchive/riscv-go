@@ -423,4 +423,7 @@ const (
 
 	// An integer immediate.
 	C_IMMI
+
+	// A relative address.
+	C_RELADDR
 )
