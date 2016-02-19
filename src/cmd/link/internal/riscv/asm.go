@@ -28,7 +28,9 @@
 package riscv
 
 import (
+	"cmd/internal/obj"
 	"cmd/link/internal/ld"
+	"fmt"
 	"log"
 )
 
@@ -68,6 +70,116 @@ func archrelocvariant(r *ld.Reloc, s *ld.LSym, t int64) int64 {
 	return -1
 }
 
+// TODO(mpratt): Refactor asmb for other archs. This worked literally copied
+// and pasted from mips64.
 func asmb() {
-	log.Printf("asmb")
+	if ld.Debug['v'] != 0 {
+		fmt.Fprintf(&ld.Bso, "%5.2f asmb\n", obj.Cputime())
+	}
+	ld.Bso.Flush()
+
+	if ld.Iself {
+		ld.Asmbelfsetup()
+	}
+
+	sect := ld.Segtext.Sect
+	ld.Cseek(int64(sect.Vaddr - ld.Segtext.Vaddr + ld.Segtext.Fileoff))
+	ld.Codeblk(int64(sect.Vaddr), int64(sect.Length))
+	for sect = sect.Next; sect != nil; sect = sect.Next {
+		ld.Cseek(int64(sect.Vaddr - ld.Segtext.Vaddr + ld.Segtext.Fileoff))
+		ld.Datblk(int64(sect.Vaddr), int64(sect.Length))
+	}
+
+	if ld.Segrodata.Filelen > 0 {
+		if ld.Debug['v'] != 0 {
+			fmt.Fprintf(&ld.Bso, "%5.2f rodatblk\n", obj.Cputime())
+		}
+		ld.Bso.Flush()
+
+		ld.Cseek(int64(ld.Segrodata.Fileoff))
+		ld.Datblk(int64(ld.Segrodata.Vaddr), int64(ld.Segrodata.Filelen))
+	}
+
+	if ld.Debug['v'] != 0 {
+		fmt.Fprintf(&ld.Bso, "%5.2f datblk\n", obj.Cputime())
+	}
+	ld.Bso.Flush()
+
+	ld.Cseek(int64(ld.Segdata.Fileoff))
+	ld.Datblk(int64(ld.Segdata.Vaddr), int64(ld.Segdata.Filelen))
+
+	/* output symbol table */
+	ld.Symsize = 0
+
+	ld.Lcsize = 0
+	symo := uint32(0)
+	if ld.Debug['s'] == 0 {
+		if ld.Debug['v'] != 0 {
+			fmt.Fprintf(&ld.Bso, "%5.2f sym\n", obj.Cputime())
+		}
+		ld.Bso.Flush()
+		switch ld.HEADTYPE {
+		default:
+			if ld.Iself {
+				symo = uint32(ld.Segdata.Fileoff + ld.Segdata.Filelen)
+				symo = uint32(ld.Rnd(int64(symo), int64(ld.INITRND)))
+			}
+
+		case obj.Hplan9:
+			log.Fatalf("Plan 9 unsupported")
+		}
+
+		ld.Cseek(int64(symo))
+		switch ld.HEADTYPE {
+		default:
+			if ld.Iself {
+				if ld.Debug['v'] != 0 {
+					fmt.Fprintf(&ld.Bso, "%5.2f elfsym\n", obj.Cputime())
+				}
+				ld.Asmelfsym()
+				ld.Cflush()
+				ld.Cwrite(ld.Elfstrdat)
+
+				if ld.Debug['v'] != 0 {
+					fmt.Fprintf(&ld.Bso, "%5.2f dwarf\n", obj.Cputime())
+				}
+				ld.Dwarfemitdebugsections()
+
+				if ld.Linkmode == ld.LinkExternal {
+					ld.Elfemitreloc()
+				}
+			}
+
+		case obj.Hplan9:
+			log.Fatalf("Plan 9 unsupported")
+		}
+	}
+
+	ld.Ctxt.Cursym = nil
+	if ld.Debug['v'] != 0 {
+		fmt.Fprintf(&ld.Bso, "%5.2f header\n", obj.Cputime())
+	}
+	ld.Bso.Flush()
+	ld.Cseek(0)
+	switch ld.HEADTYPE {
+	default:
+		log.Fatalf("Unsupported OS: %v", ld.HEADTYPE)
+
+	case obj.Hlinux,
+		obj.Hfreebsd,
+		obj.Hnetbsd,
+		obj.Hopenbsd,
+		obj.Hnacl:
+		ld.Asmbelf(int64(symo))
+	}
+
+	ld.Cflush()
+	if ld.Debug['c'] != 0 {
+		fmt.Printf("textsize=%d\n", ld.Segtext.Filelen)
+		fmt.Printf("datsize=%d\n", ld.Segdata.Filelen)
+		fmt.Printf("bsssize=%d\n", ld.Segdata.Length-ld.Segdata.Filelen)
+		fmt.Printf("symsize=%d\n", ld.Symsize)
+		fmt.Printf("lcsize=%d\n", ld.Lcsize)
+		fmt.Printf("total=%d\n", ld.Segtext.Filelen+ld.Segdata.Length+uint64(ld.Symsize)+uint64(ld.Lcsize))
+	}
 }
