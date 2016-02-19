@@ -65,7 +65,9 @@ var optab = []Optab{
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
 
 	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AADD, C_REGI, C_NONE, C_REGI, type_regi2, 4},
 	{AADD, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AADD, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
 
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
@@ -302,11 +304,14 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		default:
 			ctxt.Diag("unknown instruction %d", o.as)
 		}
+		if p.From3.Class == C_NONE {
+			p.From3.Reg = p.To.Reg
+		}
 		// TODO(bbaren): Do something reasonable if immediate is too large.
 		result = instr_i(p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
-		if p.From3 == nil {
-			ctxt.Diag("nil From3 in register-register instruction")
+		if p.From3.Class == C_NONE {
+			p.From3.Reg = p.To.Reg
 		}
 		encoded := encode(o.as)
 		result = instr_r(encoded.funct7, p.From3.Reg, p.From.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
