@@ -38,6 +38,9 @@ const (
 	// Integer register-register instructions, such as ADD.
 	type_regi2
 
+	// Instructions which get compiled as jump-and-link, including JMP.
+	type_jal
+
 	// System instructions (read counters).  These are encoded using a
 	// variant of the I-type encoding.
 	type_system
@@ -63,6 +66,8 @@ var optab = []Optab{
 
 	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
 	{AADD, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+
+	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 }
@@ -116,6 +121,9 @@ func aclass(a *obj.Addr) {
 
 	case obj.TYPE_CONST:
 		a.Class = C_IMMI
+
+	case obj.TYPE_BRANCH:
+		a.Class = C_RELADDR
 
 	default:
 		log.Printf("aclass: unsupported type")
@@ -227,24 +235,44 @@ func reg(r int16) uint32 {
 	return uint32(r - obj.RBaseRISCV)
 }
 
+// Encodes a signed integer immediate.
+func immi(i int64, nbits uint) uint32 {
+	if i < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < i {
+		// The immediate will not fit in the bits allotted to it in the
+		// instruction.
+		log.Fatalf("immi: too large immediate %d", i)
+	}
+	return uint32(i)
+}
+
 // Encodes an R-type instruction.
 func instr_r(funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
 	return funct7<<25 | reg(rs2)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
 // Encodes an I-type instruction.
-func instr_i(imm uint32, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
-	return imm<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
+func instr_i(imm int64, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+	if funct3>>3 != 0 {
+		log.Fatalf("instr_i: too large funct3 %#x", funct3)
+	}
+	if opcode>>7 != 0 {
+		log.Fatalf("instr_i: too large opcode %#x", opcode)
+	}
+	return immi(imm, 12)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
 }
 
-// Encodes a signed integer immediate.
-func immi(i int64) uint32 {
-	if i < -(1<<11) || (1<<11)-1 < i {
-		// The immediate will not fit in the 12 bits allotted to it in
-		// the instruction.
-		log.Fatalf("immi: too large immediate %d", i)
+// Encodes a UJ-type instruction.
+func instr_uj(imm64 int64, rd int16, opcode uint32) uint32 {
+	if opcode>>7 != 0 {
+		log.Fatalf("instr_i: too large opcode %#x", opcode)
 	}
-	return uint32(i)
+	imm := immi(imm64, 21)
+	return (imm>>20)<<31 |
+		((imm>>1)&0x3ff)<<21 |
+		((imm>>11)&0x1)<<20 |
+		((imm>>12)&0xff)<<12 |
+		reg(rd)<<7 |
+		opcode
 }
 
 // Encodes a machine instruction.
@@ -266,16 +294,37 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 			ctxt.Diag("unknown instruction %d", o.as)
 		}
 		// TODO(bbaren): Do something reasonable if immediate is too large.
-		result = instr_i(immi(p.From.Offset), p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_i(p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
 		if p.From3 == nil {
 			ctxt.Diag("nil From3 in register-register instruction")
 		}
 		encoded := encode(o.as)
 		result = instr_r(encoded.funct7, p.From3.Reg, p.From.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+	case type_jal:
+		var encoded *inst
+		var rd int16
+		switch o.as {
+		case obj.AJMP:
+			encoded = encode(AJAL)
+			rd = REG_ZERO
+		default:
+			ctxt.Diag("unknown instruction %d", o.as)
+		}
+		var offset int64
+		if p.Pcond == nil {
+			offset = 0
+		} else {
+			offset = p.Pcond.Pc - p.Pc
+		}
+		// TODO(bbaren): Do something reasonable if immediate is too large.
+		if offset%4 != 0 {
+			ctxt.Diag("asmout: misaligned jump offset %d", offset)
+		}
+		result = instr_uj(offset, rd, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
-		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_i(int64(encoded.csr), REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
 	}
 	return result
 }
