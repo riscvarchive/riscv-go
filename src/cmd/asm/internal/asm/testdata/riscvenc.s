@@ -41,5 +41,4 @@ start:
 	// stack pointer adjustment.)
 	JMP	start		// JMP	2	// 6ff01ff8
 
-	// TODO(bbaren): Fix RDCYCLE in the assembler and uncomment this line.
-	// RDCYCLE	T0				// f32200c0
+	RDCYCLE	T0				// f32200c0

@@ -379,7 +379,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		result = instr_uj(offset, rd, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
-		result = instr_i(int64(encoded.csr), REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
 	}
 	return result
 }
