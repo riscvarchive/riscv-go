@@ -85,6 +85,19 @@ var optab = []Optab{
 	{ASRA, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
 	{ASRA, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
 
+	{AAND, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AAND, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{AAND, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AAND, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+	{AOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AOR, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{AOR, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AOR, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+	{AXOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AXOR, C_REGI, C_NONE, C_REGI, type_regi2, 4},
+	{AXOR, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AXOR, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
+
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
@@ -317,12 +330,18 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		switch o.as {
 		case AADD:
 			encoded = encode(AADDI)
+		case AAND:
+			encoded = encode(AANDI)
+		case AOR:
+			encoded = encode(AORI)
 		case ASLL:
 			encoded = encode(ASLLI)
 		case ASRA:
 			encoded = encode(ASRAI)
 		case ASRL:
 			encoded = encode(ASRLI)
+		case AXOR:
+			encoded = encode(AXORI)
 		default:
 			ctxt.Diag("unknown instruction %d", o.as)
 		}

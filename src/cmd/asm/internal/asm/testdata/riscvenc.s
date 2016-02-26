@@ -23,10 +23,23 @@ start:
 	SRA	$1, T0, T1			// 13d31200
 	SRA	$1, T0				// 93d21200
 
+	AND	T1, T0, T2			// b3f36200
+	AND	T0, T1				// 33735300
+	AND	$1, T0, T1			// 13f31200
+	AND	$1, T0				// 93f21200
+	OR	T1, T0, T2			// b3e36200
+	OR	T0, T1				// 33635300
+	OR	$1, T0, T1			// 13e31200
+	OR	$1, T0				// 93e21200
+	XOR	T1, T0, T2			// b3c36200
+	XOR	T0, T1				// 33435300
+	XOR	$1, T0, T1			// 13c31200
+	XOR	$1, T0				// 93c21200
+
 	// This jump can get printed as JMP 2 because it goes to the second
 	// instruction in the function.  (The first instruction is an invisible
 	// stack pointer adjustment.)
-	JMP	start		// JMP	2	// 6ff01ffb
+	JMP	start		// JMP	2	// 6ff01ff8
 
 	// TODO(bbaren): Fix RDCYCLE in the assembler and uncomment this line.
 	// RDCYCLE	T0				// f32200c0
