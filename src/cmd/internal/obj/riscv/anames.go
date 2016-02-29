@@ -188,4 +188,5 @@ var Anames = []string{
 	"ECALL",
 	"EBREAK",
 	"ERET",
+	"MOV",
 }

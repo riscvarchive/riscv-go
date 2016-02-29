@@ -200,7 +200,8 @@ const (
 )
 
 // RISC-V mnemonics, as defined in the "opcodes" and "opcodes-pseudo" files of
-// riscv-opcodes.
+// riscv-opcodes, as well as some fake mnemonics (e.g., MOV) used only in the
+// assembler.
 //
 // If you modify this table, you MUST run 'go generate' to regenerate anames.go!
 const (
@@ -386,6 +387,10 @@ const (
 	AECALL
 	AEBREAK
 	AERET
+
+	// Fake instructions.  These get translated by the assembler into other
+	// instructions, based on their operands.
+	AMOV
 )
 
 // All unary instructions which write to their arguments (as opposed to reading

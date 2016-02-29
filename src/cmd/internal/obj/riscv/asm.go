@@ -44,6 +44,9 @@ const (
 	// System instructions (read counters).  These are encoded using a
 	// variant of the I-type encoding.
 	type_system
+
+	// Moves.
+	type_mov
 )
 
 type Optab struct {
@@ -103,6 +106,9 @@ var optab = []Optab{
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
+
+	{AMOV, C_REGI, C_NONE, C_REGI, type_mov, 4},
+	{AMOV, C_IMMI, C_NONE, C_REGI, type_mov, 4},
 }
 
 // progedit is called individually for each Prog.
@@ -317,6 +323,12 @@ func instr_uj(imm64 int64, rd int16, opcode uint32) uint32 {
 		opcode
 }
 
+// Convenience functions for specific instructions.
+func instr_addi(imm int64, rs1 int16, rd int16) uint32 {
+	encoded := encode(AADDI)
+	return instr_i(imm, rs1, encoded.funct3, rd, encoded.opcode)
+}
+
 // Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	log.Printf("asmout: ctxt: %+v p: %+v o: %+v", ctxt, p, o)
@@ -382,6 +394,16 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	case type_system:
 		encoded := encode(o.as)
 		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+	case type_mov:
+		switch p.From.Class {
+		case C_REGI:
+			result = instr_addi(0, p.From.Reg, p.To.Reg)
+		case C_IMMI:
+			// TODO(bbaren): Do something reasonable if immediate is too large.
+			result = instr_addi(p.From.Offset, REG_ZERO, p.To.Reg)
+		default:
+			ctxt.Diag("unknown instruction %d", o.as)
+		}
 	}
 	return result
 }

@@ -44,3 +44,7 @@ start:
 	RDCYCLE	T0				// f32200c0
 	RDTIME	T0				// f32210c0
 	RDINSTRET	T0			// f32220c0
+
+	MOV	T0, T1				// 13830200
+	MOV	$2047, T0			// 9302f07f
+	MOV	$-2048, T0			// 93020080
