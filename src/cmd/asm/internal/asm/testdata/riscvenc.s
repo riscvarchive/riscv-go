@@ -42,3 +42,5 @@ start:
 	JMP	start		// JMP	2	// 6ff01ff8
 
 	RDCYCLE	T0				// f32200c0
+	RDTIME	T0				// f32210c0
+	RDINSTRET	T0			// f32220c0

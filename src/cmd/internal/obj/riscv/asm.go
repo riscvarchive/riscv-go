@@ -101,6 +101,8 @@ var optab = []Optab{
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
+	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
+	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
 }
 
 // progedit is called individually for each Prog.
