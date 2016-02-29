@@ -231,9 +231,9 @@ const (
 	AXORI
 	AORI
 	AANDI
-	ASLLI
-	ASRLI
-	ASRAI
+	ASLLIRV32
+	ASRLIRV32
+	ASRAIRV32
 	AADD
 	ASUB
 	ASLL
@@ -248,6 +248,7 @@ const (
 	AFENCEI
 	ASCALL
 	ASBREAK
+	ASRET
 	ARDCYCLE
 	ARDCYCLEH
 	ARDTIME
@@ -259,9 +260,9 @@ const (
 	ALWU
 	ALD
 	ASD
-	// SLLI
-	// SRLI
-	// SRAI
+	ASLLI
+	ASRLI
+	ASRAI
 	ASLLIW
 	ASRLIW
 	ASRAIW
@@ -394,6 +395,22 @@ const (
 	AFCVTDL
 	AFCVTDLU
 	AFMVDX
+
+	// Privileged instructions
+	ACSRRW
+	ACSRRS
+	ACSRRC
+	ACSRRWI
+	ACSRRSI
+	ACSRRCI
+	AECALL
+	AEBREAK
+	AERET
+	AMRTS
+	AMRTH
+	AHRTS
+	AWFI
+	ASFENCEVM
 )
 
 // All unary instructions which write to their arguments (as opposed to reading
