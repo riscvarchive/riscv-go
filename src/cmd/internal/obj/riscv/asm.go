@@ -20,11 +20,7 @@
 
 package riscv
 
-import (
-	"log"
-
-	"cmd/internal/obj"
-)
+import "cmd/internal/obj"
 
 const (
 	// Things which the assembler treats as instructions but which do not
@@ -116,8 +112,6 @@ var optab = []Optab{
 // progedit is called individually for each Prog.
 // TODO(myenik)
 func progedit(ctxt *obj.Link, p *obj.Prog) {
-	log.Printf("progedit: p: %#v p: %s", p, p)
-
 	// Rewrite branches as TYPE_BRANCH
 	switch p.As {
 	case AJAL,
@@ -139,16 +133,11 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 
 // TODO(myenik)
 func follow(ctxt *obj.Link, s *obj.LSym) {
-	log.Printf("follow")
-
-	for ; s != nil; s = s.Next {
-		log.Printf("s: %+v", s)
-	}
 }
 
 // Given an Addr, reads the Addr's high-level Type and converts it to a
 // low-level Class.
-func aclass(a *obj.Addr) {
+func aclass(ctxt *obj.Link, a *obj.Addr) {
 	switch a.Type {
 	case obj.TYPE_NONE:
 		a.Class = C_NONE
@@ -157,7 +146,7 @@ func aclass(a *obj.Addr) {
 		if REG_X0 <= a.Reg && a.Reg <= REG_X31 {
 			a.Class = C_REGI
 		} else if REG_F0 <= a.Reg && a.Reg <= REG_F31 {
-			log.Printf("aclass: floating-point registers are unsupported")
+			ctxt.Diag("aclass: floating-point registers are unsupported")
 		}
 
 	case obj.TYPE_CONST:
@@ -173,7 +162,7 @@ func aclass(a *obj.Addr) {
 		a.Class = C_MEM
 
 	default:
-		log.Printf("aclass: unsupported type")
+		ctxt.Diag("aclass: unsupported type %v", a.Type)
 	}
 }
 
@@ -181,8 +170,6 @@ func aclass(a *obj.Addr) {
 // * Updating the SP on function entry and exit
 // * Rewriting RET to a real return instruction
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
-	log.Printf("preprocess")
-
 	ctxt.Cursym = cursym
 
 	if cursym.Text == nil || cursym.Text.Link == nil {
@@ -198,8 +185,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 	var q *obj.Prog
 	for p := cursym.Text; p != nil; p = p.Link {
-		log.Printf("p: %+v", p)
-
 		switch p.As {
 		case obj.ATEXT:
 			// Function entry. Setup stack.
@@ -241,7 +226,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Normalize all the instructions.
 	for p := cursym.Text; p != nil; p = p.Link {
 		// Populate the Class field in the operands.
-		aclass(&p.From)
+		aclass(ctxt, &p.From)
 		if p.From3 == nil {
 			// There is no third operand for this operation.  Create an
 			// empty one to make other code have to deal with fewer special
@@ -249,16 +234,14 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.From3 = &obj.Addr{}
 			p.From3.Class = C_NONE
 		} else {
-			aclass(p.From3)
+			aclass(ctxt, p.From3)
 		}
-		aclass(&p.To)
+		aclass(ctxt, &p.To)
 	}
 }
 
 // Looks up an operation in the operation table.
 func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
-	log.Printf("oplook: p: %+v", p)
-
 	for i := 0; i < len(optab); i++ {
 		o := optab[i]
 		if o.as == p.As &&
@@ -268,79 +251,75 @@ func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
 			return &o
 		}
 	}
-
-	// No instruction found, so just return a placeholder NOP.
-	log.Printf("oplook: could not find op, returning NOP")
-	return &optab[0]
+	ctxt.Diag("oplook: could not find op %#v (%#v)", p, *p.From3)
+	return nil
 }
 
 // Encodes a register.
-func reg(r int16) uint32 {
+func reg(ctxt *obj.Link, r int16) uint32 {
 	if r < REG_X0 || REG_END <= r {
-		log.Fatalf("reg: invalid register %d", r)
+		ctxt.Diag("reg: invalid register %d", r)
 	}
 	return uint32(r - obj.RBaseRISCV)
 }
 
 // Encodes a signed integer immediate.
-func immi(i int64, nbits uint) uint32 {
+func immi(ctxt *obj.Link, i int64, nbits uint) uint32 {
 	if i < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < i {
 		// The immediate will not fit in the bits allotted to it in the
 		// instruction.
-		log.Fatalf("immi: too large immediate %d", i)
+		ctxt.Diag("immi: too large immediate %d", i)
 	}
 	return uint32(i)
 }
 
 // Encodes an R-type instruction.
-func instr_r(funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+func instr_r(ctxt *obj.Link, funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
 	if funct7>>7 != 0 {
-		log.Fatalf("instr_r: too large funct7 %#x", funct7)
+		ctxt.Diag("instr_r: too large funct7 %#x", funct7)
 	}
 	if funct3>>3 != 0 {
-		log.Fatalf("instr_r: too large funct3 %#x", funct3)
+		ctxt.Diag("instr_r: too large funct3 %#x", funct3)
 	}
 	if opcode>>7 != 0 {
-		log.Fatalf("instr_r: too large opcode %#x", opcode)
+		ctxt.Diag("instr_r: too large opcode %#x", opcode)
 	}
-	return funct7<<25 | reg(rs2)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
+	return funct7<<25 | reg(ctxt, rs2)<<20 | reg(ctxt, rs1)<<15 | funct3<<12 | reg(ctxt, rd)<<7 | opcode
 }
 
 // Encodes an I-type instruction.
-func instr_i(imm int64, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
+func instr_i(ctxt *obj.Link, imm int64, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
 	if funct3>>3 != 0 {
-		log.Fatalf("instr_i: too large funct3 %#x", funct3)
+		ctxt.Diag("instr_i: too large funct3 %#x", funct3)
 	}
 	if opcode>>7 != 0 {
-		log.Fatalf("instr_i: too large opcode %#x", opcode)
+		ctxt.Diag("instr_i: too large opcode %#x", opcode)
 	}
-	return immi(imm, 12)<<20 | reg(rs1)<<15 | funct3<<12 | reg(rd)<<7 | opcode
+	return immi(ctxt, imm, 12)<<20 | reg(ctxt, rs1)<<15 | funct3<<12 | reg(ctxt, rd)<<7 | opcode
 }
 
 // Encodes a UJ-type instruction.
-func instr_uj(imm64 int64, rd int16, opcode uint32) uint32 {
+func instr_uj(ctxt *obj.Link, imm64 int64, rd int16, opcode uint32) uint32 {
 	if opcode>>7 != 0 {
-		log.Fatalf("instr_i: too large opcode %#x", opcode)
+		ctxt.Diag("instr_i: too large opcode %#x", opcode)
 	}
-	imm := immi(imm64, 21)
+	imm := immi(ctxt, imm64, 21)
 	return (imm>>20)<<31 |
 		((imm>>1)&0x3ff)<<21 |
 		((imm>>11)&0x1)<<20 |
 		((imm>>12)&0xff)<<12 |
-		reg(rd)<<7 |
+		reg(ctxt, rd)<<7 |
 		opcode
 }
 
 // Convenience functions for specific instructions.
-func instr_addi(imm int64, rs1 int16, rd int16) uint32 {
+func instr_addi(ctxt *obj.Link, imm int64, rs1 int16, rd int16) uint32 {
 	encoded := encode(AADDI)
-	return instr_i(imm, rs1, encoded.funct3, rd, encoded.opcode)
+	return instr_i(ctxt, imm, rs1, encoded.funct3, rd, encoded.opcode)
 }
 
 // Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
-	log.Printf("asmout: p: %+v o: %+v", p, o)
-
 	result := uint32(0)
 	switch o.type_ {
 	default:
@@ -371,13 +350,13 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 			p.From3.Reg = p.To.Reg
 		}
 		// TODO(bbaren): Do something reasonable if immediate is too large.
-		result = instr_i(p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_i(ctxt, p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
 		if p.From3.Class == C_NONE {
 			p.From3.Reg = p.To.Reg
 		}
 		encoded := encode(o.as)
-		result = instr_r(encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_jal:
 		var encoded *inst
 		var rd int16
@@ -398,17 +377,17 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		if offset%4 != 0 {
 			ctxt.Diag("asmout: misaligned jump offset %d", offset)
 		}
-		result = instr_uj(offset, rd, encoded.opcode)
+		result = instr_uj(ctxt, offset, rd, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
-		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+		result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_mov:
 		switch p.From.Class {
 		case C_REGI:
-			result = instr_addi(0, p.From.Reg, p.To.Reg)
+			result = instr_addi(ctxt, 0, p.From.Reg, p.To.Reg)
 		case C_IMMI:
 			// TODO(bbaren): Do something reasonable if immediate is too large.
-			result = instr_addi(p.From.Offset, REG_ZERO, p.To.Reg)
+			result = instr_addi(ctxt, p.From.Offset, REG_ZERO, p.To.Reg)
 		default:
 			ctxt.Diag("unknown instruction %d", o.as)
 		}
@@ -417,8 +396,6 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 }
 
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
-	log.Printf("assemble")
-
 	if cursym.Text == nil || cursym.Text.Link == nil {
 		// We're being asked to assemble an external function or an ELF
 		// section symbol.  Do nothing.
