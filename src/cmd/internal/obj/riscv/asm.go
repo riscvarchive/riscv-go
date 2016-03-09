@@ -25,7 +25,7 @@ import "cmd/internal/obj"
 const (
 	// Things which the assembler treats as instructions but which do not
 	// correspond to actual RISC-V instructions (e.g., the TEXT directive at
-	// the start of each symbol).
+	// the start of each symbol, MOVs).
 	type_pseudo = iota
 
 	// Integer register-immediate instructions, such as ADDI.
@@ -40,9 +40,6 @@ const (
 	// System instructions (read counters).  These are encoded using a
 	// variant of the I-type encoding.
 	type_system
-
-	// Moves.
-	type_mov
 )
 
 type Optab struct {
@@ -105,8 +102,8 @@ var optab = []Optab{
 	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
 
-	{AMOV, C_REGI, C_NONE, C_REGI, type_mov, 4},
-	{AMOV, C_IMMI, C_NONE, C_REGI, type_mov, 4},
+	{AMOV, C_REGI, C_NONE, C_REGI, type_pseudo, 0},
+	{AMOV, C_IMMI, C_NONE, C_REGI, type_pseudo, 0},
 }
 
 // progedit is called individually for each Prog.
@@ -129,6 +126,38 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.To.Type = obj.TYPE_BRANCH
 		}
 	}
+
+	// Populate the Class field in the operands.
+	aclass(ctxt, &p.From)
+	if p.From3 == nil {
+		// There is no third operand for this operation.  Create an
+		// empty one to make other code have to deal with fewer special
+		// cases.
+		p.From3 = &obj.Addr{}
+		p.From3.Class = C_NONE
+	} else {
+		aclass(ctxt, p.From3)
+	}
+	aclass(ctxt, &p.To)
+
+	// Rewrite pseudoinstructions.
+	if p.As == AMOV {
+		switch p.From.Class {
+		case C_REGI:
+			p.As = AADD
+			*p.From3 = p.From
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = 0
+			aclass(ctxt, &p.From)
+		case C_IMMI:
+			p.As = AADD
+			p.From3.Type = obj.TYPE_REG
+			p.From3.Reg = REG_ZERO
+			aclass(ctxt, p.From3)
+		default:
+			ctxt.Diag("progedit: unsupported MOV")
+		}
+	}
 }
 
 // TODO(myenik)
@@ -147,6 +176,8 @@ func aclass(ctxt *obj.Link, a *obj.Addr) {
 			a.Class = C_REGI
 		} else if REG_F0 <= a.Reg && a.Reg <= REG_F31 {
 			ctxt.Diag("aclass: floating-point registers are unsupported")
+		} else {
+			ctxt.Diag("aclass: unknown register %v", a.Reg)
 		}
 
 	case obj.TYPE_CONST:
@@ -200,6 +231,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			q.To.Type = obj.TYPE_REG
 			q.To.Reg = REG_SP
 			q.Spadj = int32(-stackSize)
+			aclass(ctxt, &q.From)
+			aclass(ctxt, q.From3)
+			aclass(ctxt, &q.To)
 		case obj.ARET:
 			// Function exit. Stack teardown and exit.
 			q = p
@@ -213,6 +247,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			q.To.Type = obj.TYPE_REG
 			q.To.Reg = REG_SP
 			q.Spadj = int32(stackSize)
+			aclass(ctxt, &q.From)
+			aclass(ctxt, q.From3)
+			aclass(ctxt, &q.To)
 
 			q = obj.Appendp(ctxt, q)
 			q.As = AJAL
@@ -220,23 +257,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			q.From.Reg = REG_RA
 			q.To.Type = obj.TYPE_REG
 			q.To.Reg = REG_ZERO
+			aclass(ctxt, &q.From)
+			aclass(ctxt, &q.To)
 		}
-	}
-
-	// Normalize all the instructions.
-	for p := cursym.Text; p != nil; p = p.Link {
-		// Populate the Class field in the operands.
-		aclass(ctxt, &p.From)
-		if p.From3 == nil {
-			// There is no third operand for this operation.  Create an
-			// empty one to make other code have to deal with fewer special
-			// cases.
-			p.From3 = &obj.Addr{}
-			p.From3.Class = C_NONE
-		} else {
-			aclass(ctxt, p.From3)
-		}
-		aclass(ctxt, &p.To)
 	}
 }
 
@@ -312,12 +335,6 @@ func instr_uj(ctxt *obj.Link, imm64 int64, rd int16, opcode uint32) uint32 {
 		opcode
 }
 
-// Convenience functions for specific instructions.
-func instr_addi(ctxt *obj.Link, imm int64, rs1 int16, rd int16) uint32 {
-	encoded := encode(AADDI)
-	return instr_i(ctxt, imm, rs1, encoded.funct3, rd, encoded.opcode)
-}
-
 // Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	result := uint32(0)
@@ -325,7 +342,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	default:
 		ctxt.Diag("unknown type %d", o.type_)
 	case type_pseudo:
-		break
+		ctxt.Diag("asmout: found pseudoinstruction %v", o.as)
 	case type_regi_immi:
 		var encoded *inst
 		switch o.as {
@@ -381,16 +398,6 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	case type_system:
 		encoded := encode(o.as)
 		result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
-	case type_mov:
-		switch p.From.Class {
-		case C_REGI:
-			result = instr_addi(ctxt, 0, p.From.Reg, p.To.Reg)
-		case C_IMMI:
-			// TODO(bbaren): Do something reasonable if immediate is too large.
-			result = instr_addi(ctxt, p.From.Offset, REG_ZERO, p.To.Reg)
-		default:
-			ctxt.Diag("unknown instruction %d", o.as)
-		}
 	}
 	return result
 }
