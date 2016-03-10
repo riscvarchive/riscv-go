@@ -68,11 +68,11 @@ func gentext() {
 		// an init function
 		return
 	}
-	addmoduledata.Reachable = true
+	addmoduledata.Attr |= ld.AttrReachable
 	initfunc := ld.Linklookup(ld.Ctxt, "go.link.addmoduledata", 0)
 	initfunc.Type = obj.STEXT
-	initfunc.Local = true
-	initfunc.Reachable = true
+	initfunc.Attr |= ld.AttrLocal
+	initfunc.Attr |= ld.AttrReachable
 	o := func(op uint32) {
 		ld.Adduint32(ld.Ctxt, initfunc, op)
 	}
@@ -102,14 +102,14 @@ func gentext() {
 	}
 	ld.Ctxt.Etextp = initfunc
 	initarray_entry := ld.Linklookup(ld.Ctxt, "go.link.addmoduledatainit", 0)
-	initarray_entry.Reachable = true
-	initarray_entry.Local = true
+	initarray_entry.Attr |= ld.AttrReachable
+	initarray_entry.Attr |= ld.AttrLocal
 	initarray_entry.Type = obj.SINITARR
 	ld.Addaddr(ld.Ctxt, initarray_entry, initfunc)
 }
 
 // Preserve highest 8 bits of a, and do addition to lower 24-bit
-// of a and b; used to adjust ARM branch intruction's target
+// of a and b; used to adjust ARM branch instruction's target
 func braddoff(a int32, b int32) int32 {
 	return int32((uint32(a))&0xff000000 | 0x00ffffff&uint32(a+b))
 }
@@ -480,7 +480,7 @@ func addpltreloc(ctxt *ld.Link, plt *ld.LSym, got *ld.LSym, sym *ld.LSym, typ in
 	r.Type = int32(typ)
 	r.Add = int64(sym.Got) - 8
 
-	plt.Reachable = true
+	plt.Attr |= ld.AttrReachable
 	plt.Size += 4
 	ld.Symgrow(ctxt, plt, plt.Size)
 

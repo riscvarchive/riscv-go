@@ -144,10 +144,10 @@ import "encoding/binary"
 //			scale = 1
 //
 type Addr struct {
-	Type   int16
 	Reg    int16
 	Index  int16
 	Scale  int16 // Sometimes holds a register.
+	Type   AddrType
 	Name   int8
 	Class  int8
 	Etype  uint8
@@ -166,6 +166,8 @@ type Addr struct {
 	Node interface{} // for use by compiler
 }
 
+type AddrType uint8
+
 const (
 	NAME_NONE = 0 + iota
 	NAME_EXTERN
@@ -178,11 +180,9 @@ const (
 )
 
 const (
-	TYPE_NONE = 0
-)
+	TYPE_NONE AddrType = 0
 
-const (
-	TYPE_BRANCH = 5 + iota
+	TYPE_BRANCH AddrType = 5 + iota
 	TYPE_TEXTSIZE
 	TYPE_MEM
 	TYPE_CONST
@@ -212,23 +212,23 @@ type Prog struct {
 	Pc     int64
 	Lineno int32
 	Spadj  int32
-	As     int16
+	As     As // Assembler opcode.
 	Reg    int16
-	RegTo2 int16 // 2nd register output operand
-	Mark   uint16
+	RegTo2 int16  // 2nd register output operand
+	Mark   uint16 // bitmask of arch-specific items
 	Optab  uint16
 	Scond  uint8
 	Back   uint8
 	Ft     uint8
 	Tt     uint8
-	Isize  uint8
+	Isize  uint8 // size of the instruction in bytes (x86 only)
 	Mode   int8
 
 	Info ProgInfo
 }
 
 // From3Type returns From3.Type, or TYPE_NONE when From3 is nil.
-func (p *Prog) From3Type() int16 {
+func (p *Prog) From3Type() AddrType {
 	if p.From3 == nil {
 		return TYPE_NONE
 	}
@@ -254,16 +254,16 @@ type ProgInfo struct {
 	Regindex uint64   // registers used by addressing mode
 }
 
-// Prog.as opcodes.
-// These are the portable opcodes, common to all architectures.
-// Each architecture defines many more arch-specific opcodes,
-// with values starting at A_ARCHSPECIFIC.
-// Each architecture adds an offset to this so each machine has
-// distinct space for its instructions. The offset is a power of
-// two so it can be masked to return to origin zero.
-// See the definitions of ABase386 etc.
+// An As denotes an assembler opcode.
+// There are some portable opcodes, declared here in package obj,
+// that are common to all architectures.
+// However, the majority of opcodes are arch-specific
+// and are declared in their respective architecture's subpackage.
+type As int16
+
+// These are the portable opcodes.
 const (
-	AXXX = 0 + iota
+	AXXX As = iota
 	ACALL
 	ACHECKNIL
 	ADATA
@@ -284,6 +284,25 @@ const (
 	AVARKILL
 	AVARLIVE
 	A_ARCHSPECIFIC
+)
+
+// Each architecture is allotted a distinct subspace of opcode values
+// for declaring its arch-specific opcodes.
+// Within this subspace, the first arch-specific opcode should be
+// at offset A_ARCHSPECIFIC.
+//
+// Subspaces are aligned to a power of two so opcodes can be masked
+// with AMask and used as compact array indices.
+const (
+	ABase386 = (1 + iota) << 12
+	ABaseARM
+	ABaseAMD64
+	ABasePPC64
+	ABaseARM64
+	ABaseMIPS64
+	ABaseRISCV
+
+	AMask = 1<<12 - 1 // AND with this to use the opcode as an array index.
 )
 
 // An LSym is the sort of symbol that is written to an object file.
@@ -339,6 +358,7 @@ const (
 	STYPE
 	SSTRING
 	SGOSTRING
+	SGOSTRINGHDR
 	SGOFUNC
 	SGCBITS
 	SRODATA
@@ -357,6 +377,7 @@ const (
 	STYPERELRO
 	SSTRINGRELRO
 	SGOSTRINGRELRO
+	SGOSTRINGHDRRELRO
 	SGOFUNCRELRO
 	SGCBITSRELRO
 	SRODATARELRO
@@ -444,6 +465,16 @@ const (
 	R_PLT1
 	R_PLT2
 	R_USEFIELD
+	// R_USETYPE resolves to an *rtype, but no relocation is created. The
+	// linker uses this as a signal that the pointed-to type information
+	// should be linked into the final binary, even if there are no other
+	// direct references. (This is used for types reachable by reflection.)
+	R_USETYPE
+	// R_METHOD resolves to an *rtype for a method.
+	// It is used when linking from the uncommonType of another *rtype, and
+	// may be set to zero by the linker if it determines the method text is
+	// unreachable by the linked program.
+	R_METHOD
 	R_POWER_TOC
 	R_GOTPCREL
 	// R_JMPMIPS (only used on mips64) resolves to non-PC-relative target address
@@ -455,7 +486,7 @@ const (
 	// have the inherent issue that a 32-bit (or 64-bit!) displacement cannot be
 	// stuffed into a 32-bit instruction, so an address needs to be spread across
 	// several instructions, and in turn this requires a sequence of relocations, each
-	// updating a part of an instruction.  This leads to relocation codes that are
+	// updating a part of an instruction. This leads to relocation codes that are
 	// inherently processor specific.
 
 	// Arm64.
@@ -572,6 +603,7 @@ type Link struct {
 	Debugpcln          int32
 	Flag_shared        int32
 	Flag_dynlink       bool
+	Flag_optimize      bool
 	Bso                *Biobuf
 	Pathname           string
 	Windows            int32
@@ -617,6 +649,10 @@ type Link struct {
 	Data  *LSym
 	Etext *LSym
 	Edata *LSym
+
+	// Cache of Progs
+	allocIdx int
+	progs    [10000]Prog
 }
 
 func (ctxt *Link) Diag(format string, args ...interface{}) {
@@ -655,7 +691,7 @@ type LinkArch struct {
 	Assemble   func(*Link, *LSym)
 	Follow     func(*Link, *LSym)
 	Progedit   func(*Link, *Prog)
-	UnaryDst   map[int]bool // Instruction takes one operand, a destination.
+	UnaryDst   map[As]bool // Instruction takes one operand, a destination.
 	Minlc      int
 	Ptrsize    int
 	Regsize    int

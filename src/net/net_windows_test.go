@@ -315,7 +315,7 @@ func TestInterfacesWithNetsh(t *testing.T) {
 }
 
 func netshInterfaceIPv4ShowAddress(name string, netshOutput []byte) []string {
-	// adress information is listed like:
+	// Address information is listed like:
 	//
 	//Configuration for interface "Local Area Connection"
 	//    DHCP enabled:                         Yes
@@ -378,7 +378,7 @@ func netshInterfaceIPv4ShowAddress(name string, netshOutput []byte) []string {
 }
 
 func netshInterfaceIPv6ShowAddress(name string, netshOutput []byte) []string {
-	// adress information is listed like:
+	// Address information is listed like:
 	//
 	//Address ::1 Parameters
 	//---------------------------------------------------------
@@ -561,24 +561,24 @@ func TestInterfaceHardwareAddrWithGetmac(t *testing.T) {
 		if bytes.Contains(line, []byte("Connection Name:")) {
 			f := bytes.Split(line, []byte{':'})
 			if len(f) != 2 {
-				t.Fatal("unexpected \"Connection Name\" line: %q", line)
+				t.Fatalf("unexpected \"Connection Name\" line: %q", line)
 			}
 			name = string(bytes.TrimSpace(f[1]))
 			if name == "" {
-				t.Fatal("empty name on \"Connection Name\" line: %q", line)
+				t.Fatalf("empty name on \"Connection Name\" line: %q", line)
 			}
 		}
 		if bytes.Contains(line, []byte("Physical Address:")) {
 			if name == "" {
-				t.Fatal("no matching name found: %q", string(out))
+				t.Fatalf("no matching name found: %q", string(out))
 			}
 			f := bytes.Split(line, []byte{':'})
 			if len(f) != 2 {
-				t.Fatal("unexpected \"Physical Address\" line: %q", line)
+				t.Fatalf("unexpected \"Physical Address\" line: %q", line)
 			}
 			addr := string(bytes.ToLower(bytes.TrimSpace(f[1])))
 			if addr == "" {
-				t.Fatal("empty address on \"Physical Address\" line: %q", line)
+				t.Fatalf("empty address on \"Physical Address\" line: %q", line)
 			}
 			if addr == "disabled" || addr == "n/a" {
 				continue

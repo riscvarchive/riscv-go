@@ -1,4 +1,4 @@
-// Copyright 2011 The Go Authors.  All rights reserved.
+// Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -59,9 +59,9 @@ func SetTestHookServerServe(fn func(*Server, net.Listener)) { testHookServerServ
 
 func NewTestTimeoutHandler(handler Handler, ch <-chan time.Time) Handler {
 	return &timeoutHandler{
-		handler: handler,
-		timeout: func() <-chan time.Time { return ch },
-		// (no body and nil cancelTimer)
+		handler:     handler,
+		testTimeout: ch,
+		// (no body)
 	}
 }
 

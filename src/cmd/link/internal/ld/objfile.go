@@ -1,4 +1,4 @@
-// Copyright 2013 The Go Authors.  All rights reserved.
+// Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -165,17 +165,14 @@ func readsym(ctxt *Link, f *obj.Biobuf, pkg string, pn string) {
 		log.Fatalf("readsym out of sync")
 	}
 	t := rdint(f)
-	name := expandpkg(rdstring(f), pkg)
+	name := rdsymName(f, pkg)
 	v := rdint(f)
 	if v != 0 && v != 1 {
 		log.Fatalf("invalid symbol version %d", v)
 	}
 	flags := rdint(f)
-	dupok := flags & 1
-	local := false
-	if flags&2 != 0 {
-		local = true
-	}
+	dupok := flags&1 != 0
+	local := flags&2 != 0
 	size := rdint(f)
 	typ := rdsym(ctxt, f, pkg)
 	data := rddata(f)
@@ -200,7 +197,7 @@ func readsym(ctxt *Link, f *obj.Biobuf, pkg string, pn string) {
 		if (s.Type == obj.SDATA || s.Type == obj.SBSS || s.Type == obj.SNOPTRBSS) && len(s.P) == 0 && len(s.R) == 0 {
 			goto overwrite
 		}
-		if s.Type != obj.SBSS && s.Type != obj.SNOPTRBSS && dupok == 0 && s.Dupok == 0 {
+		if s.Type != obj.SBSS && s.Type != obj.SNOPTRBSS && !dupok && !s.Attr.DuplicateOK() {
 			log.Fatalf("duplicate symbol %s (types %d and %d) in %s and %s", s.Name, s.Type, t, s.File, pn)
 		}
 		if len(s.P) > 0 {
@@ -212,7 +209,9 @@ func readsym(ctxt *Link, f *obj.Biobuf, pkg string, pn string) {
 
 overwrite:
 	s.File = pkg
-	s.Dupok = uint8(dupok)
+	if dupok {
+		s.Attr |= AttrDuplicateOK
+	}
 	if t == obj.SXREF {
 		log.Fatalf("bad sxref")
 	}
@@ -226,7 +225,7 @@ overwrite:
 	if s.Size < int64(size) {
 		s.Size = int64(size)
 	}
-	s.Local = local
+	s.Attr.Set(AttrLocal, local)
 	if typ != nil { // if bss sym defined multiple times, take type from any one def
 		s.Gotype = typ
 	}
@@ -262,20 +261,19 @@ overwrite:
 	if s.Type == obj.STEXT {
 		s.Args = rdint32(f)
 		s.Locals = rdint32(f)
-		s.Nosplit = rduint8(f)
-		v := rdint(f)
-		s.Leaf = uint8(v & 1)
-		s.Cfunc = uint8(v & 2)
+		if rduint8(f) != 0 {
+			s.Attr |= AttrNoSplit
+		}
+		rdint(f) // v&1 is Leaf, currently unused
 		n := rdint(f)
-		var a *Auto
+		s.Autom = make([]Auto, n)
 		for i := 0; i < n; i++ {
-			a = new(Auto)
-			a.Asym = rdsym(ctxt, f, pkg)
-			a.Aoffset = rdint32(f)
-			a.Name = rdint16(f)
-			a.Gotype = rdsym(ctxt, f, pkg)
-			a.Link = s.Autom
-			s.Autom = a
+			s.Autom[i] = Auto{
+				Asym:    rdsym(ctxt, f, pkg),
+				Aoffset: rdint32(f),
+				Name:    rdint16(f),
+				Gotype:  rdsym(ctxt, f, pkg),
+			}
 		}
 
 		s.Pcln = new(Pcln)
@@ -307,10 +305,10 @@ overwrite:
 		}
 
 		if dup == nil {
-			if s.Onlist != 0 {
+			if s.Attr.OnList() {
 				log.Fatalf("symbol %s listed multiple times", s.Name)
 			}
-			s.Onlist = 1
+			s.Attr |= AttrOnList
 			if ctxt.Etextp != nil {
 				ctxt.Etextp.Next = s
 			} else {
@@ -328,13 +326,10 @@ overwrite:
 		if s.Type != 0 {
 			fmt.Fprintf(ctxt.Bso, "t=%d ", s.Type)
 		}
-		if s.Dupok != 0 {
+		if s.Attr.DuplicateOK() {
 			fmt.Fprintf(ctxt.Bso, "dupok ")
 		}
-		if s.Cfunc != 0 {
-			fmt.Fprintf(ctxt.Bso, "cfunc ")
-		}
-		if s.Nosplit != 0 {
+		if s.Attr.NoSplit() {
 			fmt.Fprintf(ctxt.Bso, "nosplit ")
 		}
 		fmt.Fprintf(ctxt.Bso, "size=%d value=%d", int64(s.Size), int64(s.Value))
@@ -424,59 +419,101 @@ func rduint8(f *obj.Biobuf) uint8 {
 	return uint8(n)
 }
 
+// rdBuf is used by rdstring and rdsymName as scratch for reading strings.
+var rdBuf []byte
+var emptyPkg = []byte(`"".`)
+
 func rdstring(f *obj.Biobuf) string {
-	n := rdint64(f)
-	p := make([]byte, n)
-	obj.Bread(f, p)
-	return string(p)
+	n := rdint(f)
+	if len(rdBuf) < n {
+		rdBuf = make([]byte, n)
+	}
+	obj.Bread(f, rdBuf[:n])
+	return string(rdBuf[:n])
 }
 
+const rddataBufMax = 1 << 14
+
+var rddataBuf = make([]byte, rddataBufMax)
+
 func rddata(f *obj.Biobuf) []byte {
-	n := rdint64(f)
-	p := make([]byte, n)
+	var p []byte
+	n := rdint(f)
+	if n > rddataBufMax {
+		p = make([]byte, n)
+	} else {
+		if len(rddataBuf) < n {
+			rddataBuf = make([]byte, rddataBufMax)
+		}
+		p = rddataBuf[:n:n]
+		rddataBuf = rddataBuf[n:]
+	}
 	obj.Bread(f, p)
 	return p
 }
 
-var symbuf []byte
-
-func rdsym(ctxt *Link, f *obj.Biobuf, pkg string) *LSym {
+// rdsymName reads a symbol name, replacing all "". with pkg.
+func rdsymName(f *obj.Biobuf, pkg string) string {
 	n := rdint(f)
 	if n == 0 {
 		rdint64(f)
-		return nil
+		return ""
 	}
 
-	if len(symbuf) < n {
-		symbuf = make([]byte, n)
+	if len(rdBuf) < n {
+		rdBuf = make([]byte, n, 2*n)
 	}
-	obj.Bread(f, symbuf[:n])
-	p := string(symbuf[:n])
+	origName := rdBuf[:n]
+	obj.Bread(f, origName)
+	adjName := rdBuf[n:n]
+	for {
+		i := bytes.Index(origName, emptyPkg)
+		if i == -1 {
+			adjName = append(adjName, origName...)
+			break
+		}
+		adjName = append(adjName, origName[:i]...)
+		adjName = append(adjName, pkg...)
+		adjName = append(adjName, '.')
+		origName = origName[i+len(emptyPkg):]
+	}
+	name := string(adjName)
+	if len(adjName) > len(rdBuf) {
+		rdBuf = adjName // save the larger buffer for reuse
+	}
+	return name
+}
+
+func rdsym(ctxt *Link, f *obj.Biobuf, pkg string) *LSym {
+	name := rdsymName(f, pkg)
+	if name == "" {
+		return nil
+	}
 	v := rdint(f)
 	if v != 0 {
 		v = ctxt.Version
 	}
-	s := Linklookup(ctxt, expandpkg(p, pkg), v)
+	s := Linklookup(ctxt, name, v)
 
 	if v == 0 && s.Name[0] == '$' && s.Type == 0 {
 		if strings.HasPrefix(s.Name, "$f32.") {
 			x, _ := strconv.ParseUint(s.Name[5:], 16, 32)
 			i32 := int32(x)
 			s.Type = obj.SRODATA
-			s.Local = true
+			s.Attr |= AttrLocal
 			Adduint32(ctxt, s, uint32(i32))
-			s.Reachable = false
+			s.Attr.Set(AttrReachable, false)
 		} else if strings.HasPrefix(s.Name, "$f64.") || strings.HasPrefix(s.Name, "$i64.") {
 			x, _ := strconv.ParseUint(s.Name[5:], 16, 64)
 			i64 := int64(x)
 			s.Type = obj.SRODATA
-			s.Local = true
+			s.Attr |= AttrLocal
 			Adduint64(ctxt, s, uint64(i64))
-			s.Reachable = false
+			s.Attr.Set(AttrReachable, false)
 		}
 	}
 	if v == 0 && strings.HasPrefix(s.Name, "runtime.gcbits.") {
-		s.Local = true
+		s.Attr |= AttrLocal
 	}
 	return s
 }

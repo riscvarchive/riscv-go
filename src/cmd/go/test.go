@@ -1,4 +1,4 @@
-// Copyright 2011 The Go Authors.  All rights reserved.
+// Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -311,10 +311,11 @@ A benchmark function is one named BenchmarkXXX and should have the signature,
 
 An example function is similar to a test function but, instead of using
 *testing.T to report success or failure, prints output to os.Stdout.
-That output is compared against the function's "Output:" comment, which
-must be the last comment in the function body (see example below). An
-example with no such comment, or with no text after "Output:" is compiled
-but not executed.
+If the last comment in the function starts with "Output:" then the output
+is compared exactly against the comment (see examples below). If the last
+comment begins with "Unordered output:" then the output is compared to the
+comment, however the order of the lines is ignored. An example with no such
+comment, or with no text after "Output:" is compiled but not executed.
 
 Godoc displays the body of ExampleXXX to demonstrate the use
 of the function, constant, or variable XXX.  An example of a method M with
@@ -328,6 +329,20 @@ Here is an example of an example:
 		Println("The output of\nthis example.")
 		// Output: The output of
 		// this example.
+	}
+
+Here is another example where the ordering of the output is ignored:
+
+	func ExamplePerm() {
+		for _, value := range Perm(4) {
+			fmt.Println(value)
+		}
+
+		// Unordered output: 4
+		// 2
+		// 1
+		// 3
+		// 0
 	}
 
 The entire test file is presented as the example when it contains a single
@@ -388,7 +403,7 @@ func runTest(cmd *Command, args []string) {
 	}
 
 	// If a test timeout was given and is parseable, set our kill timeout
-	// to that timeout plus one minute.  This is a backup alarm in case
+	// to that timeout plus one minute. This is a backup alarm in case
 	// the test wedges with a goroutine spinning and its background
 	// timer does not get a chance to fire.
 	if dt, err := time.ParseDuration(testTimeout); err == nil && dt > 0 {
@@ -691,7 +706,7 @@ func (b *builder) test(p *Package) (buildAction, runAction, printAction *action,
 	// the usual place in the temporary tree, because then
 	// other tests will see it as the real package.
 	// Instead we make a _test directory under the import path
-	// and then repeat the import path there.  We tell the
+	// and then repeat the import path there. We tell the
 	// compiler and linker to look in that _test directory first.
 	//
 	// That is, if the package under test is unicode/utf8,
@@ -1206,11 +1221,11 @@ func (b *builder) notest(a *action) error {
 	return nil
 }
 
-// isTestMain tells whether fn is a TestMain(m *testing.M) function.
-func isTestMain(fn *ast.FuncDecl) bool {
-	if fn.Name.String() != "TestMain" ||
-		fn.Type.Results != nil && len(fn.Type.Results.List) > 0 ||
-		fn.Type.Params == nil ||
+// isTestFunc tells whether fn has the type of a testing function. arg
+// specifies the parameter type we look for: B, M or T.
+func isTestFunc(fn *ast.FuncDecl, arg string) bool {
+	if fn.Type.Results != nil && len(fn.Type.Results.List) > 0 ||
+		fn.Type.Params.List == nil ||
 		len(fn.Type.Params.List) != 1 ||
 		len(fn.Type.Params.List[0].Names) > 1 {
 		return false
@@ -1222,10 +1237,11 @@ func isTestMain(fn *ast.FuncDecl) bool {
 	// We can't easily check that the type is *testing.M
 	// because we don't know how testing has been imported,
 	// but at least check that it's *M or *something.M.
-	if name, ok := ptr.X.(*ast.Ident); ok && name.Name == "M" {
+	// Same applies for B and T.
+	if name, ok := ptr.X.(*ast.Ident); ok && name.Name == arg {
 		return true
 	}
-	if sel, ok := ptr.X.(*ast.SelectorExpr); ok && sel.Sel.Name == "M" {
+	if sel, ok := ptr.X.(*ast.SelectorExpr); ok && sel.Sel.Name == arg {
 		return true
 	}
 	return false
@@ -1322,9 +1338,10 @@ func (t *testFuncs) Tested() string {
 }
 
 type testFunc struct {
-	Package string // imported package name (_test or _xtest)
-	Name    string // function name
-	Output  string // output, for examples
+	Package   string // imported package name (_test or _xtest)
+	Name      string // function name
+	Output    string // output, for examples
+	Unordered bool   // output is allowed to be unordered.
 }
 
 var testFileSet = token.NewFileSet()
@@ -1344,17 +1361,25 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 		}
 		name := n.Name.String()
 		switch {
-		case isTestMain(n):
+		case name == "TestMain" && isTestFunc(n, "M"):
 			if t.TestMain != nil {
 				return errors.New("multiple definitions of TestMain")
 			}
-			t.TestMain = &testFunc{pkg, name, ""}
+			t.TestMain = &testFunc{pkg, name, "", false}
 			*doImport, *seen = true, true
 		case isTest(name, "Test"):
-			t.Tests = append(t.Tests, testFunc{pkg, name, ""})
+			err := checkTestFunc(n, "T")
+			if err != nil {
+				return err
+			}
+			t.Tests = append(t.Tests, testFunc{pkg, name, "", false})
 			*doImport, *seen = true, true
 		case isTest(name, "Benchmark"):
-			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, ""})
+			err := checkTestFunc(n, "B")
+			if err != nil {
+				return err
+			}
+			t.Benchmarks = append(t.Benchmarks, testFunc{pkg, name, "", false})
 			*doImport, *seen = true, true
 		}
 	}
@@ -1366,8 +1391,17 @@ func (t *testFuncs) load(filename, pkg string, doImport, seen *bool) error {
 			// Don't run examples with no output.
 			continue
 		}
-		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output})
+		t.Examples = append(t.Examples, testFunc{pkg, "Example" + e.Name, e.Output, e.Unordered})
 		*seen = true
+	}
+	return nil
+}
+
+func checkTestFunc(fn *ast.FuncDecl, arg string) error {
+	if !isTestFunc(fn, arg) {
+		name := fn.Name.String()
+		pos := testFileSet.Position(fn.Pos())
+		return fmt.Errorf("%s: wrong signature for %s, must be: func %s(%s *testing.%s)", pos, name, name, strings.ToLower(arg), arg)
 	}
 	return nil
 }
@@ -1417,7 +1451,7 @@ var benchmarks = []testing.InternalBenchmark{
 
 var examples = []testing.InternalExample{
 {{range .Examples}}
-	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}},
+	{"{{.Name}}", {{.Package}}.{{.Name}}, {{.Output | printf "%q"}}, {{.Unordered}}},
 {{end}}
 }
 

@@ -34,8 +34,8 @@ import (
 )
 
 var (
-	// Instructions is a map of instruction names to integer IDs.
-	Instructions = make(map[string]int)
+	// Instructions is a map of instruction names to instruction IDs.
+	Instructions = make(map[string]obj.As)
 
 	// Registers is a map of register names to integer IDs.
 	Registers = make(map[string]int16)
@@ -228,11 +228,11 @@ func checkRegNames() {
 
 func initInstructions() {
 	for i, s := range obj.Anames {
-		Instructions[s] = i
+		Instructions[s] = obj.As(i)
 	}
 	for i, s := range Anames {
-		if i >= obj.A_ARCHSPECIFIC {
-			Instructions[s] = i + obj.ABaseRISCV
+		if obj.As(i) >= obj.A_ARCHSPECIFIC {
+			Instructions[s] = obj.As(i) + obj.ABaseRISCV
 		}
 	}
 }

@@ -84,7 +84,7 @@ func slicebytetostring(buf *tmpBuf, b []byte) string {
 	if raceenabled && l > 0 {
 		racereadrangepc(unsafe.Pointer(&b[0]),
 			uintptr(l),
-			getcallerpc(unsafe.Pointer(&b)),
+			getcallerpc(unsafe.Pointer(&buf)),
 			funcPC(slicebytetostring))
 	}
 	if msanenabled && l > 0 {
@@ -155,7 +155,7 @@ func stringtoslicebytetmp(s string) []byte {
 	// for i, c := range []byte(str)
 
 	str := stringStructOf(&s)
-	ret := slice{array: unsafe.Pointer(str.str), len: str.len, cap: str.len}
+	ret := slice{array: str.str, len: str.len, cap: str.len}
 	return *(*[]byte)(unsafe.Pointer(&ret))
 }
 
@@ -189,7 +189,7 @@ func slicerunetostring(buf *tmpBuf, a []rune) string {
 	if raceenabled && len(a) > 0 {
 		racereadrangepc(unsafe.Pointer(&a[0]),
 			uintptr(len(a))*unsafe.Sizeof(a[0]),
-			getcallerpc(unsafe.Pointer(&a)),
+			getcallerpc(unsafe.Pointer(&buf)),
 			funcPC(slicerunetostring))
 	}
 	if msanenabled && len(a) > 0 {
@@ -290,7 +290,7 @@ func rawstring(size int) (s string, b []byte) {
 
 	for {
 		ms := maxstring
-		if uintptr(size) <= uintptr(ms) || atomic.Casuintptr((*uintptr)(unsafe.Pointer(&maxstring)), uintptr(ms), uintptr(size)) {
+		if uintptr(size) <= ms || atomic.Casuintptr((*uintptr)(unsafe.Pointer(&maxstring)), ms, uintptr(size)) {
 			return
 		}
 	}

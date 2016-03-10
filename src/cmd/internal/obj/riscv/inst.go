@@ -2,7 +2,11 @@
 
 package riscv
 
-import "log"
+import (
+	"log"
+
+	"cmd/internal/obj"
+)
 
 type inst struct {
 	opcode uint32
@@ -11,7 +15,7 @@ type inst struct {
 	funct7 uint32
 }
 
-func encode(a int16) *inst {
+func encode(a obj.As) *inst {
 	switch a {
 	case ABEQ:
 		return &inst{0x63, 0x0, 0, 0x0}

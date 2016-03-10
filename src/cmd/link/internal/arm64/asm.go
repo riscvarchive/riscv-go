@@ -48,11 +48,11 @@ func gentext() {
 		// an init function
 		return
 	}
-	addmoduledata.Reachable = true
+	addmoduledata.Attr |= ld.AttrReachable
 	initfunc := ld.Linklookup(ld.Ctxt, "go.link.addmoduledata", 0)
 	initfunc.Type = obj.STEXT
-	initfunc.Local = true
-	initfunc.Reachable = true
+	initfunc.Attr |= ld.AttrLocal
+	initfunc.Attr |= ld.AttrReachable
 	o := func(op uint32) {
 		ld.Adduint32(ld.Ctxt, initfunc, op)
 	}
@@ -85,8 +85,8 @@ func gentext() {
 	}
 	ld.Ctxt.Etextp = initfunc
 	initarray_entry := ld.Linklookup(ld.Ctxt, "go.link.addmoduledatainit", 0)
-	initarray_entry.Reachable = true
-	initarray_entry.Local = true
+	initarray_entry.Attr |= ld.AttrReachable
+	initarray_entry.Attr |= ld.AttrLocal
 	initarray_entry.Type = obj.SINITARR
 	ld.Addaddr(ld.Ctxt, initarray_entry, initfunc)
 }
@@ -162,7 +162,7 @@ func machoreloc1(r *ld.Reloc, sectoff int64) int {
 	rs := r.Xsym
 
 	// ld64 has a bug handling MACHO_ARM64_RELOC_UNSIGNED with !extern relocation.
-	// see cmd/internal/ld/data.go for details. The workarond is that don't use !extern
+	// see cmd/internal/ld/data.go for details. The workaround is that don't use !extern
 	// UNSIGNED relocation at all.
 	if rs.Type == obj.SHOSTOBJ || r.Type == obj.R_CALLARM64 || r.Type == obj.R_ADDRARM64 || r.Type == obj.R_ADDR {
 		if rs.Dynid < 0 {
@@ -258,7 +258,7 @@ func archreloc(r *ld.Reloc, s *ld.LSym, val *int64) int {
 			// (https://sourceware.org/bugzilla/show_bug.cgi?id=18270). So
 			// we convert the adrp; ld64 + R_ARM64_GOTPCREL into adrp;
 			// add + R_ADDRARM64.
-			if !(r.Sym.Version != 0 || (r.Sym.Type&obj.SHIDDEN != 0) || r.Sym.Local) && r.Sym.Type == obj.STEXT && ld.DynlinkingGo() {
+			if !(r.Sym.Version != 0 || (r.Sym.Type&obj.SHIDDEN != 0) || r.Sym.Attr.Local()) && r.Sym.Type == obj.STEXT && ld.DynlinkingGo() {
 				if o2&0xffc00000 != 0xf9400000 {
 					ld.Ctxt.Diag("R_ARM64_GOTPCREL against unexpected instruction %x", o2)
 				}

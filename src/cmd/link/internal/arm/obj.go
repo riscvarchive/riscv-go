@@ -54,6 +54,7 @@ func linkarchinit() {
 	ld.Thearch.Regsize = ld.Thelinkarch.Regsize
 	ld.Thearch.Funcalign = FuncAlign
 	ld.Thearch.Maxalign = MaxAlign
+	ld.Thearch.Minalign = MinAlign
 	ld.Thearch.Minlc = MINLC
 	ld.Thearch.Dwarfregsp = DWARFREGSP
 	ld.Thearch.Dwarfreglr = DWARFREGLR
@@ -70,6 +71,9 @@ func linkarchinit() {
 	ld.Thearch.Lput = ld.Lputl
 	ld.Thearch.Wput = ld.Wputl
 	ld.Thearch.Vput = ld.Vputl
+	ld.Thearch.Append16 = ld.Append16l
+	ld.Thearch.Append32 = ld.Append32l
+	ld.Thearch.Append64 = ld.Append64l
 
 	ld.Thearch.Linuxdynld = "/lib/ld-linux.so.3" // 2 for OABI, 3 for EABI
 	ld.Thearch.Freebsddynld = "/usr/libexec/ld-elf.so.1"
@@ -156,7 +160,7 @@ func archinit() {
 		}
 
 	case obj.Hdarwin: /* apple MACH */
-		ld.Debug['w'] = 1 // disable DWARF generataion
+		ld.Debug['w'] = 1 // disable DWARF generation
 		ld.Machoinit()
 		ld.HEADR = ld.INITIAL_MACHO_HEADR
 		if ld.INITTEXT == -1 {
