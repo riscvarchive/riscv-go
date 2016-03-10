@@ -67,6 +67,8 @@ var optab = []Optab{
 	// preprocess?
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
 
+	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
+
 	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
 	{AADD, C_REGI, C_NONE, C_REGI, type_regi2, 4},
 	{AADD, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
@@ -163,6 +165,12 @@ func aclass(a *obj.Addr) {
 
 	case obj.TYPE_BRANCH:
 		a.Class = C_RELADDR
+
+	case obj.TYPE_TEXTSIZE:
+		a.Class = C_TEXTSIZE
+
+	case obj.TYPE_MEM:
+		a.Class = C_MEM
 
 	default:
 		log.Printf("aclass: unsupported type")

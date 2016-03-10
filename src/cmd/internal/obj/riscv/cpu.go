@@ -423,4 +423,10 @@ const (
 
 	// A relative address.
 	C_RELADDR
+
+	// A memory address contained in an integer register.
+	C_MEM
+
+	// The size of a TEXT section.
+	C_TEXTSIZE
 )
