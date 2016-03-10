@@ -57,9 +57,9 @@ type ArHdr struct {
 }
 
 // hostArchive reads an archive file holding host objects and links in
-// required objects.  The general format is the same as a Go archive
+// required objects. The general format is the same as a Go archive
 // file, but it has an armap listing symbols and the objects that
-// define them.  This is used for the compiler support library
+// define them. This is used for the compiler support library
 // libgcc.a.
 func hostArchive(name string) {
 	f, err := obj.Bopenr(name)
@@ -97,7 +97,7 @@ func hostArchive(name string) {
 	any := true
 	for any {
 		var load []uint64
-		for s := Ctxt.Allsym; s != nil; s = s.Allsym {
+		for _, s := range Ctxt.Allsym {
 			for _, r := range s.R {
 				if r.Sym != nil && r.Sym.Type&obj.SMASK == obj.SXREF {
 					if off := armap[r.Sym.Name]; off != 0 && !loaded[off] {

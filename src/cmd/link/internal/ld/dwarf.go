@@ -111,64 +111,47 @@ func addrput(addr int64) {
 	}
 }
 
-func uleb128enc(v uint64, dst []byte) int {
-	var c uint8
-
-	length := uint8(0)
+func appendUleb128(b []byte, v uint64) []byte {
 	for {
-		c = uint8(v & 0x7f)
+		c := uint8(v & 0x7f)
 		v >>= 7
 		if v != 0 {
 			c |= 0x80
 		}
-		if dst != nil {
-			dst[0] = byte(c)
-			dst = dst[1:]
-		}
-		length++
+		b = append(b, c)
 		if c&0x80 == 0 {
 			break
 		}
 	}
-
-	return int(length)
+	return b
 }
 
-func sleb128enc(v int64, dst []byte) int {
-	var c uint8
-	var s uint8
-
-	length := uint8(0)
+func appendSleb128(b []byte, v int64) []byte {
 	for {
-		c = uint8(v & 0x7f)
-		s = uint8(v & 0x40)
+		c := uint8(v & 0x7f)
+		s := uint8(v & 0x40)
 		v >>= 7
 		if (v != -1 || s == 0) && (v != 0 || s != 0) {
 			c |= 0x80
 		}
-		if dst != nil {
-			dst[0] = byte(c)
-			dst = dst[1:]
-		}
-		length++
+		b = append(b, c)
 		if c&0x80 == 0 {
 			break
 		}
 	}
-
-	return int(length)
+	return b
 }
 
 var encbuf [10]byte
 
 func uleb128put(v int64) {
-	n := uleb128enc(uint64(v), encbuf[:])
-	Cwrite(encbuf[:n])
+	b := appendUleb128(encbuf[:0], uint64(v))
+	Cwrite(b)
 }
 
 func sleb128put(v int64) {
-	n := sleb128enc(v, encbuf[:])
-	Cwrite(encbuf[:n])
+	b := appendSleb128(encbuf[:0], v)
+	Cwrite(b)
 }
 
 /*
@@ -502,18 +485,6 @@ func writeabbrev() {
 /*
  * Debugging Information Entries and their attributes.
  */
-const (
-	HASHSIZE = 107
-)
-
-func dwarfhashstr(s string) uint32 {
-	h := uint32(0)
-	for s != "" {
-		h = h + h + h + uint32(s[0])
-		s = s[1:]
-	}
-	return h % HASHSIZE
-}
 
 // For DW_CLS_string and _block, value should contain the length, and
 // data the data, for _reference, value is 0 and data is a DWDie* to
@@ -535,9 +506,8 @@ type DWDie struct {
 	attr   *DWAttr
 	// offset into .debug_info section, i.e relative to
 	// infoo. only valid after call to putdie()
-	offs  int64
-	hash  []*DWDie // optional index of children by name, enabled by mkindex()
-	hlink *DWDie   // bucket chain in parent's index
+	offs int64
+	hash map[string]*DWDie // optional index of DWAttr by name, enabled by mkindex()
 }
 
 /*
@@ -597,16 +567,14 @@ func newdie(parent *DWDie, abbrev int, name string) *DWDie {
 	newattr(die, DW_AT_name, DW_CLS_STRING, int64(len(name)), name)
 
 	if parent.hash != nil {
-		h := int(dwarfhashstr(name))
-		die.hlink = parent.hash[h]
-		parent.hash[h] = die
+		parent.hash[name] = die
 	}
 
 	return die
 }
 
 func mkindex(die *DWDie) {
-	die.hash = make([]*DWDie, HASHSIZE)
+	die.hash = make(map[string]*DWDie)
 }
 
 func walktypedef(die *DWDie) *DWDie {
@@ -627,7 +595,6 @@ func walktypedef(die *DWDie) *DWDie {
 func find(die *DWDie, name string) *DWDie {
 	var prev *DWDie
 	for ; die != prev; prev, die = die, walktypedef(die) {
-
 		if die.hash == nil {
 			for a := die.child; a != nil; a = a.link {
 				if name == getattr(a, DW_AT_name).data {
@@ -636,27 +603,8 @@ func find(die *DWDie, name string) *DWDie {
 			}
 			continue
 		}
-
-		h := int(dwarfhashstr(name))
-		a := die.hash[h]
-
-		if a == nil {
-			continue
-		}
-
-		if name == getattr(a, DW_AT_name).data {
+		if a := die.hash[name]; a != nil {
 			return a
-		}
-
-		// Move found ones to head of the list.
-		for b := a.hlink; b != nil; b = b.hlink {
-			if name == getattr(b, DW_AT_name).data {
-				a.hlink = b.hlink
-				b.hlink = die.hash[h]
-				die.hash[h] = b
-				return b
-			}
-			a = b
 		}
 	}
 	return nil
@@ -892,12 +840,9 @@ func reversetree(list **DWDie) {
 
 func newmemberoffsetattr(die *DWDie, offs int32) {
 	var block [20]byte
-
-	i := 0
-	block[i] = DW_OP_plus_uconst
-	i++
-	i += uleb128enc(uint64(offs), block[i:])
-	newattr(die, DW_AT_data_member_location, DW_CLS_BLOCK, int64(i), block[:i])
+	b := append(block[:0], DW_OP_plus_uconst)
+	b = appendUleb128(b, uint64(offs))
+	newattr(die, DW_AT_data_member_location, DW_CLS_BLOCK, int64(len(b)), b)
 }
 
 // GDB doesn't like DW_FORM_addr for DW_AT_location, so emit a
@@ -951,7 +896,7 @@ func defgotype(gotype *LSym) *DWDie {
 	}
 
 	if !strings.HasPrefix(gotype.Name, "type.") {
-		Diag("dwarf: type name doesn't start with \".type\": %s", gotype.Name)
+		Diag("dwarf: type name doesn't start with \"type.\": %s", gotype.Name)
 		return mustFind(&dwtypes, "<unspecified>")
 	}
 
@@ -1039,7 +984,7 @@ func defgotype(gotype *LSym) *DWDie {
 			newrefattr(fld, DW_AT_type, defgotype(s))
 		}
 
-		if decodetype_funcdotdotdot(gotype) != 0 {
+		if decodetype_funcdotdotdot(gotype) {
 			newdie(die, DW_ABRV_DOTDOTDOT, "...")
 		}
 		nfields = decodetype_funcoutcount(gotype)
@@ -1132,7 +1077,7 @@ func defptrto(dwtype *DWDie) *DWDie {
 }
 
 // Copies src's children into dst. Copies attributes by value.
-// DWAttr.data is copied as pointer only.  If except is one of
+// DWAttr.data is copied as pointer only. If except is one of
 // the top-level children, it will not be copied.
 func copychildrenexcept(dst *DWDie, src *DWDie, except *DWDie) {
 	for src = src.child; src != nil; src = src.link {
@@ -1462,20 +1407,15 @@ func putpclcdelta(delta_pc int64, delta_lc int64) {
 
 func newcfaoffsetattr(die *DWDie, offs int32) {
 	var block [20]byte
+	b := append(block[:0], DW_OP_call_frame_cfa)
 
-	i := 0
-
-	block[i] = DW_OP_call_frame_cfa
-	i++
 	if offs != 0 {
-		block[i] = DW_OP_consts
-		i++
-		i += sleb128enc(int64(offs), block[i:])
-		block[i] = DW_OP_plus
-		i++
+		b = append(b, DW_OP_consts)
+		b = appendSleb128(b, int64(offs))
+		b = append(b, DW_OP_plus)
 	}
 
-	newattr(die, DW_AT_location, DW_CLS_BLOCK, int64(i), block[:i])
+	newattr(die, DW_AT_location, DW_CLS_BLOCK, int64(len(b)), b)
 }
 
 func mkvarname(name string, da int) string {
@@ -1646,13 +1586,10 @@ func writelines() {
 		}
 
 		var (
-			dt      int
-			offs    int64
-			varhash [HASHSIZE]*DWDie
+			dt, da int
+			offs   int64
 		)
-		da := 0
-		dwfunc.hash = varhash[:] // enable indexing of children by name
-		for a := s.Autom; a != nil; a = a.Link {
+		for _, a := range s.Autom {
 			switch a.Name {
 			case obj.A_AUTO:
 				dt = DW_ABRV_AUTO
@@ -1703,8 +1640,6 @@ func writelines() {
 
 			da++
 		}
-
-		dwfunc.hash = nil
 	}
 
 	flushunit(dwinfo, epc, epcs, unitstart, int32(headerend-unitstart-10))
@@ -1719,22 +1654,25 @@ const (
 	DATAALIGNMENTFACTOR = -4
 )
 
-func putpccfadelta(deltapc int64, cfa int64) {
-	Cput(DW_CFA_def_cfa_offset_sf)
-	sleb128put(cfa / DATAALIGNMENTFACTOR)
+// appendPCDeltaCFA appends per-PC CFA deltas to b and returns the final slice.
+func appendPCDeltaCFA(b []byte, deltapc, cfa int64) []byte {
+	b = append(b, DW_CFA_def_cfa_offset_sf)
+	b = appendSleb128(b, cfa/DATAALIGNMENTFACTOR)
 
-	if deltapc < 0x40 {
-		Cput(uint8(DW_CFA_advance_loc + deltapc))
-	} else if deltapc < 0x100 {
-		Cput(DW_CFA_advance_loc1)
-		Cput(uint8(deltapc))
-	} else if deltapc < 0x10000 {
-		Cput(DW_CFA_advance_loc2)
-		Thearch.Wput(uint16(deltapc))
-	} else {
-		Cput(DW_CFA_advance_loc4)
-		Thearch.Lput(uint32(deltapc))
+	switch {
+	case deltapc < 0x40:
+		b = append(b, uint8(DW_CFA_advance_loc+deltapc))
+	case deltapc < 0x100:
+		b = append(b, DW_CFA_advance_loc1)
+		b = append(b, uint8(deltapc))
+	case deltapc < 0x10000:
+		b = append(b, DW_CFA_advance_loc2)
+		b = Thearch.Append16(b, uint16(deltapc))
+	default:
+		b = append(b, DW_CFA_advance_loc4)
+		b = Thearch.Append32(b, uint32(deltapc))
 	}
+	return b
 }
 
 func writeframes() {
@@ -1779,6 +1717,7 @@ func writeframes() {
 
 	strnput("", int(pad))
 
+	var deltaBuf []byte
 	var pcsp Pciter
 	for Ctxt.Cursym = Ctxt.Textp; Ctxt.Cursym != nil; Ctxt.Cursym = Ctxt.Cursym.Next {
 		s := Ctxt.Cursym
@@ -1786,14 +1725,9 @@ func writeframes() {
 			continue
 		}
 
-		fdeo := Cpos()
-
-		// Emit a FDE, Section 6.4.1, starting wit a placeholder.
-		Thearch.Lput(0) // length, must be multiple of thearch.ptrsize
-		Thearch.Lput(0) // Pointer to the CIE above, at offset 0
-		addrput(0)      // initial location
-		addrput(0)      // address range
-
+		// Emit a FDE, Section 6.4.1.
+		// First build the section contents into a byte buffer.
+		deltaBuf = deltaBuf[:0]
 		for pciterinit(Ctxt, &pcsp, &s.Pcln.Pcsp); pcsp.done == 0; pciternext(&pcsp) {
 			nextpc := pcsp.nextpc
 
@@ -1807,31 +1741,30 @@ func writeframes() {
 			}
 
 			if haslinkregister() {
-				putpccfadelta(int64(nextpc)-int64(pcsp.pc), int64(pcsp.value))
+				deltaBuf = appendPCDeltaCFA(deltaBuf, int64(nextpc)-int64(pcsp.pc), int64(pcsp.value))
 			} else {
-				putpccfadelta(int64(nextpc)-int64(pcsp.pc), int64(Thearch.Ptrsize)+int64(pcsp.value))
+				deltaBuf = appendPCDeltaCFA(deltaBuf, int64(nextpc)-int64(pcsp.pc), int64(Thearch.Ptrsize)+int64(pcsp.value))
 			}
 		}
+		pad := int(Rnd(int64(len(deltaBuf)), int64(Thearch.Ptrsize))) - len(deltaBuf)
+		deltaBuf = append(deltaBuf, zeros[:pad]...)
 
-		fdesize := Cpos() - fdeo - 4 // exclude the length field.
-		pad = Rnd(fdesize, int64(Thearch.Ptrsize)) - fdesize
-		strnput("", int(pad))
-		fdesize += pad
-
-		// Emit the FDE header for real, Section 6.4.1.
-		Cseek(fdeo)
-
-		Thearch.Lput(uint32(fdesize))
+		// Emit the FDE header, Section 6.4.1.
+		//	4 bytes: length, must be multiple of thearch.ptrsize
+		//	4 bytes: Pointer to the CIE above, at offset 0
+		//	ptrsize: initial location
+		//	ptrsize: address range
+		Thearch.Lput(uint32(4 + 2*Thearch.Ptrsize + len(deltaBuf))) // length (excludes itself)
 		if Linkmode == LinkExternal {
-			adddwarfrel(framesec, framesym, frameo, 4, 0)
-			adddwarfrel(framesec, s, frameo, Thearch.Ptrsize, 0)
+			adddwarfrel(framesec, framesym, frameo, 4, 0)        // CIE offset
+			adddwarfrel(framesec, s, frameo, Thearch.Ptrsize, 0) // initial location
 		} else {
-			Thearch.Lput(0)
-			addrput(s.Value)
+			Thearch.Lput(0)  // CIE offset
+			addrput(s.Value) // initial location
 		}
+		addrput(s.Size) // address range
 
-		addrput(s.Size)
-		Cseek(fdeo + 4 + fdesize)
+		Cwrite(deltaBuf)
 	}
 
 	Cflush()
@@ -2064,16 +1997,16 @@ func Dwarfemitdebugsections() {
 			sect = addmachodwarfsect(sect, ".debug_info")
 
 			infosym = Linklookup(Ctxt, ".debug_info", 0)
-			infosym.Hide = 1
+			infosym.Attr |= AttrHidden
 
 			abbrevsym = Linklookup(Ctxt, ".debug_abbrev", 0)
-			abbrevsym.Hide = 1
+			abbrevsym.Attr |= AttrHidden
 
 			linesym = Linklookup(Ctxt, ".debug_line", 0)
-			linesym.Hide = 1
+			linesym.Attr |= AttrHidden
 
 			framesym = Linklookup(Ctxt, ".debug_frame", 0)
-			framesym.Hide = 1
+			framesym.Attr |= AttrHidden
 		}
 	}
 
@@ -2250,20 +2183,20 @@ func dwarfaddshstrings(shstrtab *LSym) {
 		}
 
 		infosym = Linklookup(Ctxt, ".debug_info", 0)
-		infosym.Hide = 1
+		infosym.Attr |= AttrHidden
 
 		abbrevsym = Linklookup(Ctxt, ".debug_abbrev", 0)
-		abbrevsym.Hide = 1
+		abbrevsym.Attr |= AttrHidden
 
 		linesym = Linklookup(Ctxt, ".debug_line", 0)
-		linesym.Hide = 1
+		linesym.Attr |= AttrHidden
 
 		framesym = Linklookup(Ctxt, ".debug_frame", 0)
-		framesym.Hide = 1
+		framesym.Attr |= AttrHidden
 	}
 }
 
-// Add section symbols for DWARF debug info.  This is called before
+// Add section symbols for DWARF debug info. This is called before
 // dwarfaddelfheaders.
 func dwarfaddelfsectionsyms() {
 	if infosym != nil {

@@ -1,4 +1,4 @@
-// Copyright 2011 The Go Authors.  All rights reserved.
+// Copyright 2011 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -1022,12 +1022,6 @@ Vendor directories do not affect the placement of new repositories
 being checked out for the first time by 'go get': those are always
 placed in the main GOPATH, never in a vendor subtree.
 
-In Go 1.5, as an experiment, setting the environment variable
-GO15VENDOREXPERIMENT=1 enabled these features.
-As of Go 1.6 they are on by default. To turn them off, set
-GO15VENDOREXPERIMENT=0. In Go 1.7, the environment
-variable will stop having any effect.
-
 See https://golang.org/s/go15vendor for details.
 
 
@@ -1094,8 +1088,6 @@ Special-purpose environment variables:
 		installed in a location other than where it is built.
 		File names in stack traces are rewritten from GOROOT to
 		GOROOT_FINAL.
-	GO15VENDOREXPERIMENT
-		Set to 0 to disable vendoring semantics.
 	GO_EXTLINK_ENABLED
 		Whether the linker should use external linking mode
 		when using -linkmode=auto with code that uses cgo.
@@ -1545,10 +1537,11 @@ A benchmark function is one named BenchmarkXXX and should have the signature,
 
 An example function is similar to a test function but, instead of using
 *testing.T to report success or failure, prints output to os.Stdout.
-That output is compared against the function's "Output:" comment, which
-must be the last comment in the function body (see example below). An
-example with no such comment, or with no text after "Output:" is compiled
-but not executed.
+If the last comment in the function starts with "Output:" then the output
+is compared exactly against the comment (see examples below). If the last
+comment begins with "Unordered output:" then the output is compared to the
+comment, however the order of the lines is ignored. An example with no such
+comment, or with no text after "Output:" is compiled but not executed.
 
 Godoc displays the body of ExampleXXX to demonstrate the use
 of the function, constant, or variable XXX.  An example of a method M with
@@ -1562,6 +1555,19 @@ Here is an example of an example:
 		Println("The output of\nthis example.")
 		// Output: The output of
 		// this example.
+	}
+
+Here is another example where the ordering of the output is ignored:
+
+	func ExamplePerm() {
+		for _, value := range Perm(4) {
+			fmt.Println(value)
+		}
+		// Unordered output: 4
+		// 2
+		// 1
+		// 3
+		// 0
 	}
 
 The entire test file is presented as the example when it contains a single

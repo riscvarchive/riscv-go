@@ -50,7 +50,7 @@ const (
 )
 
 type Optab struct {
-	as    int16
+	as    obj.As
 	src1  int8
 	src2  int8
 	dest  int8
@@ -114,7 +114,7 @@ var optab = []Optab{
 // progedit is called individually for each Prog.
 // TODO(myenik)
 func progedit(ctxt *obj.Link, p *obj.Prog) {
-	log.Printf("progedit: ctxt: %+v p: %#v p: %s", ctxt, p, p)
+	log.Printf("progedit: p: %#v p: %s", p, p)
 
 	// Rewrite branches as TYPE_BRANCH
 	switch p.As {
@@ -137,7 +137,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 
 // TODO(myenik)
 func follow(ctxt *obj.Link, s *obj.LSym) {
-	log.Printf("follow: ctxt: %+v", ctxt)
+	log.Printf("follow")
 
 	for ; s != nil; s = s.Next {
 		log.Printf("s: %+v", s)
@@ -173,7 +173,7 @@ func aclass(a *obj.Addr) {
 // * Updating the SP on function entry and exit
 // * Rewriting RET to a real return instruction
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
-	log.Printf("preprocess: ctxt: %+v", ctxt)
+	log.Printf("preprocess")
 
 	ctxt.Cursym = cursym
 
@@ -249,7 +249,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 // Looks up an operation in the operation table.
 func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
-	log.Printf("oplook: ctxt: %+v p: %+v", ctxt, p)
+	log.Printf("oplook: p: %+v", p)
 
 	for i := 0; i < len(optab); i++ {
 		o := optab[i]
@@ -331,7 +331,7 @@ func instr_addi(imm int64, rs1 int16, rd int16) uint32 {
 
 // Encodes a machine instruction.
 func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
-	log.Printf("asmout: ctxt: %+v p: %+v o: %+v", ctxt, p, o)
+	log.Printf("asmout: p: %+v o: %+v", p, o)
 
 	result := uint32(0)
 	switch o.type_ {
@@ -409,7 +409,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 }
 
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
-	log.Printf("assemble: ctxt: %+v", ctxt)
+	log.Printf("assemble")
 
 	if cursym.Text == nil || cursym.Text.Link == nil {
 		// We're being asked to assemble an external function or an ELF

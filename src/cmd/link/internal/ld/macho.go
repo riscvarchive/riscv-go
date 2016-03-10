@@ -123,9 +123,9 @@ var sortsym []*LSym
 var nsortsym int
 
 // Amount of space left for adding load commands
-// that refer to dynamic libraries.  Because these have
+// that refer to dynamic libraries. Because these have
 // to go in the Mach-O header, we can't just pick a
-// "big enough" header size.  The initial header is
+// "big enough" header size. The initial header is
 // one page, the non-dynamic library stuff takes
 // up about 1300 bytes; we overestimate that as 2k.
 var load_budget int = INITIAL_MACHO_HEADR - 2*1024
@@ -308,37 +308,37 @@ func domacho() {
 	s := Linklookup(Ctxt, ".machosymstr", 0)
 
 	s.Type = obj.SMACHOSYMSTR
-	s.Reachable = true
+	s.Attr |= AttrReachable
 	Adduint8(Ctxt, s, ' ')
 	Adduint8(Ctxt, s, '\x00')
 
 	s = Linklookup(Ctxt, ".machosymtab", 0)
 	s.Type = obj.SMACHOSYMTAB
-	s.Reachable = true
+	s.Attr |= AttrReachable
 
 	if Linkmode != LinkExternal {
 		s := Linklookup(Ctxt, ".plt", 0) // will be __symbol_stub
 		s.Type = obj.SMACHOPLT
-		s.Reachable = true
+		s.Attr |= AttrReachable
 
 		s = Linklookup(Ctxt, ".got", 0) // will be __nl_symbol_ptr
 		s.Type = obj.SMACHOGOT
-		s.Reachable = true
+		s.Attr |= AttrReachable
 		s.Align = 4
 
 		s = Linklookup(Ctxt, ".linkedit.plt", 0) // indirect table for .plt
 		s.Type = obj.SMACHOINDIRECTPLT
-		s.Reachable = true
+		s.Attr |= AttrReachable
 
 		s = Linklookup(Ctxt, ".linkedit.got", 0) // indirect table for .got
 		s.Type = obj.SMACHOINDIRECTGOT
-		s.Reachable = true
+		s.Attr |= AttrReachable
 	}
 }
 
 func Machoadddynlib(lib string) {
 	// Will need to store the library name rounded up
-	// and 24 bytes of header metadata.  If not enough
+	// and 24 bytes of header metadata. If not enough
 	// space, grab another page of initial space at the
 	// beginning of the output file.
 	load_budget -= (len(lib)+7)/8*8 + 24
@@ -356,8 +356,9 @@ func machoshbits(mseg *MachoSeg, sect *Section, segname string) {
 	buf := "__" + strings.Replace(sect.Name[1:], ".", "_", -1)
 
 	var msect *MachoSect
-	if sect.Rwx&1 == 0 && (Thearch.Thechar == '7' || (Thearch.Thechar == '6' && Buildmode == BuildmodeCShared)) {
-		// Darwin external linker on arm64 and on amd64 in c-shared buildmode
+	if sect.Rwx&1 == 0 && (Thearch.Thechar == '7' || // arm64
+		(Thearch.Thechar == '6' && (Buildmode == BuildmodeCShared || Buildmode == BuildmodeCArchive))) { // amd64
+		// Darwin external linker on arm64 and on amd64 in c-shared/c-archive buildmode
 		// complains about absolute relocs in __TEXT, so if the section is not
 		// executable, put it in __DATA segment.
 		msect = newMachoSect(mseg, buf, "__DATA")
@@ -569,7 +570,7 @@ func Asmbmacho() {
 	if Linkmode == LinkInternal {
 		// For lldb, must say LC_VERSION_MIN_MACOSX or else
 		// it won't know that this Mach-O binary is from OS X
-		// (could be iOS or WatchOS intead).
+		// (could be iOS or WatchOS instead).
 		// Go on iOS uses linkmode=external, and linkmode=external
 		// adds this itself. So we only need this code for linkmode=internal
 		// and we can assume OS X.
@@ -600,7 +601,7 @@ func symkind(s *LSym) int {
 	if s.Type == obj.SDYNIMPORT {
 		return SymKindUndef
 	}
-	if s.Cgoexport != 0 {
+	if s.Attr.CgoExport() {
 		return SymKindExtdef
 	}
 	return SymKindLocal
@@ -652,9 +653,9 @@ func (x machoscmp) Less(i, j int) bool {
 
 func machogenasmsym(put func(*LSym, string, int, int64, int64, int, *LSym)) {
 	genasmsym(put)
-	for s := Ctxt.Allsym; s != nil; s = s.Allsym {
+	for _, s := range Ctxt.Allsym {
 		if s.Type == obj.SDYNIMPORT || s.Type == obj.SHOSTOBJ {
-			if s.Reachable {
+			if s.Attr.Reachable() {
 				put(s, "", 'D', 0, 0, 0, nil)
 			}
 		}
@@ -666,7 +667,7 @@ func machosymorder() {
 	// So we sort them here and pre-allocate dynid for them
 	// See https://golang.org/issue/4029
 	for i := 0; i < len(dynexp); i++ {
-		dynexp[i].Reachable = true
+		dynexp[i].Attr |= AttrReachable
 	}
 	machogenasmsym(addsym)
 	sortsym = make([]*LSym, nsortsym)
@@ -717,7 +718,7 @@ func machosymtab() {
 			Adduint16(Ctxt, symtab, 0)                  // desc
 			adduintxx(Ctxt, symtab, 0, Thearch.Ptrsize) // no value
 		} else {
-			if s.Cgoexport != 0 {
+			if s.Attr.CgoExport() {
 				Adduint8(Ctxt, symtab, 0x0f)
 			} else {
 				Adduint8(Ctxt, symtab, 0x0e)
@@ -785,12 +786,12 @@ func Domacholink() int64 {
 	s4 := Linklookup(Ctxt, ".machosymstr", 0)
 
 	// Force the linkedit section to end on a 16-byte
-	// boundary.  This allows pure (non-cgo) Go binaries
+	// boundary. This allows pure (non-cgo) Go binaries
 	// to be code signed correctly.
 	//
 	// Apple's codesign_allocate (a helper utility for
 	// the codesign utility) can do this fine itself if
-	// it is run on a dynamic Mach-O binary.  However,
+	// it is run on a dynamic Mach-O binary. However,
 	// when it is run on a pure (non-cgo) Go binary, where
 	// the linkedit section is mostly empty, it fails to
 	// account for the extra padding that it itself adds
@@ -829,7 +830,7 @@ func machorelocsect(sect *Section, first *LSym) {
 	sect.Reloff = uint64(Cpos())
 	var sym *LSym
 	for sym = first; sym != nil; sym = sym.Next {
-		if !sym.Reachable {
+		if !sym.Attr.Reachable() {
 			continue
 		}
 		if uint64(sym.Value) >= sect.Vaddr {
@@ -841,7 +842,7 @@ func machorelocsect(sect *Section, first *LSym) {
 	var r *Reloc
 	var ri int
 	for ; sym != nil; sym = sym.Next {
-		if !sym.Reachable {
+		if !sym.Attr.Reachable() {
 			continue
 		}
 		if sym.Value >= int64(eaddr) {

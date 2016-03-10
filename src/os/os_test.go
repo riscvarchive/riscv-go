@@ -47,10 +47,10 @@ var sysdir = func() *sysDir {
 	switch runtime.GOOS {
 	case "android":
 		return &sysDir{
-			"/system/framework",
+			"/system/lib",
 			[]string{
-				"ext.jar",
-				"framework.jar",
+				"libmedia.so",
+				"libpowermanager.so",
 			},
 		}
 	case "darwin":
@@ -538,7 +538,7 @@ func TestReaddirStatFailures(t *testing.T) {
 		return s
 	}
 
-	if got, want := names(mustReadDir("inital readdir")),
+	if got, want := names(mustReadDir("initial readdir")),
 		[]string{"good1", "good2", "x"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("initial readdir got %q; want %q", got, want)
 	}
@@ -1275,15 +1275,19 @@ func TestOpenNoName(t *testing.T) {
 	}
 }
 
-func run(t *testing.T, cmd []string) string {
+func runBinHostname(t *testing.T) string {
 	// Run /bin/hostname and collect output.
 	r, w, err := Pipe()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
-	p, err := StartProcess("/bin/hostname", []string{"hostname"}, &ProcAttr{Files: []*File{nil, w, Stderr}})
+	const path = "/bin/hostname"
+	p, err := StartProcess(path, []string{"hostname"}, &ProcAttr{Files: []*File{nil, w, Stderr}})
 	if err != nil {
+		if _, err := Stat(path); IsNotExist(err) {
+			t.Skipf("skipping test; test requires %s but it does not exist", path)
+		}
 		t.Fatal(err)
 	}
 	w.Close()
@@ -1303,7 +1307,7 @@ func run(t *testing.T, cmd []string) string {
 		output = output[0 : n-1]
 	}
 	if output == "" {
-		t.Fatalf("%v produced no output", cmd)
+		t.Fatalf("/bin/hostname produced no output")
 	}
 
 	return output
@@ -1345,7 +1349,7 @@ func TestHostname(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	want := run(t, []string{"/bin/hostname"})
+	want := runBinHostname(t)
 	if hostname != want {
 		i := strings.Index(hostname, ".")
 		if i < 0 || hostname[0:i] != want {

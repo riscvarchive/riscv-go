@@ -1,4 +1,4 @@
-// Copyright 2015 The Go Authors.  All rights reserved.
+// Copyright 2015 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -378,7 +378,7 @@ func (t *tester) registerTests() {
 	})
 
 	// Test that internal linking of standard packages does not
-	// require libgcc.  This ensures that we can install a Go
+	// require libgcc. This ensures that we can install a Go
 	// release on a system that does not have a C compiler
 	// installed and still build Go programs (that don't use cgo).
 	for _, pkg := range cgoPackages {
@@ -441,6 +441,20 @@ func (t *tester) registerTests() {
 				return nil
 			},
 		})
+		fortran := os.Getenv("FC")
+		if fortran == "" {
+			fortran, _ = exec.LookPath("gfortran")
+		}
+		if fortran != "" {
+			t.tests = append(t.tests, distTest{
+				name:    "cgo_fortran",
+				heading: "../misc/cgo/fortran",
+				fn: func(dt *distTest) error {
+					t.addCmd(dt, "misc/cgo/fortran", "./test.bash", fortran)
+					return nil
+				},
+			})
+		}
 	}
 	if t.cgoEnabled && t.goos != "android" && !t.iOS() {
 		// TODO(crawshaw): reenable on android and iOS

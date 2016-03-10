@@ -6,79 +6,15 @@ package gc
 
 import (
 	"bytes"
-	"cmd/compile/internal/big"
 	"cmd/internal/obj"
 )
 
-// The parser's maximum stack size.
-// We have to use a #define macro here since yacc
-// or bison will check for its definition and use
-// a potentially smaller value if it is undefined.
 const (
-	NHUNK           = 50000
-	BUFSIZ          = 8192
-	NSYMB           = 500
-	NHASH           = 1024
-	MAXALIGN        = 7
 	UINF            = 100
 	PRIME1          = 3
 	BADWIDTH        = -1000000000
 	MaxStackVarSize = 10 * 1024 * 1024
 )
-
-const (
-	// These values are known by runtime.
-	// The MEMx and NOEQx values must run in parallel.  See algtype.
-	AMEM = iota
-	AMEM0
-	AMEM8
-	AMEM16
-	AMEM32
-	AMEM64
-	AMEM128
-	ANOEQ
-	ANOEQ0
-	ANOEQ8
-	ANOEQ16
-	ANOEQ32
-	ANOEQ64
-	ANOEQ128
-	ASTRING
-	AINTER
-	ANILINTER
-	ASLICE
-	AFLOAT32
-	AFLOAT64
-	ACPLX64
-	ACPLX128
-	AUNK = 100
-)
-
-const (
-	// Maximum size in bits for Mpints before signalling
-	// overflow and also mantissa precision for Mpflts.
-	Mpprec = 512
-	// Turn on for constant arithmetic debugging output.
-	Mpdebug = false
-)
-
-// Mpint represents an integer constant.
-type Mpint struct {
-	Val  big.Int
-	Ovf  bool // set if Val overflowed compiler limit (sticky)
-	Rune bool // set if syntax indicates default type rune
-}
-
-// Mpflt represents a floating-point constant.
-type Mpflt struct {
-	Val big.Float
-}
-
-// Mpcplx represents a complex constant.
-type Mpcplx struct {
-	Real Mpflt
-	Imag Mpflt
-}
 
 type Val struct {
 	// U contains one of:
@@ -131,10 +67,9 @@ type Pkg struct {
 }
 
 type Sym struct {
-	Lexical   uint16
-	Flags     uint8
-	Link      *Sym
+	Flags     SymFlags
 	Uniqgen   uint32
+	Link      *Sym
 	Importdef *Pkg   // where imported definition was found
 	Linkname  string // link name
 
@@ -148,69 +83,6 @@ type Sym struct {
 	Origpkg    *Pkg   // original package for . import
 	Lsym       *obj.LSym
 	Fsym       *Sym // funcsym
-}
-
-type Type struct {
-	Etype       EType
-	Nointerface bool
-	Noalg       bool
-	Chan        uint8
-	Trecur      uint8 // to detect loops
-	Printed     bool
-	Embedded    uint8 // TFIELD embedded type
-	Funarg      bool  // on TSTRUCT and TFIELD
-	Copyany     bool
-	Local       bool // created in this file
-	Deferwidth  bool
-	Broke       bool // broken type definition.
-	Isddd       bool // TFIELD is ... argument
-	Align       uint8
-	Haspointers uint8 // 0 unknown, 1 no, 2 yes
-
-	Nod    *Node // canonical OTYPE node
-	Orig   *Type // original type (type literal or predefined type)
-	Lineno int
-
-	// TFUNC
-	Thistuple int
-	Outtuple  int
-	Intuple   int
-	Outnamed  bool
-
-	Method  *Type
-	Xmethod *Type
-
-	Sym    *Sym
-	Vargen int32 // unique name for OTYPE/ONAME
-
-	Nname  *Node
-	Argwid int64
-
-	// most nodes
-	Type  *Type // actual type for TFIELD, element type for TARRAY, TCHAN, TMAP, TPTRxx
-	Width int64 // offset in TFIELD, width in all others
-
-	// TFIELD
-	Down  *Type   // next struct field, also key type in TMAP
-	Outer *Type   // outer struct
-	Note  *string // literal string annotation
-
-	// TARRAY
-	Bound int64 // negative is dynamic array
-
-	// TMAP
-	Bucket *Type // internal type representing a hash bucket
-	Hmap   *Type // internal type representing a Hmap (map header object)
-	Hiter  *Type // internal type representing hash iterator state
-	Map    *Type // link from the above 3 internal types back to the map type.
-
-	Maplineno   int32 // first use of TFORW as map key
-	Embedlineno int32 // first use of TFORW as embedded type
-
-	// for TFORW, where to copy the eventual value to
-	Copyto []*Node
-
-	Lastfn *Node // for usefield
 }
 
 type Label struct {
@@ -240,77 +112,19 @@ type InitPlan struct {
 	E    []InitEntry
 }
 
+type SymFlags uint8
+
 const (
-	SymExport   = 1 << 0 // to be exported
-	SymPackage  = 1 << 1
-	SymExported = 1 << 2 // already written out by export
-	SymUniq     = 1 << 3
-	SymSiggen   = 1 << 4
-	SymAsm      = 1 << 5
-	SymAlgGen   = 1 << 6
+	SymExport SymFlags = 1 << iota // to be exported
+	SymPackage
+	SymExported // already written out by export
+	SymUniq
+	SymSiggen
+	SymAsm
+	SymAlgGen
 )
 
 var dclstack *Sym
-
-type Iter struct {
-	Done  int
-	Tfunc *Type
-	T     *Type
-}
-
-type EType uint8
-
-const (
-	Txxx = iota
-
-	TINT8
-	TUINT8
-	TINT16
-	TUINT16
-	TINT32
-	TUINT32
-	TINT64
-	TUINT64
-	TINT
-	TUINT
-	TUINTPTR
-
-	TCOMPLEX64
-	TCOMPLEX128
-
-	TFLOAT32
-	TFLOAT64
-
-	TBOOL
-
-	TPTR32
-	TPTR64
-
-	TFUNC
-	TARRAY
-	T_old_DARRAY // Doesn't seem to be used in existing code. Used now for Isddd export (see bexport.go). TODO(gri) rename.
-	TSTRUCT
-	TCHAN
-	TMAP
-	TINTER
-	TFORW
-	TFIELD
-	TANY
-	TSTRING
-	TUNSAFEPTR
-
-	// pseudo-types for literals
-	TIDEAL
-	TNIL
-	TBLANK
-
-	// pseudo-type for frame layout
-	TFUNCARGS
-	TCHANARGS
-	TINTERMETH
-
-	NTYPE
-)
 
 // Ctype describes the constant kind of an "ideal" (untyped) constant.
 type Ctype int8
@@ -329,8 +143,7 @@ const (
 
 const (
 	// types of channel
-	// must match ../../pkg/nreflect/type.go:/Chandir
-	Cxxx  = 0
+	// must match ../../../../reflect/type.go:/ChanDir
 	Crecv = 1 << 0
 	Csend = 1 << 1
 	Cboth = Crecv | Csend
@@ -369,12 +182,6 @@ const (
 	Ecomplit  = 1 << 11 // type in composite literal
 )
 
-type Typedef struct {
-	Name   string
-	Etype  EType
-	Sameas EType
-}
-
 type Sig struct {
 	name   string
 	pkg    *Pkg
@@ -385,25 +192,8 @@ type Sig struct {
 	offset int32
 }
 
-type Io struct {
-	infile     string
-	bin        *obj.Biobuf
-	cp         string // used for content when bin==nil
-	last       int
-	peekc      int
-	peekc1     int // second peekc for ...
-	nlsemi     bool
-	eofnl      bool
-	importsafe bool
-}
-
 type Dlist struct {
 	field *Type
-}
-
-type Idir struct {
-	link *Idir
-	dir  string
 }
 
 // argument passing to/from
@@ -452,15 +242,12 @@ var sizeof_String int // runtime sizeof(String)
 
 var dotlist [10]Dlist // size is max depth of embeddeds
 
-var curio Io
-
-var pushedio Io
-
+// lexlineno is the line number _after_ the most recently read rune.
+// In particular, it's advanced (or rewound) as newlines are read (or unread).
 var lexlineno int32
 
+// lineno is the line number at the start of the most recently lexed token.
 var lineno int32
-
-var prevlineno int32
 
 var pragcgobuf string
 
@@ -493,8 +280,6 @@ var debugstr string
 var Debug_checknil int
 var Debug_typeassert int
 
-var importmyname *Sym // my name for package
-
 var localpkg *Pkg // package being compiled
 
 var importpkg *Pkg // package being imported
@@ -517,8 +302,6 @@ var typepkg *Pkg // fake package for runtime type info (headers)
 
 var typelinkpkg *Pkg // fake package for runtime type info (data)
 
-var weaktypepkg *Pkg // weak references to runtime type info
-
 var unsafepkg *Pkg // package unsafe
 
 var trackpkg *Pkg // fake package for field tracking
@@ -527,23 +310,9 @@ var Tptr EType // either TPTR32 or TPTR64
 
 var myimportpath string
 
-var idirs *Idir
-
 var localimport string
 
 var asmhdr string
-
-var Types [NTYPE]*Type
-
-var idealstring *Type
-
-var idealbool *Type
-
-var bytetype *Type
-
-var runetype *Type
-
-var errortype *Type
 
 var Simtype [NTYPE]EType
 
@@ -651,22 +420,9 @@ var flag_largemodel int
 // when the race detector is enabled.
 var instrumenting bool
 
-// Pending annotations for next func declaration.
-var (
-	noescape          bool
-	noinline          bool
-	norace            bool
-	nosplit           bool
-	nowritebarrier    bool
-	nowritebarrierrec bool
-	systemstack       bool
-)
-
 var debuglive int
 
 var Ctxt *obj.Link
-
-var nointerface bool
 
 var writearchive int
 
@@ -771,7 +527,6 @@ type Arch struct {
 	Thechar      int
 	Thestring    string
 	Thelinkarch  *obj.LinkArch
-	Typedefs     []Typedef
 	REGSP        int
 	REGCTXT      int
 	REGCALLX     int // BX
@@ -801,7 +556,7 @@ type Arch struct {
 	Excise       func(*Flow)
 	Expandchecks func(*obj.Prog)
 	Getg         func(*Node)
-	Gins         func(int, *Node, *Node) *obj.Prog
+	Gins         func(obj.As, *Node, *Node) *obj.Prog
 
 	// Ginscmp generates code comparing n1 to n2 and jumping away if op is satisfied.
 	// The returned prog should be Patch'ed with the jump target.
@@ -821,9 +576,9 @@ type Arch struct {
 	// corresponding to the desired value.
 	// The second argument is the destination.
 	// If not present, Ginsboolval will be emulated with jumps.
-	Ginsboolval func(int, *Node)
+	Ginsboolval func(obj.As, *Node)
 
-	Ginscon      func(int, int64, *Node)
+	Ginscon      func(obj.As, int64, *Node)
 	Ginsnop      func()
 	Gmove        func(*Node, *Node)
 	Igenindex    func(*Node, *Node, bool) *obj.Prog
@@ -835,14 +590,14 @@ type Arch struct {
 	Smallindir   func(*obj.Addr, *obj.Addr) bool
 	Stackaddr    func(*obj.Addr) bool
 	Blockcopy    func(*Node, *Node, int64, int64, int64)
-	Sudoaddable  func(int, *Node, *obj.Addr) bool
+	Sudoaddable  func(obj.As, *Node, *obj.Addr) bool
 	Sudoclean    func()
 	Excludedregs func() uint64
 	RtoB         func(int) uint64
 	FtoB         func(int) uint64
 	BtoR         func(uint64) int
 	BtoF         func(uint64) int
-	Optoas       func(Op, *Type) int
+	Optoas       func(Op, *Type) obj.As
 	Doregbits    func(int) uint64
 	Regnames     func(*int) []string
 	Use387       bool // should 8g use 387 FP instructions instead of sse2.
@@ -862,4 +617,13 @@ var Panicindex *Node
 
 var panicslice *Node
 
+var panicdivide *Node
+
 var throwreturn *Node
+
+var growslice *Node
+
+var writebarrierptr *Node
+var typedmemmove *Node
+
+var panicdottype *Node

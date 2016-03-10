@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 )
 
 // runtime interface and reflection data structures
@@ -42,21 +43,29 @@ func siglt(a, b *Sig) bool {
 }
 
 // Builds a type representing a Bucket structure for
-// the given map type.  This type is not visible to users -
+// the given map type. This type is not visible to users -
 // we include only enough information to generate a correct GC
 // program for it.
-// Make sure this stays in sync with ../../runtime/hashmap.go!
+// Make sure this stays in sync with ../../../../runtime/hashmap.go!
 const (
 	BUCKETSIZE = 8
 	MAXKEYSIZE = 128
 	MAXVALSIZE = 128
 )
 
+func structfieldSize() int       { return 5 * Widthptr } // Sizeof(runtime.structfield{})
+func imethodSize() int           { return 3 * Widthptr } // Sizeof(runtime.imethod{})
+func uncommonSize(t *Type) int { // Sizeof(runtime.uncommontype{})
+	if t.Sym == nil && len(methods(t)) == 0 {
+		return 0
+	}
+	return 2*Widthptr + 2*Widthint
+}
+
 func makefield(name string, t *Type) *Type {
 	f := typ(TFIELD)
 	f.Type = t
-	f.Sym = new(Sym)
-	f.Sym.Name = name
+	f.Sym = nopkg.Lookup(name)
 	return f
 }
 
@@ -150,7 +159,7 @@ func mapbucket(t *Type) *Type {
 }
 
 // Builds a type representing a Hmap structure for the given map type.
-// Make sure this stays in sync with ../../runtime/hashmap.go!
+// Make sure this stays in sync with ../../../../runtime/hashmap.go!
 func hmap(t *Type) *Type {
 	if t.Hmap != nil {
 		return t.Hmap
@@ -187,7 +196,7 @@ func hiter(t *Type) *Type {
 	}
 
 	// build a struct:
-	// hash_iter {
+	// hiter {
 	//    key *Key
 	//    val *Value
 	//    t *MapType
@@ -201,7 +210,7 @@ func hiter(t *Type) *Type {
 	//    bucket uintptr
 	//    checkBucket uintptr
 	// }
-	// must match ../../runtime/hashmap.go:hash_iter.
+	// must match ../../../../runtime/hashmap.go:hiter.
 	var field [12]*Type
 	field[0] = makefield("key", Ptrto(t.Down))
 
@@ -238,26 +247,26 @@ func hiter(t *Type) *Type {
 // f is method type, with receiver.
 // return function type, receiver as first argument (or not).
 func methodfunc(f *Type, receiver *Type) *Type {
-	var in *NodeList
+	var in []*Node
 	if receiver != nil {
 		d := Nod(ODCLFIELD, nil, nil)
 		d.Type = receiver
-		in = list(in, d)
+		in = append(in, d)
 	}
 
 	var d *Node
-	for t := getinargx(f).Type; t != nil; t = t.Down {
+	for t, it := IterFields(f.Params()); t != nil; t = it.Next() {
 		d = Nod(ODCLFIELD, nil, nil)
 		d.Type = t.Type
 		d.Isddd = t.Isddd
-		in = list(in, d)
+		in = append(in, d)
 	}
 
-	var out *NodeList
-	for t := getoutargx(f).Type; t != nil; t = t.Down {
+	var out []*Node
+	for t, it := IterFields(f.Results()); t != nil; t = it.Next() {
 		d = Nod(ODCLFIELD, nil, nil)
 		d.Type = t.Type
-		out = list(out, d)
+		out = append(out, d)
 	}
 
 	t := functype(nil, in, out)
@@ -297,7 +306,7 @@ func methods(t *Type) []*Sig {
 		if f.Type.Etype != TFUNC || f.Type.Thistuple == 0 {
 			Fatalf("non-method on %v method %v %v\n", mt, f.Sym, f)
 		}
-		if getthisx(f.Type).Type == nil {
+		if f.Type.Recv() == nil {
 			Fatalf("receiver with no type on %v method %v %v\n", mt, f.Sym, f)
 		}
 		if f.Nointerface {
@@ -313,7 +322,7 @@ func methods(t *Type) []*Sig {
 		// if pointer receiver but non-pointer t and
 		// this is not an embedded pointer inside a struct,
 		// method does not apply.
-		this := getthisx(f.Type).Type.Type
+		this := f.Type.Recv().Type
 
 		if Isptr[this.Etype] && this.Type == t {
 			continue
@@ -364,7 +373,7 @@ func methods(t *Type) []*Sig {
 // imethods returns the methods of the interface type t, sorted by name.
 func imethods(t *Type) []*Sig {
 	var methods []*Sig
-	for f := t.Type; f != nil; f = f.Down {
+	for f, it := IterFields(t); f != nil; f = it.Next() {
 		if f.Etype != TFIELD {
 			Fatalf("imethods: not field")
 		}
@@ -422,7 +431,7 @@ func dimportpath(p *Pkg) {
 	}
 
 	// If we are compiling the runtime package, there are two runtime packages around
-	// -- localpkg and Runtimepkg.  We don't want to produce import path symbols for
+	// -- localpkg and Runtimepkg. We don't want to produce import path symbols for
 	// both of them, so just produce one for localpkg.
 	if myimportpath == "runtime" && p == Runtimepkg {
 		return
@@ -473,18 +482,19 @@ func dgopkgpath(s *Sym, ot int, pkg *Pkg) int {
 	return dsymptr(s, ot, pkg.Pathsym, 0)
 }
 
-// uncommonType
-// ../../runtime/type.go:/uncommonType
-func dextratype(sym *Sym, off int, t *Type, ptroff int) int {
+// dextratype dumps the fields of a runtime.uncommontype.
+// dataAdd is the offset in bytes after the header where the
+// backing array of the []method field is written (by dextratypeData).
+func dextratype(sym *Sym, off int, t *Type, dataAdd int) int {
 	m := methods(t)
 	if t.Sym == nil && len(m) == 0 {
 		return off
 	}
-
-	// fill in *extraType pointer in header
-	off = int(Rnd(int64(off), int64(Widthptr)))
-
-	dsymptr(sym, ptroff, sym, off)
+	noff := int(Rnd(int64(off), int64(Widthptr)))
+	if noff != off {
+		panic("dextratype rounding does something. :-(")
+	}
+	off = noff
 
 	for _, a := range m {
 		dtypesym(a.type_)
@@ -492,47 +502,55 @@ func dextratype(sym *Sym, off int, t *Type, ptroff int) int {
 
 	ot := off
 	s := sym
-	if t.Sym != nil {
-		ot = dgostringptr(s, ot, t.Sym.Name)
-		if t != Types[t.Etype] && t != errortype {
-			ot = dgopkgpath(s, ot, t.Sym.Pkg)
-		} else {
-			ot = dgostringptr(s, ot, "")
-		}
+	if t.Sym != nil && t != Types[t.Etype] && t != errortype {
+		ot = dgopkgpath(s, ot, t.Sym.Pkg)
 	} else {
-		ot = dgostringptr(s, ot, "")
 		ot = dgostringptr(s, ot, "")
 	}
 
 	// slice header
-	ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint)
+	ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint+dataAdd)
 
 	n := len(m)
 	ot = duintxx(s, ot, uint64(n), Widthint)
 	ot = duintxx(s, ot, uint64(n), Widthint)
 
-	// methods
-	for _, a := range m {
+	return ot
+}
+
+// dextratypeData dumps the backing array for the []method field of
+// runtime.uncommontype.
+func dextratypeData(s *Sym, ot int, t *Type) int {
+	for _, a := range methods(t) {
 		// method
-		// ../../runtime/type.go:/method
+		// ../../../../runtime/type.go:/method
 		ot = dgostringptr(s, ot, a.name)
 
 		ot = dgopkgpath(s, ot, a.pkg)
 		ot = dsymptr(s, ot, dtypesym(a.mtype), 0)
 		ot = dsymptr(s, ot, dtypesym(a.type_), 0)
 		if a.isym != nil {
-			ot = dsymptr(s, ot, a.isym, 0)
+			ot = dmethodptr(s, ot, a.isym)
 		} else {
 			ot = duintptr(s, ot, 0)
 		}
 		if a.tsym != nil {
-			ot = dsymptr(s, ot, a.tsym, 0)
+			ot = dmethodptr(s, ot, a.tsym)
 		} else {
 			ot = duintptr(s, ot, 0)
 		}
 	}
-
 	return ot
+}
+
+func dmethodptr(s *Sym, off int, x *Sym) int {
+	duintptr(s, off, 0)
+	r := obj.Addrel(Linksym(s))
+	r.Off = int32(off)
+	r.Siz = uint8(Widthptr)
+	r.Sym = Linksym(x)
+	r.Type = obj.R_METHOD
+	return off + Widthptr
 }
 
 var kinds = []int{
@@ -604,7 +622,7 @@ func haspointers(t *Type) bool {
 
 	case TSTRUCT:
 		ret = false
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			if haspointers(t1.Type) {
 				ret = true
 				break
@@ -667,7 +685,7 @@ func typeptrdata(t *Type) int64 {
 	case TSTRUCT:
 		// Find the last field that has pointers.
 		var lastPtrField *Type
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			if haspointers(t1.Type) {
 				lastPtrField = t1
 			}
@@ -680,8 +698,11 @@ func typeptrdata(t *Type) int64 {
 	}
 }
 
+// tflag is documented in ../../../../reflect/type.go.
+const tflagUncommon = 1
+
 // commonType
-// ../../runtime/type.go:/commonType
+// ../../../../runtime/type.go:/commonType
 
 var dcommontype_algarray *Sym
 
@@ -701,37 +722,42 @@ func dcommontype(s *Sym, ot int, t *Type) int {
 		algsym = dalgsym(t)
 	}
 
-	var sptr *Sym
 	tptr := Ptrto(t)
 	if !Isptr[t.Etype] && (t.Sym != nil || methods(tptr) != nil) {
-		sptr = dtypesym(tptr)
-	} else {
-		sptr = weaktypesym(tptr)
+		sptr := dtypesym(tptr)
+		r := obj.Addrel(Linksym(s))
+		r.Off = 0
+		r.Siz = 0
+		r.Sym = sptr.Lsym
+		r.Type = obj.R_USETYPE
 	}
 
 	gcsym, useGCProg, ptrdata := dgcsym(t)
 
-	// ../../pkg/reflect/type.go:/^type.commonType
+	// ../../../../reflect/type.go:/^type.rtype
 	// actual type structure
-	//	type commonType struct {
+	//	type rtype struct {
 	//		size          uintptr
-	//		ptrsize       uintptr
+	//		ptrdata       uintptr
 	//		hash          uint32
-	//		_             uint8
+	//		tflag         tflag
 	//		align         uint8
 	//		fieldAlign    uint8
 	//		kind          uint8
-	//		alg           unsafe.Pointer
-	//		gcdata        unsafe.Pointer
+	//		alg           *typeAlg
+	//		gcdata        *byte
 	//		string        *string
-	//		*extraType
-	//		ptrToThis     *Type
 	//	}
 	ot = duintptr(s, ot, uint64(t.Width))
 	ot = duintptr(s, ot, uint64(ptrdata))
 
 	ot = duint32(s, ot, typehash(t))
-	ot = duint8(s, ot, 0) // unused
+
+	var tflag uint8
+	if uncommonSize(t) != 0 {
+		tflag |= tflagUncommon
+	}
+	ot = duint8(s, ot, tflag)
 
 	// runtime (and common sense) expects alignment to be a power of two.
 	i := int(t.Align)
@@ -764,20 +790,24 @@ func dcommontype(s *Sym, ot int, t *Type) int {
 	} else {
 		ot = dsymptr(s, ot, algsym, 0)
 	}
-	ot = dsymptr(s, ot, gcsym, 0)
+	ot = dsymptr(s, ot, gcsym, 0) // gcdata
 
 	p := Tconv(t, obj.FmtLeft|obj.FmtUnsigned)
 
-	//print("dcommontype: %s\n", p);
-	ot = dgostringptr(s, ot, p) // string
+	// If we're writing out type T,
+	// we are very likely to write out type *T as well.
+	// Use the string "*T"[1:] for "T", so that the two
+	// share storage. This is a cheap way to reduce the
+	// amount of space taken up by reflect strings.
+	prefix := 0
+	if !strings.HasPrefix(p, "*") {
+		p = "*" + p
+		prefix = 1
+	}
+	_, symdata := stringsym(p) // string
+	ot = dsymptr(s, ot, symdata, prefix)
+	ot = duintxx(s, ot, uint64(len(p)-prefix), Widthint)
 
-	// skip pointer to extraType,
-	// which follows the rest of this type structure.
-	// caller will fill in if needed.
-	// otherwise linker will assume 0.
-	ot += Widthptr
-
-	ot = dsymptr(s, ot, sptr, 0) // ptrto type
 	return ot
 }
 
@@ -849,15 +879,6 @@ func typename(t *Type) *Node {
 	return n
 }
 
-func weaktypesym(t *Type) *Sym {
-	p := Tconv(t, obj.FmtLeft)
-	s := Pkglookup(p, weaktypepkg)
-
-	//print("weaktypesym: %s -> %+S\n", p, s);
-
-	return s
-}
-
 // isreflexive reports whether t has a reflexive equality operator.
 // That is, if x==x for all x of type t.
 func isreflexive(t *Type) bool {
@@ -895,7 +916,7 @@ func isreflexive(t *Type) bool {
 		return isreflexive(t.Type)
 
 	case TSTRUCT:
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			if !isreflexive(t1.Type) {
 				return false
 			}
@@ -945,7 +966,7 @@ func needkeyupdate(t *Type) bool {
 		return needkeyupdate(t.Type)
 
 	case TSTRUCT:
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			if needkeyupdate(t1.Type) {
 				return true
 			}
@@ -1003,15 +1024,14 @@ func dtypesym(t *Type) *Sym {
 
 ok:
 	ot := 0
-	xt := 0
 	switch t.Etype {
 	default:
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
+		ot = dextratype(s, ot, t, 0)
 
 	case TARRAY:
 		if t.Bound >= 0 {
-			// ../../runtime/type.go:/ArrayType
+			// ../../../../runtime/type.go:/arrayType
 			s1 := dtypesym(t.Type)
 
 			t2 := typ(TARRAY)
@@ -1019,69 +1039,64 @@ ok:
 			t2.Bound = -1 // slice
 			s2 := dtypesym(t2)
 			ot = dcommontype(s, ot, t)
-			xt = ot - 2*Widthptr
 			ot = dsymptr(s, ot, s1, 0)
 			ot = dsymptr(s, ot, s2, 0)
 			ot = duintptr(s, ot, uint64(t.Bound))
 		} else {
-			// ../../runtime/type.go:/SliceType
+			// ../../../../runtime/type.go:/sliceType
 			s1 := dtypesym(t.Type)
 
 			ot = dcommontype(s, ot, t)
-			xt = ot - 2*Widthptr
 			ot = dsymptr(s, ot, s1, 0)
 		}
+		ot = dextratype(s, ot, t, 0)
 
-	// ../../runtime/type.go:/ChanType
+	// ../../../../runtime/type.go:/chanType
 	case TCHAN:
 		s1 := dtypesym(t.Type)
 
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
 		ot = dsymptr(s, ot, s1, 0)
 		ot = duintptr(s, ot, uint64(t.Chan))
+		ot = dextratype(s, ot, t, 0)
 
 	case TFUNC:
-		for t1 := getthisx(t).Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t.Recvs()); t1 != nil; t1 = it.Next() {
 			dtypesym(t1.Type)
 		}
 		isddd := false
-		for t1 := getinargx(t).Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t.Params()); t1 != nil; t1 = it.Next() {
 			isddd = t1.Isddd
 			dtypesym(t1.Type)
 		}
-
-		for t1 := getoutargx(t).Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t.Results()); t1 != nil; t1 = it.Next() {
 			dtypesym(t1.Type)
 		}
 
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
-		ot = duint8(s, ot, uint8(obj.Bool2int(isddd)))
-
-		// two slice headers: in and out.
-		ot = int(Rnd(int64(ot), int64(Widthptr)))
-
-		ot = dsymptr(s, ot, s, ot+2*(Widthptr+2*Widthint))
-		n := t.Thistuple + t.Intuple
-		ot = duintxx(s, ot, uint64(n), Widthint)
-		ot = duintxx(s, ot, uint64(n), Widthint)
-		ot = dsymptr(s, ot, s, ot+1*(Widthptr+2*Widthint)+n*Widthptr)
-		ot = duintxx(s, ot, uint64(t.Outtuple), Widthint)
-		ot = duintxx(s, ot, uint64(t.Outtuple), Widthint)
-
-		// slice data
-		for t1 := getthisx(t).Type; t1 != nil; t1 = t1.Down {
-			ot = dsymptr(s, ot, dtypesym(t1.Type), 0)
-			n++
+		inCount := t.Thistuple + t.Intuple
+		outCount := t.Outtuple
+		if isddd {
+			outCount |= 1 << 15
 		}
-		for t1 := getinargx(t).Type; t1 != nil; t1 = t1.Down {
-			ot = dsymptr(s, ot, dtypesym(t1.Type), 0)
-			n++
+		ot = duint16(s, ot, uint16(inCount))
+		ot = duint16(s, ot, uint16(outCount))
+		if Widthptr == 8 {
+			ot += 4 // align for *rtype
 		}
-		for t1 := getoutargx(t).Type; t1 != nil; t1 = t1.Down {
+
+		dataAdd := (inCount + outCount) * Widthptr
+		ot = dextratype(s, ot, t, dataAdd)
+
+		// Array of rtype pointers follows funcType.
+		for t1, it := IterFields(t.Recvs()); t1 != nil; t1 = it.Next() {
 			ot = dsymptr(s, ot, dtypesym(t1.Type), 0)
-			n++
+		}
+		for t1, it := IterFields(t.Params()); t1 != nil; t1 = it.Next() {
+			ot = dsymptr(s, ot, dtypesym(t1.Type), 0)
+		}
+		for t1, it := IterFields(t.Results()); t1 != nil; t1 = it.Next() {
+			ot = dsymptr(s, ot, dtypesym(t1.Type), 0)
 		}
 
 	case TINTER:
@@ -1091,22 +1106,23 @@ ok:
 			dtypesym(a.type_)
 		}
 
-		// ../../../runtime/type.go:/InterfaceType
+		// ../../../../runtime/type.go:/interfaceType
 		ot = dcommontype(s, ot, t)
 
-		xt = ot - 2*Widthptr
-		ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint)
+		ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint+uncommonSize(t))
 		ot = duintxx(s, ot, uint64(n), Widthint)
 		ot = duintxx(s, ot, uint64(n), Widthint)
-		for _, a := range m {
-			// ../../../runtime/type.go:/imethod
-			ot = dgostringptr(s, ot, a.name)
+		dataAdd := imethodSize() * n
+		ot = dextratype(s, ot, t, dataAdd)
 
+		for _, a := range m {
+			// ../../../../runtime/type.go:/imethod
+			ot = dgostringptr(s, ot, a.name)
 			ot = dgopkgpath(s, ot, a.pkg)
 			ot = dsymptr(s, ot, dtypesym(a.type_), 0)
 		}
 
-	// ../../../runtime/type.go:/MapType
+	// ../../../../runtime/type.go:/mapType
 	case TMAP:
 		s1 := dtypesym(t.Down)
 
@@ -1114,7 +1130,6 @@ ok:
 		s3 := dtypesym(mapbucket(t))
 		s4 := dtypesym(hmap(t))
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
 		ot = dsymptr(s, ot, s1, 0)
 		ot = dsymptr(s, ot, s2, 0)
 		ot = dsymptr(s, ot, s3, 0)
@@ -1138,39 +1153,44 @@ ok:
 		ot = duint16(s, ot, uint16(mapbucket(t).Width))
 		ot = duint8(s, ot, uint8(obj.Bool2int(isreflexive(t.Down))))
 		ot = duint8(s, ot, uint8(obj.Bool2int(needkeyupdate(t.Down))))
+		ot = dextratype(s, ot, t, 0)
 
 	case TPTR32, TPTR64:
 		if t.Type.Etype == TANY {
-			// ../../runtime/type.go:/UnsafePointerType
+			// ../../../../runtime/type.go:/UnsafePointerType
 			ot = dcommontype(s, ot, t)
+			ot = dextratype(s, ot, t, 0)
 
 			break
 		}
 
-		// ../../runtime/type.go:/PtrType
+		// ../../../../runtime/type.go:/ptrType
 		s1 := dtypesym(t.Type)
 
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
 		ot = dsymptr(s, ot, s1, 0)
+		ot = dextratype(s, ot, t, 0)
 
-	// ../../runtime/type.go:/StructType
+	// ../../../../runtime/type.go:/structType
 	// for security, only the exported fields.
 	case TSTRUCT:
 		n := 0
 
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			dtypesym(t1.Type)
 			n++
 		}
 
 		ot = dcommontype(s, ot, t)
-		xt = ot - 2*Widthptr
-		ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint)
+		ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint+uncommonSize(t))
 		ot = duintxx(s, ot, uint64(n), Widthint)
 		ot = duintxx(s, ot, uint64(n), Widthint)
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
-			// ../../runtime/type.go:/structField
+
+		dataAdd := n * structfieldSize()
+		ot = dextratype(s, ot, t, dataAdd)
+
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
+			// ../../../../runtime/type.go:/structField
 			if t1.Sym != nil && t1.Embedded == 0 {
 				ot = dgostringptr(s, ot, t1.Sym.Name)
 				if exportname(t1.Sym.Name) {
@@ -1194,7 +1214,7 @@ ok:
 		}
 	}
 
-	ot = dextratype(s, ot, t, xt)
+	ot = dextratypeData(s, ot, t)
 	ggloblsym(s, int32(ot), int16(dupok|obj.RODATA))
 
 	// generate typelink.foo pointing at s = type.foo.
@@ -1204,21 +1224,7 @@ ok:
 	// we want be able to find.
 	if t.Sym == nil {
 		switch t.Etype {
-		case TPTR32, TPTR64:
-			// The ptrto field of the type data cannot be relied on when
-			// dynamic linking: a type T may be defined in a module that makes
-			// no use of pointers to that type, but another module can contain
-			// a package that imports the first one and does use *T pointers.
-			// The second module will end up defining type data for *T and a
-			// type.*T symbol pointing at it. It's important that calling
-			// .PtrTo() on the reflect.Type for T returns this type data and
-			// not some synthesized object, so we need reflect to be able to
-			// find it!
-			if !Ctxt.Flag_dynlink {
-				break
-			}
-			fallthrough
-		case TARRAY, TCHAN, TFUNC, TMAP:
+		case TPTR32, TPTR64, TARRAY, TCHAN, TFUNC, TMAP:
 			slink := typelinksym(t)
 			dsymptr(slink, 0, s, 0)
 			ggloblsym(slink, int32(Widthptr), int16(dupok|obj.RODATA))
@@ -1277,7 +1283,7 @@ func dumptypestructs() {
 		// The latter is the type of an auto-generated wrapper.
 		dtypesym(Ptrto(errortype))
 
-		dtypesym(functype(nil, list1(Nod(ODCLFIELD, nil, typenod(errortype))), list1(Nod(ODCLFIELD, nil, typenod(Types[TSTRING])))))
+		dtypesym(functype(nil, []*Node{Nod(ODCLFIELD, nil, typenod(errortype))}, []*Node{Nod(ODCLFIELD, nil, typenod(Types[TSTRING]))}))
 
 		// add paths for runtime and main, which 6l imports implicitly.
 		dimportpath(Runtimepkg)
@@ -1350,7 +1356,7 @@ func dalgsym(t *Type) *Sym {
 		ggloblsym(eqfunc, int32(Widthptr), obj.DUPOK|obj.RODATA)
 	}
 
-	// ../../runtime/alg.go:/typeAlg
+	// ../../../../runtime/alg.go:/typeAlg
 	ot := 0
 
 	ot = dsymptr(s, ot, hashfunc, 0)
@@ -1378,7 +1384,7 @@ func dalgsym(t *Type) *Sym {
 // be multiples of four words. On 32-bit systems that's 16 bytes, and
 // all size classes >= 16 bytes are 16-byte aligned, so no real constraint.
 // On 64-bit systems, that's 32 bytes, and 32-byte alignment is guaranteed
-// for size classes >= 256 bytes. On a 64-bit sytem, 256 bytes allocated
+// for size classes >= 256 bytes. On a 64-bit system, 256 bytes allocated
 // is 32 pointers, the bits for which fit in 4 bytes. So maxPtrmaskBytes
 // must be >= 4.
 //
@@ -1551,7 +1557,7 @@ func (p *GCProg) emit(t *Type, offset int64) {
 		p.w.Repeat(elem.Width/int64(Widthptr), count-1)
 
 	case TSTRUCT:
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			p.emit(t1.Type, offset+t1.Width)
 		}
 	}

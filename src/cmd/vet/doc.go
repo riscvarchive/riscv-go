@@ -85,12 +85,12 @@ Flag: -copylocks
 
 Locks that are erroneously passed by value.
 
-Documentation examples
+Tests, benchmarks and documentation examples
 
-Flag: -example
+Flag: -tests
 
-Mistakes involving example tests, including examples with incorrect names or
-function signatures, or that document identifiers not in the package.
+Mistakes involving tests including functions with incorrect names or signatures
+and example tests that document identifiers not in the package.
 
 Methods
 
@@ -198,7 +198,5 @@ These flags configure the behavior of vet:
 		For more information, see the discussion of the -printf flag.
 	-shadowstrict
 		Whether to be strict about shadowing; can be noisy.
-	-test
-		For testing only: sets -all and -shadow.
 */
 package main // import "golang.org/x/tools/cmd/vet"

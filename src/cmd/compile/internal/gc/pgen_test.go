@@ -6,6 +6,7 @@ package gc
 
 import (
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -39,6 +40,16 @@ func TestCmpstackvar(t *testing.T) {
 			Node{Class: PFUNC, Xoffset: 10},
 			Node{Class: PFUNC, Xoffset: 10},
 			false,
+		},
+		{
+			Node{Class: PPARAM, Xoffset: 10},
+			Node{Class: PPARAMOUT, Xoffset: 20},
+			true,
+		},
+		{
+			Node{Class: PPARAMOUT, Xoffset: 10},
+			Node{Class: PPARAM, Xoffset: 20},
+			true,
 		},
 		{
 			Node{Class: PAUTO, Used: true},
@@ -101,6 +112,10 @@ func TestCmpstackvar(t *testing.T) {
 		if got != d.lt {
 			t.Errorf("want %#v < %#v", d.a, d.b)
 		}
+		// If we expect a < b to be true, check that b < a is false.
+		if d.lt && cmpstackvarlt(&d.b, &d.a) {
+			t.Errorf("unexpected %#v < %#v", d.b, d.a)
+		}
 	}
 }
 
@@ -120,7 +135,7 @@ func nodelist2slice(nl *NodeList) []*Node {
 	return s
 }
 
-func TestListsort(t *testing.T) {
+func TestStackvarSort(t *testing.T) {
 	inp := []*Node{
 		{Class: PFUNC, Type: &Type{}, Name: &Name{}, Sym: &Sym{}},
 		{Class: PAUTO, Type: &Type{}, Name: &Name{}, Sym: &Sym{}},
@@ -159,13 +174,11 @@ func TestListsort(t *testing.T) {
 		haspointers(inp[i].Type)
 	}
 
-	nl := slice2nodelist(inp)
-	listsort(&nl, cmpstackvarlt)
-	got := nodelist2slice(nl)
-	if !reflect.DeepEqual(want, got) {
-		t.Error("listsort failed")
-		for i := range got {
-			g := got[i]
+	sort.Sort(byStackVar(inp))
+	if !reflect.DeepEqual(want, inp) {
+		t.Error("sort failed")
+		for i := range inp {
+			g := inp[i]
 			w := want[i]
 			eq := reflect.DeepEqual(w, g)
 			if !eq {
