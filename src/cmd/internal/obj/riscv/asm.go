@@ -105,6 +105,7 @@ var optab = []Optab{
 
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
+	{ASCALL, C_NONE, C_NONE, C_NONE, type_system, 4},
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
@@ -401,7 +402,14 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		result = instr_uj(offset, rd, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
-		result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+		switch p.To.Class {
+		case C_REGI:
+			result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+		case C_NONE:
+			result = instr_i(encoded.csr, REG_ZERO, encoded.funct3, REG_ZERO, encoded.opcode)
+		default:
+			ctxt.Diag("unknown instruction %d", o.as)
+		}
 	case type_mov:
 		switch p.From.Class {
 		case C_REGI:
