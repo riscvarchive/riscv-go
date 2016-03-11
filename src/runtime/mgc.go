@@ -216,9 +216,10 @@ var gcphase uint32
 // The compiler knows about this variable.
 // If you change it, you must change the compiler too.
 var writeBarrier struct {
-	enabled bool // compiler emits a check of this before calling write barrier
-	needed  bool // whether we need a write barrier for current GC phase
-	cgo     bool // whether we need a write barrier for a cgo check
+	enabled bool   // compiler emits a check of this before calling write barrier
+	needed  bool   // whether we need a write barrier for current GC phase
+	cgo     bool   // whether we need a write barrier for a cgo check
+	alignme uint64 // guarantee alignment so that compiler can use a 32 or 64-bit load
 }
 
 // gcBlackenEnabled is 1 if mutator assists and background mark
@@ -339,13 +340,9 @@ type gcControllerState struct {
 	// the cycle.
 	idleMarkTime int64
 
-	// bgMarkStartTime is the absolute start time in nanoseconds
-	// that the background mark phase started.
-	bgMarkStartTime int64
-
-	// assistTime is the absolute start time in nanoseconds that
-	// mutator assists were enabled.
-	assistStartTime int64
+	// markStartTime is the absolute start time in nanoseconds
+	// that assists and background mark workers started.
+	markStartTime int64
 
 	// heapGoal is the goal memstats.heap_live for when this cycle
 	// ends. This is computed at the beginning of each cycle.
@@ -541,7 +538,7 @@ func (c *gcControllerState) endCycle() {
 	// technically isn't comparable to the trigger ratio.
 	goalGrowthRatio := float64(gcpercent) / 100
 	actualGrowthRatio := float64(memstats.heap_live)/float64(memstats.heap_marked) - 1
-	assistDuration := nanotime() - c.assistStartTime
+	assistDuration := nanotime() - c.markStartTime
 
 	// Assume background mark hit its utilization goal.
 	utilization := gcGoalUtilization
@@ -699,7 +696,7 @@ func (c *gcControllerState) findRunnableGCWorker(_p_ *p) *g {
 		// TODO(austin): Shorter preemption interval for mark
 		// worker to improve fairness and give this
 		// finer-grained control over schedule?
-		now := nanotime() - gcController.bgMarkStartTime
+		now := nanotime() - gcController.markStartTime
 		then := now + gcForcePreemptNS
 		timeUsed := c.fractionalMarkTime + gcForcePreemptNS
 		if then > 0 && float64(timeUsed)/float64(then) > c.fractionalUtilizationGoal {
@@ -932,6 +929,9 @@ func gcStart(mode gcMode, forceTrigger bool) {
 	if mode == gcBackgroundMode {
 		gcBgMarkStartWorkers()
 	}
+
+	gcResetMarkState()
+
 	now := nanotime()
 	work.stwprocs, work.maxprocs = gcprocs(), gomaxprocs
 	work.tSweepTerm = now
@@ -948,10 +948,6 @@ func gcStart(mode gcMode, forceTrigger bool) {
 	// clearpools before we start the GC. If we wait they memory will not be
 	// reclaimed until the next GC cycle.
 	clearpools()
-
-	gcResetMarkState()
-
-	work.finalizersDone = false
 
 	if mode == gcBackgroundMode { // Do as much work concurrently as possible
 		gcController.startCycle()
@@ -1000,8 +996,7 @@ func gcStart(mode gcMode, forceTrigger bool) {
 
 		// Assists and workers can start the moment we start
 		// the world.
-		gcController.assistStartTime = now
-		gcController.bgMarkStartTime = now
+		gcController.markStartTime = now
 
 		// Concurrent mark.
 		systemstack(startTheWorldWithSema)
@@ -1164,8 +1159,8 @@ func gcMarkTermination() {
 	casgstatus(gp, _Grunning, _Gwaiting)
 	gp.waitreason = "garbage collection"
 
-	// Run gc on the g0 stack.  We do this so that the g stack
-	// we're currently running on will no longer change.  Cuts
+	// Run gc on the g0 stack. We do this so that the g stack
+	// we're currently running on will no longer change. Cuts
 	// the root set down a bit (g0 stacks are not scanned, and
 	// we don't need to scan gc's internal state).  We also
 	// need to switch to g0 so we can shrink the stack.
@@ -1555,11 +1550,12 @@ func gcMark(start_time int64) {
 
 	gchelperstart()
 
-	var gcw gcWork
-	gcDrain(&gcw, gcDrainBlock)
+	gcw := &getg().m.p.ptr().gcw
+	gcDrain(gcw, gcDrainBlock)
 	gcw.dispose()
 
-	gcMarkRootCheck()
+	// TODO: Re-enable once this is cheap.
+	//gcMarkRootCheck()
 	if work.full != 0 {
 		throw("work.full != 0")
 	}
@@ -1723,8 +1719,10 @@ func gcCopySpans() {
 }
 
 // gcResetMarkState resets global state prior to marking (concurrent
-// or STW) and resets the stack scan state of all Gs. Any Gs created
-// after this will also be in the reset state.
+// or STW) and resets the stack scan state of all Gs.
+//
+// This is safe to do without the world stopped because any Gs created
+// during or after this will start out in the reset state.
 func gcResetMarkState() {
 	// This may be called during a concurrent phase, so make sure
 	// allgs doesn't change.
@@ -1738,6 +1736,7 @@ func gcResetMarkState() {
 
 	work.bytesMarked = 0
 	work.initialHeapLive = memstats.heap_live
+	work.finalizersDone = false
 }
 
 // Hooks for other packages
@@ -1798,8 +1797,8 @@ func gchelper() {
 
 	// Parallel mark over GC roots and heap
 	if gcphase == _GCmarktermination {
-		var gcw gcWork
-		gcDrain(&gcw, gcDrainBlock) // blocks in getfull
+		gcw := &_g_.m.p.ptr().gcw
+		gcDrain(gcw, gcDrainBlock) // blocks in getfull
 		gcw.dispose()
 	}
 

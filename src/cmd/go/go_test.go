@@ -1,4 +1,4 @@
-// Copyright 2015 The Go Authors.  All rights reserved.
+// Copyright 2015 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -109,7 +109,7 @@ func TestMain(m *testing.M) {
 	os.Exit(r)
 }
 
-// The length of an mtime tick on this system.  This is an estimate of
+// The length of an mtime tick on this system. This is an estimate of
 // how long we need to sleep to ensure that the mtime of two files is
 // different.
 // We used to try to be clever but that didn't always work (see golang.org/issue/12205).
@@ -181,7 +181,7 @@ func (tg *testgoData) pwd() string {
 	return wd
 }
 
-// cd changes the current directory to the named directory.  Note that
+// cd changes the current directory to the named directory. Note that
 // using this means that the test must not be run in parallel with any
 // other tests.
 func (tg *testgoData) cd(dir string) {
@@ -325,7 +325,7 @@ func (tg *testgoData) getStderr() string {
 }
 
 // doGrepMatch looks for a regular expression in a buffer, and returns
-// whether it is found.  The regular expression is matched against
+// whether it is found. The regular expression is matched against
 // each line separately, as with the grep command.
 func (tg *testgoData) doGrepMatch(match string, b *bytes.Buffer) bool {
 	if !tg.ran {
@@ -341,7 +341,7 @@ func (tg *testgoData) doGrepMatch(match string, b *bytes.Buffer) bool {
 }
 
 // doGrep looks for a regular expression in a buffer and fails if it
-// is not found.  The name argument is the name of the output we are
+// is not found. The name argument is the name of the output we are
 // searching, "output" or "error".  The msg argument is logged on
 // failure.
 func (tg *testgoData) doGrep(match string, b *bytes.Buffer, name, msg string) {
@@ -375,7 +375,7 @@ func (tg *testgoData) grepBoth(match, msg string) {
 }
 
 // doGrepNot looks for a regular expression in a buffer and fails if
-// it is found.  The name and msg arguments are as for doGrep.
+// it is found. The name and msg arguments are as for doGrep.
 func (tg *testgoData) doGrepNot(match string, b *bytes.Buffer, name, msg string) {
 	if tg.doGrepMatch(match, b) {
 		tg.t.Log(msg)
@@ -440,8 +440,8 @@ func (tg *testgoData) grepCountBoth(match string) int {
 }
 
 // creatingTemp records that the test plans to create a temporary file
-// or directory.  If the file or directory exists already, it will be
-// removed.  When the test completes, the file or directory will be
+// or directory. If the file or directory exists already, it will be
+// removed. When the test completes, the file or directory will be
 // removed if it exists.
 func (tg *testgoData) creatingTemp(path string) {
 	if filepath.IsAbs(path) && !strings.HasPrefix(path, tg.tempdir) {
@@ -457,7 +457,7 @@ func (tg *testgoData) creatingTemp(path string) {
 	tg.temps = append(tg.temps, path)
 }
 
-// makeTempdir makes a temporary directory for a run of testgo.  If
+// makeTempdir makes a temporary directory for a run of testgo. If
 // the temporary directory was already created, this does nothing.
 func (tg *testgoData) makeTempdir() {
 	if tg.tempdir == "" {
@@ -1105,8 +1105,8 @@ func testMove(t *testing.T, vcs, url, base, config string) {
 	}
 	if vcs == "git" {
 		// git will ask for a username and password when we
-		// run go get -d -f -u.  An empty username and
-		// password will work.  Prevent asking by setting
+		// run go get -d -f -u. An empty username and
+		// password will work. Prevent asking by setting
 		// GIT_ASKPASS.
 		tg.creatingTemp("sink" + exeSuffix)
 		tg.tempFile("src/sink/sink.go", `package main; func main() {}`)
@@ -1224,14 +1224,6 @@ func TestGetGitDefaultBranch(t *testing.T) {
 	tg.run("get", "-d", "-u", importPath)
 	tg.runGit(repoDir, "branch", "--contains", "HEAD")
 	tg.grepStdout(`\* another-branch`, "not on correct default branch")
-}
-
-func TestDisallowedCSourceFiles(t *testing.T) {
-	tg := testgo(t)
-	defer tg.cleanup()
-	tg.setenv("GOPATH", filepath.Join(tg.pwd(), "testdata"))
-	tg.runFail("build", "badc")
-	tg.grepStderr("C source files not allowed", "go test did not say C source files not allowed")
 }
 
 func TestErrorMessageForSyntaxErrorInTestGoFileSaysFAIL(t *testing.T) {
@@ -1657,8 +1649,8 @@ func TestLdflagsArgumentsWithSpacesIssue3941(t *testing.T) {
 		func main() {
 			println(extern)
 		}`)
-	tg.run("run", "-ldflags", `-X main.extern "hello world"`, tg.path("main.go"))
-	tg.grepStderr("^hello world", `ldflags -X main.extern 'hello world' failed`)
+	tg.run("run", "-ldflags", `-X "main.extern=hello world"`, tg.path("main.go"))
+	tg.grepStderr("^hello world", `ldflags -X "main.extern=hello world"' failed`)
 }
 
 func TestGoTestCpuprofileLeavesBinaryBehind(t *testing.T) {
@@ -1726,7 +1718,6 @@ func TestSymlinksVendor(t *testing.T) {
 
 	tg := testgo(t)
 	defer tg.cleanup()
-	tg.setenv("GO15VENDOREXPERIMENT", "1")
 	tg.tempDir("gopath/src/dir1/vendor/v")
 	tg.tempFile("gopath/src/dir1/p.go", "package main\nimport _ `v`\nfunc main(){}")
 	tg.tempFile("gopath/src/dir1/vendor/v/v.go", "package v")
@@ -2106,10 +2097,33 @@ func main() { C.f() }`)
 	tg.grepStderr(`gccgo.*\-L alibpath \-lalib`, `no Go-inline "#cgo LDFLAGS:" ("-L alibpath -lalib") passed to gccgo linking stage`)
 }
 
-func TestListTemplateCanUseContextFunction(t *testing.T) {
+func TestListTemplateContextFunction(t *testing.T) {
 	tg := testgo(t)
 	defer tg.cleanup()
-	tg.run("list", "-f", "GOARCH: {{context.GOARCH}}")
+	for _, tt := range []struct {
+		v    string
+		want string
+	}{
+		{"GOARCH", runtime.GOARCH},
+		{"GOOS", runtime.GOOS},
+		{"GOROOT", filepath.Clean(runtime.GOROOT())},
+		{"GOPATH", os.Getenv("GOPATH")},
+		{"CgoEnabled", ""},
+		{"UseAllFiles", ""},
+		{"Compiler", ""},
+		{"BuildTags", ""},
+		{"ReleaseTags", ""},
+		{"InstallSuffix", ""},
+	} {
+		tmpl := "{{context." + tt.v + "}}"
+		tg.run("list", "-f", tmpl)
+		if tt.want == "" {
+			continue
+		}
+		if got := strings.TrimSpace(tg.getStdout()); got != tt.want {
+			t.Errorf("go list -f %q: got %q; want %q", tmpl, got, tt.want)
+		}
+	}
 }
 
 // cmd/go: "go test" should fail if package does not build
@@ -2123,7 +2137,7 @@ func TestIssue7108(t *testing.T) {
 // cmd/go: go test -a foo does not rebuild regexp.
 func TestIssue6844(t *testing.T) {
 	if testing.Short() {
-		t.Skip("don't rebuild the standard libary in short mode")
+		t.Skip("don't rebuild the standard library in short mode")
 	}
 
 	tg := testgo(t)
@@ -2338,7 +2352,7 @@ func TestGoGetHTTPS404(t *testing.T) {
 	tg.run("get", "bazil.org/fuse/fs/fstestutil")
 }
 
-// Test that you can not import a main package.
+// Test that you cannot import a main package.
 func TestIssue4210(t *testing.T) {
 	tg := testgo(t)
 	defer tg.cleanup()
@@ -2758,4 +2772,55 @@ func TestParallelTest(t *testing.T) {
 	tg.tempFile("src/p4/p4_test.go", strings.Replace(testSrc, "package_test", "p4_test", 1))
 	tg.setenv("GOPATH", tg.path("."))
 	tg.run("test", "-p=4", "p1", "p2", "p3", "p4")
+}
+
+func TestCgoConsistentResults(t *testing.T) {
+	if !canCgo {
+		t.Skip("skipping because cgo not enabled")
+	}
+	if runtime.GOOS == "solaris" {
+		// See https://golang.org/issue/13247
+		t.Skip("skipping because Solaris builds are known to be inconsistent; see #13247")
+	}
+
+	tg := testgo(t)
+	defer tg.cleanup()
+	tg.parallel()
+	tg.makeTempdir()
+	tg.setenv("GOPATH", filepath.Join(tg.pwd(), "testdata"))
+	exe1 := tg.path("cgotest1" + exeSuffix)
+	exe2 := tg.path("cgotest2" + exeSuffix)
+	tg.run("build", "-o", exe1, "cgotest")
+	tg.run("build", "-x", "-o", exe2, "cgotest")
+	b1, err := ioutil.ReadFile(exe1)
+	tg.must(err)
+	b2, err := ioutil.ReadFile(exe2)
+	tg.must(err)
+
+	if !tg.doGrepMatch(`-fdebug-prefix-map=\$WORK`, &tg.stderr) {
+		t.Skip("skipping because C compiler does not support -fdebug-prefix-map")
+	}
+	if !bytes.Equal(b1, b2) {
+		t.Error("building cgotest twice did not produce the same output")
+	}
+}
+
+// Issue 14444: go get -u .../ duplicate loads errors
+func TestGoGetUpdateAllDoesNotTryToLoadDuplicates(t *testing.T) {
+	testenv.MustHaveExternalNetwork(t)
+
+	tg := testgo(t)
+	defer tg.cleanup()
+	tg.makeTempdir()
+	tg.setenv("GOPATH", tg.path("."))
+	tg.run("get", "-u", ".../")
+	tg.grepStderrNot("duplicate loads of", "did not remove old packages from cache")
+}
+
+func TestFatalInBenchmarkCauseNonZeroExitStatus(t *testing.T) {
+	tg := testgo(t)
+	defer tg.cleanup()
+	tg.runFail("test", "-bench", ".", "./testdata/src/benchfatal")
+	tg.grepBothNot("^ok", "test passed unexpectedly")
+	tg.grepBoth("FAIL.*benchfatal", "test did not run everything")
 }

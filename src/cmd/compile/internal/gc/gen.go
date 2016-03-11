@@ -76,6 +76,9 @@ func addrescapes(n *Node) {
 			oldfn := Curfn
 
 			Curfn = n.Name.Curfn
+			if Curfn.Func.Closure != nil && Curfn.Op == OCLOSURE {
+				Curfn = Curfn.Func.Closure
+			}
 			n.Name.Heapaddr = temp(Ptrto(n.Type))
 			buf := fmt.Sprintf("&%v", n.Sym)
 			n.Name.Heapaddr.Sym = Lookup(buf)
@@ -139,6 +142,8 @@ func newlab(n *Node) *Label {
 	return lab
 }
 
+// There is a copy of checkgoto in the new SSA backend.
+// Please keep them in sync.
 func checkgoto(from *Node, to *Node) {
 	if from.Sym == to.Sym {
 		return
@@ -157,7 +162,7 @@ func checkgoto(from *Node, to *Node) {
 		fs = fs.Link
 	}
 	if fs != to.Sym {
-		lno := int(lineno)
+		lno := lineno
 		setlineno(from)
 
 		// decide what to complain about.
@@ -187,11 +192,11 @@ func checkgoto(from *Node, to *Node) {
 		}
 
 		if block != nil {
-			Yyerror("goto %v jumps into block starting at %v", from.Left.Sym, Ctxt.Line(int(block.Lastlineno)))
+			Yyerror("goto %v jumps into block starting at %v", from.Left.Sym, linestr(block.Lastlineno))
 		} else {
-			Yyerror("goto %v jumps over declaration of %v at %v", from.Left.Sym, dcl, Ctxt.Line(int(dcl.Lastlineno)))
+			Yyerror("goto %v jumps over declaration of %v at %v", from.Left.Sym, dcl, linestr(dcl.Lastlineno))
 		}
-		lineno = int32(lno)
+		lineno = lno
 	}
 }
 
@@ -210,9 +215,9 @@ func stmtlabel(n *Node) *Label {
 }
 
 // compile statements
-func Genlist(l *NodeList) {
-	for ; l != nil; l = l.Next {
-		gen(l.N)
+func Genlist(l Nodes) {
+	for _, n := range l.Slice() {
+		gen(n)
 	}
 }
 
@@ -220,7 +225,7 @@ func Genlist(l *NodeList) {
 func cgen_proc(n *Node, proc int) {
 	switch n.Left.Op {
 	default:
-		Fatalf("cgen_proc: unknown call %v", Oconv(int(n.Left.Op), 0))
+		Fatalf("cgen_proc: unknown call %v", Oconv(n.Left.Op, 0))
 
 	case OCALLMETH:
 		cgen_callmeth(n.Left, proc)
@@ -429,13 +434,13 @@ func cgen_dottype(n *Node, res, resok *Node, wb bool) {
 		q := Gbranch(obj.AJMP, nil, 0)
 		Patch(p, Pc)
 		Regrealloc(&r2) // reclaim from above, for this failure path
-		fn := syslook("panicdottype", 0)
+		fn := syslook("panicdottype")
 		dowidth(fn.Type)
 		call := Nod(OCALLFUNC, fn, nil)
 		r1.Type = byteptr
 		r2.Type = byteptr
-		call.List = list(list(list1(&r1), &r2), typename(n.Left.Type))
-		call.List = ascompatte(OCALLFUNC, call, false, getinarg(fn.Type), call.List, 0, nil)
+		setNodeSeq(&call.List, list(list(list1(&r1), &r2), typename(n.Left.Type)))
+		call.List.Set(ascompatte(OCALLFUNC, call, false, fn.Type.Params(), call.List.Slice(), 0, nil))
 		gen(call)
 		Regfree(&r1)
 		Regfree(&r2)
@@ -517,11 +522,11 @@ func Cgen_As2dottype(n, res, resok *Node) {
 	q := Gbranch(obj.AJMP, nil, 0)
 	Patch(p, Pc)
 
-	fn := syslook("panicdottype", 0)
+	fn := syslook("panicdottype")
 	dowidth(fn.Type)
 	call := Nod(OCALLFUNC, fn, nil)
-	call.List = list(list(list1(&r1), &r2), typename(n.Left.Type))
-	call.List = ascompatte(OCALLFUNC, call, false, getinarg(fn.Type), call.List, 0, nil)
+	setNodeSeq(&call.List, list(list(list1(&r1), &r2), typename(n.Left.Type)))
+	call.List.Set(ascompatte(OCALLFUNC, call, false, fn.Type.Params(), call.List.Slice(), 0, nil))
 	gen(call)
 	Regfree(&r1)
 	Regfree(&r2)
@@ -585,6 +590,10 @@ func Tempname(nn *Node, t *Type) {
 	if Curfn == nil {
 		Fatalf("no curfn for tempname")
 	}
+	if Curfn.Func.Closure != nil && Curfn.Op == OCLOSURE {
+		Dump("Tempname", Curfn)
+		Fatalf("adding tempname to wrong closure function")
+	}
 
 	if t == nil {
 		Yyerror("tempname called with nil type")
@@ -604,7 +613,7 @@ func Tempname(nn *Node, t *Type) {
 	n.Ullman = 1
 	n.Esc = EscNever
 	n.Name.Curfn = Curfn
-	Curfn.Func.Dcl = list(Curfn.Func.Dcl, n)
+	Curfn.Func.Dcl = append(Curfn.Func.Dcl, n)
 
 	dowidth(t)
 	n.Xoffset = 0
@@ -629,7 +638,7 @@ func gen(n *Node) {
 		goto ret
 	}
 
-	if n.Ninit != nil {
+	if n.Ninit.Len() > 0 {
 		Genlist(n.Ninit)
 	}
 
@@ -827,7 +836,7 @@ func gen(n *Node) {
 		cgen_dcl(n.Left)
 
 	case OAS:
-		if gen_as_init(n) {
+		if gen_as_init(n, false) {
 			break
 		}
 		Cgen_as(n.Left, n.Right)
@@ -836,7 +845,7 @@ func gen(n *Node) {
 		Cgen_as_wb(n.Left, n.Right, true)
 
 	case OAS2DOTTYPE:
-		cgen_dottype(n.Rlist.N, n.List.N, n.List.Next.N, needwritebarrier(n.List.N, n.Rlist.N))
+		cgen_dottype(n.Rlist.First(), n.List.First(), n.List.Second(), needwritebarrier(n.List.First(), n.Rlist.First()))
 
 	case OCALLMETH:
 		cgen_callmeth(n, 0)
@@ -968,13 +977,13 @@ func checklabels() {
 	for lab := labellist; lab != nil; lab = lab.Link {
 		if lab.Def == nil {
 			for _, n := range lab.Use {
-				yyerrorl(int(n.Lineno), "label %v not defined", lab.Sym)
+				yyerrorl(n.Lineno, "label %v not defined", lab.Sym)
 			}
 			continue
 		}
 
 		if lab.Use == nil && !lab.Used {
-			yyerrorl(int(lab.Def.Lineno), "label %v defined and not used", lab.Sym)
+			yyerrorl(lab.Def.Lineno, "label %v defined and not used", lab.Sym)
 			continue
 		}
 

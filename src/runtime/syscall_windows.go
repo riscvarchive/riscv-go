@@ -1,4 +1,4 @@
-// Copyright 2014 The Go Authors.  All rights reserved.
+// Copyright 2014 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -45,15 +45,15 @@ func compileCallback(fn eface, cleanstack bool) (code uintptr) {
 		panic("compileCallback: not a function")
 	}
 	ft := (*functype)(unsafe.Pointer(fn._type))
-	if len(ft.out) != 1 {
+	if len(ft.out()) != 1 {
 		panic("compileCallback: function must have one output parameter")
 	}
 	uintptrSize := unsafe.Sizeof(uintptr(0))
-	if ft.out[0].size != uintptrSize {
+	if ft.out()[0].size != uintptrSize {
 		panic("compileCallback: output parameter size is wrong")
 	}
 	argsize := uintptr(0)
-	for _, t := range ft.in {
+	for _, t := range ft.in() {
 		if t.size > uintptrSize {
 			panic("compileCallback: input parameter size is wrong")
 		}

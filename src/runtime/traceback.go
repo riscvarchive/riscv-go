@@ -98,7 +98,7 @@ func tracebackdefers(gp *g, callback func(*stkframe, unsafe.Pointer) bool, v uns
 			frame.arglen = 0
 			frame.argmap = nil
 		} else {
-			frame.pc = uintptr(fn.fn)
+			frame.pc = fn.fn
 			f := findfunc(frame.pc)
 			if f == nil {
 				print("runtime: unknown pc in defer ", hex(frame.pc), "\n")
@@ -115,7 +115,7 @@ func tracebackdefers(gp *g, callback func(*stkframe, unsafe.Pointer) bool, v uns
 	}
 }
 
-// Generic traceback.  Handles runtime stack prints (pcbuf == nil),
+// Generic traceback. Handles runtime stack prints (pcbuf == nil),
 // the runtime.Callers function (pcbuf != nil), as well as the garbage
 // collector (callback != nil).  A little clunky to merge these, but avoids
 // duplicating the code and all its subtlety.
@@ -174,7 +174,7 @@ func gentraceback(pc0, sp0, lr0 uintptr, gp *g, skip int, pcbuf *uintptr, max in
 	printing := pcbuf == nil && callback == nil
 	_defer := gp._defer
 
-	for _defer != nil && uintptr(_defer.sp) == _NoArgs {
+	for _defer != nil && _defer.sp == _NoArgs {
 		_defer = _defer.link
 	}
 
@@ -600,7 +600,7 @@ func traceback1(pc, sp, lr uintptr, gp *g, flags uint) {
 
 func callers(skip int, pcbuf []uintptr) int {
 	sp := getcallersp(unsafe.Pointer(&skip))
-	pc := uintptr(getcallerpc(unsafe.Pointer(&skip)))
+	pc := getcallerpc(unsafe.Pointer(&skip))
 	gp := getg()
 	var n int
 	systemstack(func() {
@@ -645,7 +645,6 @@ var gStatusStrings = [...]string{
 	_Gsyscall:   "syscall",
 	_Gwaiting:   "waiting",
 	_Gdead:      "dead",
-	_Genqueue:   "enqueue",
 	_Gcopystack: "copystack",
 }
 
@@ -707,7 +706,7 @@ func tracebackothers(me *g) {
 		goroutineheader(gp)
 		// Note: gp.m == g.m occurs when tracebackothers is
 		// called from a signal handler initiated during a
-		// systemstack call.  The original G is still in the
+		// systemstack call. The original G is still in the
 		// running state, and we want to print its stack.
 		if gp.m != g.m && readgstatus(gp)&^_Gscan == _Grunning {
 			print("\tgoroutine running on other thread; stack unavailable\n")

@@ -158,7 +158,7 @@ func (s *Server) Close() {
 			// previously-flaky tests) in the case of
 			// socket-late-binding races from the http Client
 			// dialing this server and then getting an idle
-			// connection before the dial completed.  There is thus
+			// connection before the dial completed. There is thus
 			// a connected connection in StateNew with no
 			// associated Request. We only close StateIdle and
 			// StateNew because they're not doing anything. It's
@@ -167,7 +167,7 @@ func (s *Server) Close() {
 			// few milliseconds wasn't liked (early versions of
 			// https://golang.org/cl/15151) so now we just
 			// forcefully close StateNew. The docs for Server.Close say
-			// we wait for "oustanding requests", so we don't close things
+			// we wait for "outstanding requests", so we don't close things
 			// in StateActive.
 			if st == http.StateIdle || st == http.StateNew {
 				s.closeConn(c)
@@ -297,7 +297,7 @@ func (s *Server) closeConn(c net.Conn) { s.closeConnChan(c, nil) }
 func (s *Server) closeConnChan(c net.Conn, done chan<- bool) {
 	if runtime.GOOS == "plan9" {
 		// Go's Plan 9 net package isn't great at unblocking reads when
-		// their underlying TCP connections are closed.  Don't trust
+		// their underlying TCP connections are closed. Don't trust
 		// that that the ConnState state machine will get to
 		// StateClosed. Instead, just go there directly. Plan 9 may leak
 		// resources if the syscall doesn't end up returning. Oh well.

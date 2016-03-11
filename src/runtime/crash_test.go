@@ -294,9 +294,9 @@ func TestRecoverBeforePanicAfterGoexit(t *testing.T) {
 	// 1. defer a function that recovers
 	// 2. defer a function that panics
 	// 3. call goexit
-	// Goexit should run the #2 defer.  Its panic
+	// Goexit should run the #2 defer. Its panic
 	// should be caught by the #1 defer, and execution
-	// should resume in the caller.  Like the Goexit
+	// should resume in the caller. Like the Goexit
 	// never happened!
 	defer func() {
 		r := recover()
@@ -335,4 +335,20 @@ func TestPanicTraceback(t *testing.T) {
 		}
 		output = output[idx[1]:]
 	}
+}
+
+func testPanicDeadlock(t *testing.T, name string, want string) {
+	// test issue 14432
+	output := runTestProg(t, "testprog", name)
+	if !strings.HasPrefix(output, want) {
+		t.Fatalf("output does not start with %q:\n%s", want, output)
+	}
+}
+
+func TestPanicDeadlockGosched(t *testing.T) {
+	testPanicDeadlock(t, "GoschedInPanic", "panic: errorThatGosched\n\n")
+}
+
+func TestPanicDeadlockSyscall(t *testing.T) {
+	testPanicDeadlock(t, "SyscallInPanic", "1\n2\npanic: 3\n\n")
 }

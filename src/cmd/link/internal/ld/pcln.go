@@ -1,4 +1,4 @@
-// Copyright 2013 The Go Authors.  All rights reserved.
+// Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -97,7 +97,7 @@ func pciterinit(ctxt *Link, it *Pciter, d *Pcdata) {
 	pciternext(it)
 }
 
-// Copyright 2013 The Go Authors.  All rights reserved.
+// Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -218,7 +218,7 @@ func pclntab() {
 	funcdata_bytes := int64(0)
 	ftab := Linklookup(Ctxt, "runtime.pclntab", 0)
 	ftab.Type = obj.SPCLNTAB
-	ftab.Reachable = true
+	ftab.Attr |= AttrReachable
 
 	// See golang.org/s/go12symtab for the format. Briefly:
 	//	8-byte header
@@ -399,12 +399,12 @@ const (
 )
 
 // findfunctab generates a lookup table to quickly find the containing
-// function for a pc.  See src/runtime/symtab.go:findfunc for details.
+// function for a pc. See src/runtime/symtab.go:findfunc for details.
 func findfunctab() {
 	t := Linklookup(Ctxt, "runtime.findfunctab", 0)
 	t.Type = obj.SRODATA
-	t.Reachable = true
-	t.Local = true
+	t.Attr |= AttrReachable
+	t.Attr |= AttrLocal
 
 	// find min and max address
 	min := Ctxt.Textp.Value

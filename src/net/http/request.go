@@ -279,8 +279,8 @@ func (r *Request) Cookie(name string) (*Cookie, error) {
 	return nil, ErrNoCookie
 }
 
-// AddCookie adds a cookie to the request.  Per RFC 6265 section 5.4,
-// AddCookie does not attach more than one Cookie header field.  That
+// AddCookie adds a cookie to the request. Per RFC 6265 section 5.4,
+// AddCookie does not attach more than one Cookie header field. That
 // means all cookies, if any, are written into the same line,
 // separated by semicolon.
 func (r *Request) AddCookie(c *Cookie) {
@@ -375,7 +375,7 @@ func (r *Request) Write(w io.Writer) error {
 }
 
 // WriteProxy is like Write but writes the request in the form
-// expected by an HTTP proxy.  In particular, WriteProxy writes the
+// expected by an HTTP proxy. In particular, WriteProxy writes the
 // initial Request-URI line of the request with an absolute URI, per
 // section 5.1.2 of RFC 2616, including the scheme and host.
 // In either case, WriteProxy also writes a Host header, using
@@ -521,7 +521,7 @@ func cleanHost(in string) string {
 	return in
 }
 
-// removeZone removes IPv6 zone identifer from host.
+// removeZone removes IPv6 zone identifier from host.
 // E.g., "[fe80::1%en0]:8080" to "[fe80::1]:8080"
 func removeZone(host string) string {
 	if !strings.HasPrefix(host, "[") {
@@ -704,7 +704,9 @@ func putTextprotoReader(r *textproto.Reader) {
 }
 
 // ReadRequest reads and parses an incoming request from b.
-func ReadRequest(b *bufio.Reader) (req *Request, err error) { return readRequest(b, deleteHostHeader) }
+func ReadRequest(b *bufio.Reader) (*Request, error) {
+	return readRequest(b, deleteHostHeader)
+}
 
 // Constants for readRequest's deleteHostHeader parameter.
 const (
@@ -774,7 +776,7 @@ func readRequest(b *bufio.Reader, deleteHostHeader bool) (req *Request, err erro
 	// and
 	//	GET http://www.google.com/index.html HTTP/1.1
 	//	Host: doesntmatter
-	// the same.  In the second case, any Host line is ignored.
+	// the same. In the second case, any Host line is ignored.
 	req.Host = req.URL.Host
 	if req.Host == "" {
 		req.Host = req.Header.get("Host")

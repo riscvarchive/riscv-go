@@ -1,4 +1,4 @@
-// Copyright 2015 The Go Authors.  All rights reserved.
+// Copyright 2015 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -287,6 +287,10 @@ func CConv(s uint8) string {
 }
 
 func (p *Prog) String() string {
+	if p == nil {
+		return "<nil Prog>"
+	}
+
 	if p.Ctxt == nil {
 		return "<Prog without ctxt>"
 	}
@@ -295,7 +299,7 @@ func (p *Prog) String() string {
 
 	var buf bytes.Buffer
 
-	fmt.Fprintf(&buf, "%.5d (%v)\t%v%s", p.Pc, p.Line(), Aconv(int(p.As)), sc)
+	fmt.Fprintf(&buf, "%.5d (%v)\t%v%s", p.Pc, p.Line(), Aconv(p.As), sc)
 	sep := "\t"
 	if p.From.Type != TYPE_NONE {
 		fmt.Fprintf(&buf, "%s%v", sep, Dconv(p, &p.From))
@@ -325,9 +329,22 @@ func (p *Prog) String() string {
 }
 
 func (ctxt *Link) NewProg() *Prog {
-	p := new(Prog) // should be the only call to this; all others should use ctxt.NewProg
+	var p *Prog
+	if i := ctxt.allocIdx; i < len(ctxt.progs) {
+		p = &ctxt.progs[i]
+		ctxt.allocIdx = i + 1
+	} else {
+		p = new(Prog) // should be the only call to this; all others should use ctxt.NewProg
+	}
 	p.Ctxt = ctxt
 	return p
+}
+func (ctxt *Link) freeProgs() {
+	s := ctxt.progs[:ctxt.allocIdx]
+	for i := range s {
+		s[i] = Prog{}
+	}
+	ctxt.allocIdx = 0
 }
 
 func (ctxt *Link) Line(n int) string {
@@ -366,7 +383,7 @@ func Dconv(p *Prog, a *Addr) string {
 		}
 
 		str = Rconv(int(a.Reg))
-		if a.Name != TYPE_NONE || a.Sym != nil {
+		if a.Name != NAME_NONE || a.Sym != nil {
 			str = fmt.Sprintf("%v(%v)(REG)", Mconv(a), Rconv(int(a.Reg)))
 		}
 
@@ -388,6 +405,9 @@ func Dconv(p *Prog, a *Addr) string {
 		str = Mconv(a)
 		if a.Index != REG_NONE {
 			str += fmt.Sprintf("(%v*%d)", Rconv(int(a.Index)), int(a.Scale))
+		}
+		if p.As == ATYPE && a.Gotype != nil {
+			str += fmt.Sprintf("%s", a.Gotype.Name)
 		}
 
 	case TYPE_CONST:
@@ -534,7 +554,7 @@ const (
 )
 
 // RegisterRegister binds a pretty-printer (Rconv) for register
-// numbers to a given register number range.  Lo is inclusive,
+// numbers to a given register number range. Lo is inclusive,
 // hi exclusive (valid registers are lo through hi-1).
 func RegisterRegister(lo, hi int, Rconv func(int) string) {
 	regSpace = append(regSpace, regSet{lo, hi, Rconv})
@@ -576,27 +596,8 @@ func regListConv(list int) string {
 	return str
 }
 
-/*
-	Each architecture defines an instruction (A*) space as a unique
-	integer range.
-	Global opcodes like CALL start at 0; the architecture-specific ones
-	start at a distinct, big-maskable offsets.
-	Here is the list of architectures and the base of their opcode spaces.
-*/
-
-const (
-	ABase386 = (1 + iota) << 12
-	ABaseARM
-	ABaseAMD64
-	ABasePPC64
-	ABaseARM64
-	ABaseMIPS64
-	ABaseRISCV
-	AMask = 1<<12 - 1 // AND with this to use the opcode as an array index.
-)
-
 type opSet struct {
-	lo    int
+	lo    As
 	names []string
 }
 
@@ -605,17 +606,17 @@ var aSpace []opSet
 
 // RegisterOpcode binds a list of instruction names
 // to a given instruction number range.
-func RegisterOpcode(lo int, Anames []string) {
+func RegisterOpcode(lo As, Anames []string) {
 	aSpace = append(aSpace, opSet{lo, Anames})
 }
 
-func Aconv(a int) string {
-	if 0 <= a && a < len(Anames) {
+func Aconv(a As) string {
+	if 0 <= a && int(a) < len(Anames) {
 		return Anames[a]
 	}
 	for i := range aSpace {
 		as := &aSpace[i]
-		if as.lo <= a && a < as.lo+len(as.names) {
+		if as.lo <= a && int(a-as.lo) < len(as.names) {
 			return as.names[a-as.lo]
 		}
 	}

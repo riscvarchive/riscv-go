@@ -79,7 +79,7 @@ func Samereg(a *Node, b *Node) bool {
 	return true
 }
 
-func Gbranch(as int, t *Type, likely int) *obj.Prog {
+func Gbranch(as obj.As, t *Type, likely int) *obj.Prog {
 	p := Prog(as)
 	p.To.Type = obj.TYPE_BRANCH
 	p.To.Val = nil
@@ -97,7 +97,7 @@ func Gbranch(as int, t *Type, likely int) *obj.Prog {
 	return p
 }
 
-func Prog(as int) *obj.Prog {
+func Prog(as obj.As) *obj.Prog {
 	var p *obj.Prog
 
 	if as == obj.ADATA || as == obj.AGLOBL {
@@ -125,7 +125,7 @@ func Prog(as int) *obj.Prog {
 		}
 	}
 
-	p.As = int16(as)
+	p.As = as
 	p.Lineno = lineno
 	return p
 }
@@ -171,6 +171,18 @@ func dumpdata() {
 	*Pc = *dfirst
 	Pc = dpc
 	Clearp(Pc)
+}
+
+func flushdata() {
+	if dfirst == nil {
+		return
+	}
+	newplist()
+	*Pc = *dfirst
+	Pc = dpc
+	Clearp(Pc)
+	dfirst = nil
+	dpc = nil
 }
 
 // Fixup instructions after allocauto (formerly compactframe) has moved all autos around.
@@ -310,7 +322,7 @@ func Naddr(a *obj.Addr, n *Node) {
 		a := a // copy to let escape into Ctxt.Dconv
 		Debug['h'] = 1
 		Dump("naddr", n)
-		Fatalf("naddr: bad %v %v", Oconv(int(n.Op), 0), Ctxt.Dconv(a))
+		Fatalf("naddr: bad %v %v", Oconv(n.Op, 0), Ctxt.Dconv(a))
 
 	case OREGISTER:
 		a.Type = obj.TYPE_REG
@@ -411,7 +423,7 @@ func Naddr(a *obj.Addr, n *Node) {
 		if n.Left.Type.Etype != TSTRUCT || n.Left.Type.Type.Sym != n.Right.Sym {
 			Debug['h'] = 1
 			Dump("naddr", n)
-			Fatalf("naddr: bad %v %v", Oconv(int(n.Op), 0), Ctxt.Dconv(a))
+			Fatalf("naddr: bad %v %v", Oconv(n.Op, 0), Ctxt.Dconv(a))
 		}
 		Naddr(a, n.Left)
 
@@ -454,7 +466,7 @@ func Naddr(a *obj.Addr, n *Node) {
 		}
 		if a.Type != obj.TYPE_MEM {
 			a := a // copy to let escape into Ctxt.Dconv
-			Fatalf("naddr: OADDR %v (from %v)", Ctxt.Dconv(a), Oconv(int(n.Left.Op), 0))
+			Fatalf("naddr: OADDR %v (from %v)", Ctxt.Dconv(a), Oconv(n.Left.Op, 0))
 		}
 		a.Type = obj.TYPE_ADDR
 
@@ -518,6 +530,16 @@ func newplist() *obj.Plist {
 	return pl
 }
 
+// nodarg does something that depends on the value of
+// fp (this was previously completely undocumented).
+//
+// fp=1 corresponds to input args
+// fp=0 corresponds to output args
+// fp=-1 is a special case of output args for a
+// specific call from walk that previously (and
+// incorrectly) passed a 1; the behavior is exactly
+// the same as it is for 1, except that PARAMOUT is
+// generated instead of PARAM.
 func nodarg(t *Type, fp int) *Node {
 	var n *Node
 
@@ -526,8 +548,7 @@ func nodarg(t *Type, fp int) *Node {
 		n = Nod(ONAME, nil, nil)
 		n.Sym = Lookup(".args")
 		n.Type = t
-		var savet Iter
-		first := Structfirst(&savet, &t)
+		first := t.Field(0)
 		if first == nil {
 			Fatalf("nodarg: bad struct")
 		}
@@ -543,10 +564,8 @@ func nodarg(t *Type, fp int) *Node {
 		Fatalf("nodarg: not field %v", t)
 	}
 
-	if fp == 1 {
-		var n *Node
-		for l := Curfn.Func.Dcl; l != nil; l = l.Next {
-			n = l.N
+	if fp == 1 || fp == -1 {
+		for _, n := range Curfn.Func.Dcl {
 			if (n.Class == PPARAM || n.Class == PPARAMOUT) && !isblanksym(t.Sym) && n.Sym == t.Sym {
 				return n
 			}
@@ -581,6 +600,9 @@ fp:
 
 	case 1: // input arg
 		n.Class = PPARAM
+
+	case -1: // output arg from paramstoheap
+		n.Class = PPARAMOUT
 
 	case 2: // offset output arg
 		Fatalf("shouldn't be used")

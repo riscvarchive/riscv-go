@@ -221,7 +221,7 @@ loop1:
 	// MOVSD removal.
 	// We never use packed registers, so a MOVSD between registers
 	// can be replaced by MOVAPD, which moves the pair of float64s
-	// instead of just the lower one.  We only use the lower one, but
+	// instead of just the lower one. We only use the lower one, but
 	// the processor can do better if we do moves using both.
 	for r := g.Start; r != nil; r = r.Link {
 		p = r.Prog
@@ -284,7 +284,7 @@ func elimshortmov(g *gc.Graph) {
 			}
 
 			if regtyp(&p.From) || p.From.Type == obj.TYPE_CONST {
-				// move or artihmetic into partial register.
+				// move or arithmetic into partial register.
 				// from another register or constant can be movl.
 				// we don't switch to 32-bit arithmetic if it can
 				// change how the carry bit is set (and the carry bit is needed).
@@ -733,7 +733,7 @@ func copysub(a *obj.Addr, v *obj.Addr, s *obj.Addr, f int) int {
 	if regtyp(v) {
 		reg := int(v.Reg)
 		if (a.Type == obj.TYPE_MEM || a.Type == obj.TYPE_ADDR) && int(a.Reg) == reg {
-			if (s.Reg == x86.REG_BP) && a.Index != obj.TYPE_NONE {
+			if (s.Reg == x86.REG_BP) && a.Index != x86.REG_NONE {
 				return 1 /* can't use BP-base with index */
 			}
 			if f != 0 {
