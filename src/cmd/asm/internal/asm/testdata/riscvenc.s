@@ -36,10 +36,11 @@ start:
 	XOR	$1, T0, T1			// 13c31200
 	XOR	$1, T0				// 93c21200
 
-	// This jump can get printed as JMP 2 because it goes to the second
-	// instruction in the function.  (The first instruction is an invisible
-	// stack pointer adjustment.)
+	// These jumps can get printed as jumps to 2 because they go to the
+	// second instruction in the function.  (The first instruction is an
+	// invisible stack pointer adjustment.)
 	JMP	start		// JMP	2	// 6ff01ff8
+	JAL	T0, start	// JAL T0, 2	// eff2dff7
 
 	SCALL					// 73000000
 	RDCYCLE	T0				// f32200c0
