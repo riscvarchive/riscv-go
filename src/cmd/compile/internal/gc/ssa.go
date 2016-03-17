@@ -30,7 +30,7 @@ func initssa() *ssa.Config {
 }
 
 func shouldssa(fn *Node) bool {
-	if Thearch.Thestring != "amd64" {
+	if Thearch.Thestring != "amd64" && Thearch.Thestring != "riscv" {
 		return false
 	}
 	if !ssaEnabled {
