@@ -62,7 +62,7 @@ var optab = []Optab{
 
 	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
 
-	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
+	{AJAL, C_REGI, C_NONE, C_RELADDR, type_jal, 4},
 
 	{AADDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
 	{ASLLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
@@ -115,7 +115,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// There is no third operand for this operation.  Create one to
 		// make other code have to deal with fewer special cases.
 		p.From3 = &obj.Addr{}
-		if p.From.Class == C_REGI || p.From.Class == C_IMMI {
+		if p.As != AJAL && (p.From.Class == C_REGI || p.From.Class == C_IMMI) {
 			p.From3.Reg = p.To.Reg
 			p.From3.Class = C_REGI
 		} else {
@@ -145,7 +145,8 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AXORI
 		}
 	}
-	if p.As == AMOV {
+	switch p.As {
+	case AMOV:
 		switch p.From.Class {
 		case C_REGI:
 			p.As = AADDI
@@ -161,6 +162,12 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		default:
 			ctxt.Diag("progedit: unsupported MOV")
 		}
+	case obj.AJMP:
+		// Convert "JMP label" into "JAL ZERO, label".
+		p.As = AJAL
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_ZERO
+		aclass(ctxt, &p.From)
 	}
 }
 
@@ -353,15 +360,9 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		encoded := encode(o.as)
 		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_jal:
-		var encoded *inst
-		var rd int16
-		switch o.as {
-		case obj.AJMP:
-			encoded = encode(AJAL)
-			rd = REG_ZERO
-		default:
-			ctxt.Diag("unknown instruction %d", o.as)
-		}
+		// Compute the jump offset.  We couldn't do this in progedit,
+		// because the offset is relative and we didn't know what the
+		// code would look like laid out.
 		var offset int64
 		if p.Pcond == nil {
 			offset = 0
@@ -372,7 +373,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		if offset%4 != 0 {
 			ctxt.Diag("asmout: misaligned jump offset %d", offset)
 		}
-		result = instr_uj(ctxt, offset, rd, encoded.opcode)
+		result = instr_uj(ctxt, offset, p.From.Reg, encode(o.as).opcode)
 	case type_system:
 		encoded := encode(o.as)
 		switch p.To.Class {
