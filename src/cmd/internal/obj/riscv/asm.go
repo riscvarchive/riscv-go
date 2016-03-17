@@ -62,43 +62,27 @@ var optab = []Optab{
 
 	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
 
-	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AADD, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{AADD, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AADD, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-
-	{ASUB, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASUB, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-
-	{ASLL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASLL, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{ASLL, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASLL, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-	{ASRL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASRL, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{ASRL, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASRL, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-	{ASRA, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASRA, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{ASRA, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASRA, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-
-	{AAND, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AAND, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{AAND, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AAND, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-	{AOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AOR, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{AOR, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AOR, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-	{AXOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AXOR, C_REGI, C_NONE, C_REGI, type_regi2, 4},
-	{AXOR, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AXOR, C_IMMI, C_NONE, C_REGI, type_regi_immi, 4},
-
 	{obj.AJMP, C_NONE, C_NONE, C_RELADDR, type_jal, 4},
 
+	{AADDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASLLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AXORI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASRLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{ASRAI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AORI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+	{AANDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
+
+	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASUB, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASLL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AXOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASRL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{ASRA, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+	{AAND, C_REGI, C_REGI, C_REGI, type_regi2, 4},
+
 	{ASCALL, C_NONE, C_NONE, C_NONE, type_system, 4},
+
 	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
 	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
@@ -128,27 +112,49 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	// Populate the Class field in the operands.
 	aclass(ctxt, &p.From)
 	if p.From3 == nil {
-		// There is no third operand for this operation.  Create an
-		// empty one to make other code have to deal with fewer special
-		// cases.
+		// There is no third operand for this operation.  Create one to
+		// make other code have to deal with fewer special cases.
 		p.From3 = &obj.Addr{}
-		p.From3.Class = C_NONE
+		if p.From.Class == C_REGI || p.From.Class == C_IMMI {
+			p.From3.Reg = p.To.Reg
+			p.From3.Class = C_REGI
+		} else {
+			p.From3.Class = C_NONE
+		}
 	} else {
 		aclass(ctxt, p.From3)
 	}
 	aclass(ctxt, &p.To)
 
 	// Rewrite pseudoinstructions.
+	if p.From.Class == C_IMMI {
+		switch p.As {
+		case AADD:
+			p.As = AADDI
+		case AAND:
+			p.As = AANDI
+		case AOR:
+			p.As = AORI
+		case ASLL:
+			p.As = ASLLI
+		case ASRA:
+			p.As = ASRAI
+		case ASRL:
+			p.As = ASRLI
+		case AXOR:
+			p.As = AXORI
+		}
+	}
 	if p.As == AMOV {
 		switch p.From.Class {
 		case C_REGI:
-			p.As = AADD
+			p.As = AADDI
 			*p.From3 = p.From
 			p.From.Type = obj.TYPE_CONST
 			p.From.Offset = 0
 			aclass(ctxt, &p.From)
 		case C_IMMI:
-			p.As = AADD
+			p.As = AADDI
 			p.From3.Type = obj.TYPE_REG
 			p.From3.Reg = REG_ZERO
 			aclass(ctxt, p.From3)
@@ -220,7 +226,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			// TODO(prattmic): handle calls to morestack.
 			q = p
 			q = obj.Appendp(ctxt, q)
-			q.As = AADD
+			q.As = AADDI
 			q.From.Type = obj.TYPE_CONST
 			q.From.Offset = -stackSize
 			q.From3 = &obj.Addr{}
@@ -233,7 +239,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			// Function exit. Stack teardown and exit.
 			q = p
 			q = obj.Appendp(ctxt, q)
-			q.As = AADD
+			q.As = AADDI
 			q.From.Type = obj.TYPE_CONST
 			q.From.Offset = stackSize
 			q.From3 = &obj.Addr{}
@@ -340,34 +346,10 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	case type_pseudo:
 		ctxt.Diag("asmout: found pseudoinstruction %v", o.as)
 	case type_regi_immi:
-		var encoded *inst
-		switch o.as {
-		case AADD:
-			encoded = encode(AADDI)
-		case AAND:
-			encoded = encode(AANDI)
-		case AOR:
-			encoded = encode(AORI)
-		case ASLL:
-			encoded = encode(ASLLI)
-		case ASRA:
-			encoded = encode(ASRAI)
-		case ASRL:
-			encoded = encode(ASRLI)
-		case AXOR:
-			encoded = encode(AXORI)
-		default:
-			ctxt.Diag("unknown instruction %d", o.as)
-		}
-		if p.From3.Class == C_NONE {
-			p.From3.Reg = p.To.Reg
-		}
+		encoded := encode(o.as)
 		// TODO(bbaren): Do something reasonable if immediate is too large.
 		result = instr_i(ctxt, p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
-		if p.From3.Class == C_NONE {
-			p.From3.Reg = p.To.Reg
-		}
 		encoded := encode(o.as)
 		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_jal:
