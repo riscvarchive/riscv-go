@@ -25,7 +25,7 @@ import (
 //
 //	1. direct call
 //	2. through a reachable interface type
-//	3. reflect.Value.Call
+//	3. reflect.Value.Call, .Method, or reflect.Method.Func
 //
 // The first case is handled by the flood fill, a directly called method
 // is marked as reachable.
@@ -35,9 +35,12 @@ import (
 // against the interface method signatures, if it matches it is marked
 // as reachable. This is extremely conservative, but easy and correct.
 //
-// The third case is handled by looking to see if reflect.Value.Call is
-// ever marked reachable. If it is, all bets are off and all exported
-// methods of reachable types are marked reachable.
+// The third case is handled by looking to see if any of:
+//	- reflect.Value.Call is reachable
+//	- reflect.Value.Method is reachable
+// 	- reflect.Type.Method or MethodByName is called.
+// If any of these happen, all bets are off and all exported methods
+// of reachable types are marked reachable.
 //
 // Any unreached text symbols are removed from ctxt.Textp.
 func deadcode(ctxt *Link) {
@@ -56,14 +59,23 @@ func deadcode(ctxt *Link) {
 	d.flood()
 
 	callSym := Linkrlookup(ctxt, "reflect.Value.Call", 0)
-	callSymSeen := false
+	methSym := Linkrlookup(ctxt, "reflect.Value.Method", 0)
+	reflectSeen := false
+
+	if DynlinkingGo() {
+		// Exported methods may satisfy interfaces we don't know
+		// about yet when dynamically linking.
+		reflectSeen = true
+	}
 
 	for {
-		if callSym != nil && callSym.Attr.Reachable() {
-			// Methods are called via reflection. Give up on
-			// static analysis, mark all exported methods of
-			// all reachable types as reachable.
-			callSymSeen = true
+		if !reflectSeen {
+			if d.reflectMethod || (callSym != nil && callSym.Attr.Reachable()) || (methSym != nil && methSym.Attr.Reachable()) {
+				// Methods might be called via reflection. Give up on
+				// static analysis, mark all exported methods of
+				// all reachable types as reachable.
+				reflectSeen = true
+			}
 		}
 
 		// Mark all methods that could satisfy a discovered
@@ -72,8 +84,19 @@ func deadcode(ctxt *Link) {
 		// in the last pass.
 		var rem []methodref
 		for _, m := range d.markableMethods {
-			if (callSymSeen && m.isExported()) || d.ifaceMethod[m.m] {
+			if (reflectSeen && m.isExported()) || d.ifaceMethod[m.m] {
 				d.markMethod(m)
+			} else if reflectSeen {
+				// This ensures the Type and Func fields of
+				// reflect.Method are filled as they were in
+				// Go 1.
+				//
+				// An argument could be made for changing this
+				// and setting those fields to nil. Doing so
+				// would reduce the binary size of typical
+				// programs like cmd/go by ~2%.
+				d.mark(m.mtyp(), m.src)
+				rem = append(rem, m)
 			} else {
 				rem = append(rem, m)
 			}
@@ -89,8 +112,9 @@ func deadcode(ctxt *Link) {
 
 	// Remove all remaining unreached R_METHOD relocations.
 	for _, m := range d.markableMethods {
-		d.cleanupReloc(m.r0)
-		d.cleanupReloc(m.r1)
+		for _, r := range m.r {
+			d.cleanupReloc(r)
+		}
 	}
 
 	if Buildmode != BuildmodeShared {
@@ -147,14 +171,17 @@ var markextra = []string{
 }
 
 // methodref holds the relocations from a receiver type symbol to its
-// method. There are two relocations, one for the method type without
-// receiver, one with receiver
+// method. There are three relocations, one for each of the fields in
+// the reflect.method struct: mtyp, ifn, and tfn.
 type methodref struct {
 	m   methodsig
-	src *LSym // receiver type symbol
-	r0  *Reloc
-	r1  *Reloc
+	src *LSym     // receiver type symbol
+	r   [3]*Reloc // R_METHOD relocations to fields of runtime.method
 }
+
+func (m methodref) mtyp() *LSym { return m.r[0].Sym }
+func (m methodref) ifn() *LSym  { return m.r[1].Sym }
+func (m methodref) tfn() *LSym  { return m.r[2].Sym }
 
 func (m methodref) isExported() bool {
 	for _, r := range m.m {
@@ -169,6 +196,7 @@ type deadcodepass struct {
 	markQueue       []*LSym            // symbols to flood fill in next pass
 	ifaceMethod     map[methodsig]bool // methods declared in reached interfaces
 	markableMethods []methodref        // methods of reached types
+	reflectMethod   bool
 }
 
 func (d *deadcodepass) cleanupReloc(r *Reloc) {
@@ -188,17 +216,20 @@ func (d *deadcodepass) mark(s, parent *LSym) {
 	if s == nil || s.Attr.Reachable() {
 		return
 	}
+	if s.Attr.ReflectMethod() {
+		d.reflectMethod = true
+	}
 	s.Attr |= AttrReachable
 	s.Reachparent = parent
 	d.markQueue = append(d.markQueue, s)
 }
 
-// markMethod marks a method as reachable and preps its R_METHOD relocations.
+// markMethod marks a method as reachable.
 func (d *deadcodepass) markMethod(m methodref) {
-	d.mark(m.r0.Sym, m.src)
-	d.mark(m.r1.Sym, m.src)
-	m.r0.Type = obj.R_ADDR
-	m.r1.Type = obj.R_ADDR
+	for _, r := range m.r {
+		d.mark(r.Sym, m.src)
+		r.Type = obj.R_ADDR
+	}
 }
 
 // init marks all initial symbols as reachable.
@@ -268,6 +299,7 @@ func (d *deadcodepass) flood() {
 			}
 		}
 
+		mpos := 0 // 0-3, the R_METHOD relocs of runtime.uncommontype
 		var methods []methodref
 		for i := 0; i < len(s.R); i++ {
 			r := &s.R[i]
@@ -280,14 +312,17 @@ func (d *deadcodepass) flood() {
 			}
 			// Collect rtype pointers to methods for
 			// later processing in deadcode.
-			if len(methods) > 0 {
-				mref := &methods[len(methods)-1]
-				if mref.r1 == nil {
-					mref.r1 = r
-					continue
-				}
+			if mpos == 0 {
+				m := methodref{src: s}
+				m.r[0] = r
+				methods = append(methods, m)
+			} else {
+				methods[len(methods)-1].r[mpos] = r
 			}
-			methods = append(methods, methodref{src: s, r0: r})
+			mpos++
+			if mpos == len(methodref{}.r) {
+				mpos = 0
+			}
 		}
 		if len(methods) > 0 {
 			// Decode runtime type information for type methods
@@ -300,8 +335,8 @@ func (d *deadcodepass) flood() {
 			for i, m := range methodsigs {
 				name := string(m)
 				name = name[:strings.Index(name, "(")]
-				if !strings.HasSuffix(methods[i].r0.Sym.Name, name) {
-					panic(fmt.Sprintf("%q relocation for %q does not match method %q", s.Name, methods[i].r0.Sym.Name, name))
+				if !strings.HasSuffix(methods[i].ifn().Name, name) {
+					panic(fmt.Sprintf("%q relocation for %q does not match method %q", s.Name, methods[i].ifn().Name, name))
 				}
 				methods[i].m = m
 			}

@@ -198,7 +198,7 @@ const (
 )
 
 // TODO(rsc): Describe prog.
-// TODO(rsc): Describe TEXT/GLOBL flag in from3, DATA width in from3.
+// TODO(rsc): Describe TEXT/GLOBL flag in from3
 type Prog struct {
 	Ctxt   *Link
 	Link   *Prog
@@ -266,7 +266,6 @@ const (
 	AXXX As = iota
 	ACALL
 	ACHECKNIL
-	ADATA
 	ADUFFCOPY
 	ADUFFZERO
 	AEND
@@ -316,22 +315,30 @@ type LSym struct {
 	Leaf      uint8
 	Seenglobl uint8
 	Onlist    uint8
+
+	// ReflectMethod means the function may call reflect.Type.Method or
+	// reflect.Type.MethodByName. Matching is imprecise (as reflect.Type
+	// can be used through a custom interface), so ReflectMethod may be
+	// set in some cases when the reflect package is not called.
+	//
+	// Used by the linker to determine what methods can be pruned.
+	ReflectMethod bool
+
 	// Local means make the symbol local even when compiling Go code to reference Go
 	// symbols in other shared libraries, as in this mode symbols are global by
 	// default. "local" here means in the sense of the dynamic linker, i.e. not
 	// visible outside of the module (shared library or executable) that contains its
 	// definition. (When not compiling to support Go shared libraries, all symbols are
 	// local in this sense unless there is a cgo_export_* directive).
-	Local  bool
+	Local bool
+
+	RefIdx int // Index of this symbol in the symbol reference list.
 	Args   int32
 	Locals int32
-	Value  int64
 	Size   int64
-	Next   *LSym
 	Gotype *LSym
 	Autom  *Auto
 	Text   *Prog
-	Etext  *Prog
 	Pcln   *Pcln
 	P      []byte
 	R      []Reloc
@@ -594,61 +601,58 @@ const (
 // Link holds the context for writing object code from a compiler
 // to be linker input or for reading that input into the linker.
 type Link struct {
-	Goarm              int32
-	Headtype           int
-	Arch               *LinkArch
-	Debugasm           int32
-	Debugvlog          int32
-	Debugdivmod        int32
-	Debugpcln          int32
-	Flag_shared        int32
-	Flag_dynlink       bool
-	Flag_optimize      bool
-	Bso                *Biobuf
-	Pathname           string
-	Windows            int32
-	Goroot             string
-	Goroot_final       string
-	Enforce_data_order int32
-	Hash               map[SymVer]*LSym
-	LineHist           LineHist
-	Imports            []string
-	Plist              *Plist
-	Plast              *Plist
-	Sym_div            *LSym
-	Sym_divu           *LSym
-	Sym_mod            *LSym
-	Sym_modu           *LSym
-	Plan9privates      *LSym
-	Curp               *Prog
-	Printp             *Prog
-	Blitrl             *Prog
-	Elitrl             *Prog
-	Rexflag            int
-	Vexflag            int
-	Rep                int
-	Repn               int
-	Lock               int
-	Asmode             int
-	Andptr             []byte
-	And                [100]uint8
-	Instoffset         int64
-	Autosize           int32
-	Armsize            int32
-	Pc                 int64
-	DiagFunc           func(string, ...interface{})
-	Mode               int
-	Cursym             *LSym
-	Version            int
-	Textp              *LSym
-	Etextp             *LSym
-	Errors             int
+	Goarm         int32
+	Headtype      int
+	Arch          *LinkArch
+	Debugasm      int32
+	Debugvlog     int32
+	Debugdivmod   int32
+	Debugpcln     int32
+	Flag_shared   int32
+	Flag_dynlink  bool
+	Flag_optimize bool
+	Bso           *Biobuf
+	Pathname      string
+	Windows       int32
+	Goroot        string
+	Goroot_final  string
+	Hash          map[SymVer]*LSym
+	LineHist      LineHist
+	Imports       []string
+	Plist         *Plist
+	Plast         *Plist
+	Sym_div       *LSym
+	Sym_divu      *LSym
+	Sym_mod       *LSym
+	Sym_modu      *LSym
+	Plan9privates *LSym
+	Curp          *Prog
+	Printp        *Prog
+	Blitrl        *Prog
+	Elitrl        *Prog
+	Rexflag       int
+	Vexflag       int
+	Rep           int
+	Repn          int
+	Lock          int
+	Asmode        int
+	AsmBuf        AsmBuf // instruction buffer for x86
+	Instoffset    int64
+	Autosize      int32
+	Armsize       int32
+	Pc            int64
+	DiagFunc      func(string, ...interface{})
+	Mode          int
+	Cursym        *LSym
+	Version       int
+	Textp         *LSym
+	Etextp        *LSym
+	Errors        int
+	RefsWritten   int // Number of symbol references already written to object file.
 
 	// state for writing objects
-	Text  *LSym
-	Data  *LSym
-	Etext *LSym
-	Edata *LSym
+	Text []*LSym
+	Data []*LSym
 
 	// Cache of Progs
 	allocIdx int
@@ -733,3 +737,96 @@ func Linknewplist(ctxt *Link) *Plist {
 	ctxt.Plast = pl
 	return pl
 }
+
+// AsmBuf is a simple buffer to assemble variable-length x86 instructions into.
+type AsmBuf struct {
+	buf [100]byte
+	off int
+}
+
+// Put1 appends one byte to the end of the buffer.
+func (a *AsmBuf) Put1(x byte) {
+	a.buf[a.off] = x
+	a.off++
+}
+
+// Put2 appends two bytes to the end of the buffer.
+func (a *AsmBuf) Put2(x, y byte) {
+	a.buf[a.off+0] = x
+	a.buf[a.off+1] = y
+	a.off += 2
+}
+
+// Put3 appends three bytes to the end of the buffer.
+func (a *AsmBuf) Put3(x, y, z byte) {
+	a.buf[a.off+0] = x
+	a.buf[a.off+1] = y
+	a.buf[a.off+2] = z
+	a.off += 3
+}
+
+// Put4 appends four bytes to the end of the buffer.
+func (a *AsmBuf) Put4(x, y, z, w byte) {
+	a.buf[a.off+0] = x
+	a.buf[a.off+1] = y
+	a.buf[a.off+2] = z
+	a.buf[a.off+3] = w
+	a.off += 4
+}
+
+// PutInt16 writes v into the buffer using little-endian encoding.
+func (a *AsmBuf) PutInt16(v int16) {
+	a.buf[a.off+0] = byte(v)
+	a.buf[a.off+1] = byte(v >> 8)
+	a.off += 2
+}
+
+// PutInt32 writes v into the buffer using little-endian encoding.
+func (a *AsmBuf) PutInt32(v int32) {
+	a.buf[a.off+0] = byte(v)
+	a.buf[a.off+1] = byte(v >> 8)
+	a.buf[a.off+2] = byte(v >> 16)
+	a.buf[a.off+3] = byte(v >> 24)
+	a.off += 4
+}
+
+// PutInt64 writes v into the buffer using little-endian encoding.
+func (a *AsmBuf) PutInt64(v int64) {
+	a.buf[a.off+0] = byte(v)
+	a.buf[a.off+1] = byte(v >> 8)
+	a.buf[a.off+2] = byte(v >> 16)
+	a.buf[a.off+3] = byte(v >> 24)
+	a.buf[a.off+4] = byte(v >> 32)
+	a.buf[a.off+5] = byte(v >> 40)
+	a.buf[a.off+6] = byte(v >> 48)
+	a.buf[a.off+7] = byte(v >> 56)
+	a.off += 8
+}
+
+// Put copies b into the buffer.
+func (a *AsmBuf) Put(b []byte) {
+	copy(a.buf[a.off:], b)
+	a.off += len(b)
+}
+
+// Insert inserts b at offset i.
+func (a *AsmBuf) Insert(i int, b byte) {
+	a.off++
+	copy(a.buf[i+1:a.off], a.buf[i:a.off-1])
+	a.buf[i] = b
+}
+
+// Last returns the byte at the end of the buffer.
+func (a *AsmBuf) Last() byte { return a.buf[a.off-1] }
+
+// Len returns the length of the buffer.
+func (a *AsmBuf) Len() int { return a.off }
+
+// Bytes returns the contents of the buffer.
+func (a *AsmBuf) Bytes() []byte { return a.buf[:a.off] }
+
+// Reset empties the buffer.
+func (a *AsmBuf) Reset() { a.off = 0 }
+
+// Peek returns the byte at offset i.
+func (a *AsmBuf) Peek(i int) byte { return a.buf[i] }

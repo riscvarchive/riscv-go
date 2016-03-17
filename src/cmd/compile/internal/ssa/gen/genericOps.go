@@ -259,8 +259,8 @@ var genericOps = []opData{
 	{name: "Const16", aux: "Int16"},      // value is low 16 bits of auxint
 	{name: "Const32", aux: "Int32"},      // value is low 32 bits of auxint
 	{name: "Const64", aux: "Int64"},      // value is auxint
-	{name: "Const32F", aux: "Float"},     // value is math.Float64frombits(uint64(auxint))
-	{name: "Const64F", aux: "Float"},     // value is math.Float64frombits(uint64(auxint))
+	{name: "Const32F", aux: "Float32"},   // value is math.Float64frombits(uint64(auxint)) and is exactly prepresentable as float 32
+	{name: "Const64F", aux: "Float64"},   // value is math.Float64frombits(uint64(auxint))
 	{name: "ConstInterface"},             // nil interface
 	{name: "ConstSlice"},                 // nil slice
 
@@ -401,6 +401,7 @@ var genericBlocks = []blockData{
 	{name: "Plain"},  // a single successor
 	{name: "If"},     // 2 successors, if control goto Succs[0] else goto Succs[1]
 	{name: "Call"},   // 1 successor, control is call op (of memory type)
+	{name: "Defer"},  // 2 successors, Succs[0]=defer queued, Succs[1]=defer recovered. control is call op (of memory type)
 	{name: "Check"},  // 1 successor, control is nilcheck op (of void type)
 	{name: "Ret"},    // no successors, control value is memory result
 	{name: "RetJmp"}, // no successors, jumps to b.Aux.(*gc.Sym)
@@ -412,5 +413,9 @@ var genericBlocks = []blockData{
 }
 
 func init() {
-	archs = append(archs, arch{"generic", genericOps, genericBlocks, nil})
+	archs = append(archs, arch{
+		name:   "generic",
+		ops:    genericOps,
+		blocks: genericBlocks,
+	})
 }

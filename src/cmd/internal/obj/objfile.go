@@ -19,6 +19,8 @@
 //	- byte 1 - version number
 //	- sequence of strings giving dependencies (imported packages)
 //	- empty string (marks end of sequence)
+//	- sequence of sybol references used by the defined symbols
+//	- byte 0xff (marks end of sequence)
 //	- sequence of defined symbols
 //	- byte 0xff (marks end of sequence)
 //	- magic footer: "\xff\xffgo13ld"
@@ -30,18 +32,21 @@
 // followed by that many bytes.
 //
 // A symbol reference is a string name followed by a version.
-// An empty name corresponds to a nil LSym* pointer.
+//
+// A symbol points to other symbols using an index into the symbol
+// reference sequence. Index 0 corresponds to a nil LSym* pointer.
+// In the symbol layout described below "symref index" stands for this
+// index.
 //
 // Each symbol is laid out as the following fields (taken from LSym*):
 //
 //	- byte 0xfe (sanity check for synchronization)
 //	- type [int]
-//	- name [string]
-//	- version [int]
+//	- name & version [symref index]
 //	- flags [int]
 //		1 dupok
 //	- size [int]
-//	- gotype [symbol reference]
+//	- gotype [symref index]
 //	- p [data block]
 //	- nr [int]
 //	- r [nr relocations, sorted by off]
@@ -52,8 +57,9 @@
 //	- locals [int]
 //	- nosplit [int]
 //	- flags [int]
-//		1 leaf
-//		2 C function
+//		1<<0 leaf
+//		1<<1 C function
+//		1<<2 function may call reflect.Type.Method
 //	- nlocal [int]
 //	- local [nlocal automatics]
 //	- pcln [pcln table]
@@ -65,15 +71,15 @@
 //	- type [int]
 //	- add [int]
 //	- xadd [int]
-//	- sym [symbol reference]
-//	- xsym [symbol reference]
+//	- sym [symref index]
+//	- xsym [symref index]
 //
 // Each local has the encoding:
 //
-//	- asym [symbol reference]
+//	- asym [symref index]
 //	- offset [int]
 //	- type [int]
-//	- gotype [symbol reference]
+//	- gotype [symref index]
 //
 // The pcln table has the encoding:
 //
@@ -83,10 +89,10 @@
 //	- npcdata [int]
 //	- pcdata [npcdata data blocks]
 //	- nfuncdata [int]
-//	- funcdata [nfuncdata symbol references]
+//	- funcdata [nfuncdata symref index]
 //	- funcdatasym [nfuncdata ints]
 //	- nfile [int]
-//	- file [nfile symbol references]
+//	- file [nfile symref index]
 //
 // The file layout and meaning of type integers are architecture-independent.
 //
@@ -95,8 +101,6 @@
 //	- The actual symbol memory images are interlaced with the symbol
 //	  metadata. They should be separated, to reduce the I/O required to
 //	  load just the metadata.
-//	- The symbol references should be shortened, either with a symbol
-//	  table or by using a simple backward index to an earlier mentioned symbol.
 
 package obj
 
@@ -104,6 +108,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -122,32 +127,27 @@ func FlushplistNoFree(ctxt *Link) {
 	flushplist(ctxt, false)
 }
 func flushplist(ctxt *Link, freeProgs bool) {
-	var flag int
-	var s *LSym
-	var p *Prog
-	var plink *Prog
-	var a *Auto
-
 	// Build list of symbols, and assign instructions to lists.
 	// Ignore ctxt->plist boundaries. There are no guarantees there,
 	// and the assemblers just use one big list.
 	var curtext *LSym
-	var text *LSym
-	var etext *LSym
+	var etext *Prog
+	var text []*LSym
 
 	for pl := ctxt.Plist; pl != nil; pl = pl.Link {
-		for p = pl.Firstpc; p != nil; p = plink {
+		var plink *Prog
+		for p := pl.Firstpc; p != nil; p = plink {
 			if ctxt.Debugasm != 0 && ctxt.Debugvlog != 0 {
 				fmt.Printf("obj: %v\n", p)
 			}
 			plink = p.Link
 			p.Link = nil
 
-			if p.As == AEND {
+			switch p.As {
+			case AEND:
 				continue
-			}
 
-			if p.As == ATYPE {
+			case ATYPE:
 				// Assume each TYPE instruction describes
 				// a different local variable or parameter,
 				// so no dedup.
@@ -162,7 +162,7 @@ func flushplist(ctxt *Link, freeProgs bool) {
 				if curtext == nil {
 					continue
 				}
-				a = new(Auto)
+				a := new(Auto)
 				a.Asym = p.From.Sym
 				a.Aoffset = int32(p.From.Offset)
 				a.Name = int16(p.From.Name)
@@ -170,10 +170,9 @@ func flushplist(ctxt *Link, freeProgs bool) {
 				a.Link = curtext.Autom
 				curtext.Autom = a
 				continue
-			}
 
-			if p.As == AGLOBL {
-				s = p.From.Sym
+			case AGLOBL:
+				s := p.From.Sym
 				tmp6 := s.Seenglobl
 				s.Seenglobl++
 				if tmp6 != 0 {
@@ -183,17 +182,12 @@ func flushplist(ctxt *Link, freeProgs bool) {
 					log.Fatalf("symbol %s listed multiple times", s.Name)
 				}
 				s.Onlist = 1
-				if ctxt.Data == nil {
-					ctxt.Data = s
-				} else {
-					ctxt.Edata.Next = s
-				}
-				s.Next = nil
+				ctxt.Data = append(ctxt.Data, s)
 				s.Size = p.To.Offset
 				if s.Type == 0 || s.Type == SXREF {
 					s.Type = SBSS
 				}
-				flag = int(p.From3.Offset)
+				flag := int(p.From3.Offset)
 				if flag&DUPOK != 0 {
 					s.Dupok = 1
 				}
@@ -204,17 +198,10 @@ func flushplist(ctxt *Link, freeProgs bool) {
 				} else if flag&TLSBSS != 0 {
 					s.Type = STLSBSS
 				}
-				ctxt.Edata = s
 				continue
-			}
 
-			if p.As == ADATA {
-				savedata(ctxt, p.From.Sym, p, "<input>")
-				continue
-			}
-
-			if p.As == ATEXT {
-				s = p.From.Sym
+			case ATEXT:
+				s := p.From.Sym
 				if s == nil {
 					// func _() { }
 					curtext = nil
@@ -229,28 +216,24 @@ func flushplist(ctxt *Link, freeProgs bool) {
 					log.Fatalf("symbol %s listed multiple times", s.Name)
 				}
 				s.Onlist = 1
-				if text == nil {
-					text = s
-				} else {
-					etext.Next = s
-				}
-				etext = s
-				flag = int(p.From3Offset())
+				text = append(text, s)
+				flag := int(p.From3Offset())
 				if flag&DUPOK != 0 {
 					s.Dupok = 1
 				}
 				if flag&NOSPLIT != 0 {
 					s.Nosplit = 1
 				}
-				s.Next = nil
+				if flag&REFLECTMETHOD != 0 {
+					s.ReflectMethod = true
+				}
 				s.Type = STEXT
 				s.Text = p
-				s.Etext = p
+				etext = p
 				curtext = s
 				continue
-			}
 
-			if p.As == AFUNCDATA {
+			case AFUNCDATA:
 				// Rewrite reference to go_args_stackmap(SB) to the Go-provided declaration information.
 				if curtext == nil { // func _() {}
 					continue
@@ -261,32 +244,33 @@ func flushplist(ctxt *Link, freeProgs bool) {
 					}
 					p.To.Sym = Linklookup(ctxt, fmt.Sprintf("%s.args_stackmap", curtext.Name), int(curtext.Version))
 				}
+
 			}
 
 			if curtext == nil {
+				etext = nil
 				continue
 			}
-			s = curtext
-			s.Etext.Link = p
-			s.Etext = p
+			etext.Link = p
+			etext = p
 		}
 	}
 
 	// Add reference to Go arguments for C or assembly functions without them.
-	var found int
-	for s := text; s != nil; s = s.Next {
+	for _, s := range text {
 		if !strings.HasPrefix(s.Name, "\"\".") {
 			continue
 		}
-		found = 0
+		found := false
+		var p *Prog
 		for p = s.Text; p != nil; p = p.Link {
 			if p.As == AFUNCDATA && p.From.Type == TYPE_CONST && p.From.Offset == FUNCDATA_ArgsPointerMaps {
-				found = 1
+				found = true
 				break
 			}
 		}
 
-		if found == 0 {
+		if !found {
 			p = Appendp(ctxt, s.Text)
 			p.As = AFUNCDATA
 			p.From.Type = TYPE_CONST
@@ -298,7 +282,7 @@ func flushplist(ctxt *Link, freeProgs bool) {
 	}
 
 	// Turn functions into machine code images.
-	for s := text; s != nil; s = s.Next {
+	for _, s := range text {
 		mkfwd(s)
 		linkpatch(ctxt, s)
 		if ctxt.Flag_optimize {
@@ -310,19 +294,11 @@ func flushplist(ctxt *Link, freeProgs bool) {
 		linkpcln(ctxt, s)
 		if freeProgs {
 			s.Text = nil
-			s.Etext = nil
 		}
 	}
 
 	// Add to running list in ctxt.
-	if text != nil {
-		if ctxt.Text == nil {
-			ctxt.Text = text
-		} else {
-			ctxt.Etext.Next = text
-		}
-		ctxt.Etext = etext
-	}
+	ctxt.Text = append(ctxt.Text, text...)
 	ctxt.Plist = nil
 	ctxt.Plast = nil
 	ctxt.Curp = nil
@@ -345,11 +321,20 @@ func Writeobjfile(ctxt *Link, b *Biobuf) {
 	}
 	wrstring(b, "")
 
+	// Emit symbol references.
+	for _, s := range ctxt.Text {
+		writerefs(ctxt, b, s)
+	}
+	for _, s := range ctxt.Data {
+		writerefs(ctxt, b, s)
+	}
+	Bputc(b, 0xff)
+
 	// Emit symbols.
-	for s := ctxt.Text; s != nil; s = s.Next {
+	for _, s := range ctxt.Text {
 		writesym(ctxt, b, s)
 	}
-	for s := ctxt.Data; s != nil; s = s.Next {
+	for _, s := range ctxt.Data {
 		writesym(ctxt, b, s)
 	}
 
@@ -358,6 +343,43 @@ func Writeobjfile(ctxt *Link, b *Biobuf) {
 
 	Bputc(b, 0xff)
 	fmt.Fprintf(b, "go13ld")
+}
+
+func wrref(ctxt *Link, b *Biobuf, s *LSym, isPath bool) {
+	if s == nil || s.RefIdx != 0 {
+		return
+	}
+	Bputc(b, 0xfe)
+	if isPath {
+		wrstring(b, filepath.ToSlash(s.Name))
+	} else {
+		wrstring(b, s.Name)
+	}
+	wrint(b, int64(s.Version))
+	ctxt.RefsWritten++
+	s.RefIdx = ctxt.RefsWritten
+}
+
+func writerefs(ctxt *Link, b *Biobuf, s *LSym) {
+	wrref(ctxt, b, s, false)
+	wrref(ctxt, b, s.Gotype, false)
+	for i := range s.R {
+		wrref(ctxt, b, s.R[i].Sym, false)
+	}
+
+	if s.Type == STEXT {
+		for a := s.Autom; a != nil; a = a.Link {
+			wrref(ctxt, b, a.Asym, false)
+			wrref(ctxt, b, a.Gotype, false)
+		}
+		pc := s.Pcln
+		for _, d := range pc.Funcdata {
+			wrref(ctxt, b, d, false)
+		}
+		for _, f := range pc.File {
+			wrref(ctxt, b, f, true)
+		}
+	}
 }
 
 func writesym(ctxt *Link, b *Biobuf, s *LSym) {
@@ -378,7 +400,7 @@ func writesym(ctxt *Link, b *Biobuf, s *LSym) {
 		if s.Nosplit != 0 {
 			fmt.Fprintf(ctxt.Bso, "nosplit ")
 		}
-		fmt.Fprintf(ctxt.Bso, "size=%d value=%d", int64(s.Size), int64(s.Value))
+		fmt.Fprintf(ctxt.Bso, "size=%d", s.Size)
 		if s.Type == STEXT {
 			fmt.Fprintf(ctxt.Bso, " args=%#x locals=%#x", uint64(s.Args), uint64(s.Locals))
 			if s.Leaf != 0 {
@@ -414,11 +436,9 @@ func writesym(ctxt *Link, b *Biobuf, s *LSym) {
 			i += 16
 		}
 
-		var r *Reloc
-		var name string
-		for i := 0; i < len(s.R); i++ {
-			r = &s.R[i]
-			name = ""
+		sort.Sort(relocByOff(s.R)) // generate stable output
+		for _, r := range s.R {
+			name := ""
 			if r.Sym != nil {
 				name = r.Sym.Name
 			}
@@ -432,8 +452,7 @@ func writesym(ctxt *Link, b *Biobuf, s *LSym) {
 
 	Bputc(b, 0xfe)
 	wrint(b, int64(s.Type))
-	wrstring(b, s.Name)
-	wrint(b, int64(s.Version))
+	wrsym(b, s)
 	flags := int64(s.Dupok)
 	if s.Local {
 		flags |= 2
@@ -460,7 +479,11 @@ func writesym(ctxt *Link, b *Biobuf, s *LSym) {
 		wrint(b, int64(s.Args))
 		wrint(b, int64(s.Locals))
 		wrint(b, int64(s.Nosplit))
-		wrint(b, int64(s.Leaf)|int64(s.Cfunc)<<1)
+		flags := int64(s.Leaf) | int64(s.Cfunc)<<1
+		if s.ReflectMethod {
+			flags |= 1 << 2
+		}
+		wrint(b, flags)
 		n := 0
 		for a := s.Autom; a != nil; a = a.Link {
 			n++
@@ -495,8 +518,8 @@ func writesym(ctxt *Link, b *Biobuf, s *LSym) {
 			wrint(b, pc.Funcdataoff[i])
 		}
 		wrint(b, int64(len(pc.File)))
-		for i := 0; i < len(pc.File); i++ {
-			wrpathsym(ctxt, b, pc.File[i])
+		for _, f := range pc.File {
+			wrsym(b, f)
 		}
 	}
 }
@@ -523,35 +546,25 @@ func wrstring(b *Biobuf, s string) {
 	b.w.WriteString(s)
 }
 
-// wrpath writes a path just like a string, but on windows, it
-// translates '\\' to '/' in the process.
-func wrpath(ctxt *Link, b *Biobuf, p string) {
-	wrstring(b, filepath.ToSlash(p))
-}
-
 func wrdata(b *Biobuf, v []byte) {
 	wrint(b, int64(len(v)))
 	b.Write(v)
 }
 
-func wrpathsym(ctxt *Link, b *Biobuf, s *LSym) {
-	if s == nil {
-		wrint(b, 0)
-		wrint(b, 0)
-		return
-	}
-
-	wrpath(ctxt, b, s.Name)
-	wrint(b, int64(s.Version))
-}
-
 func wrsym(b *Biobuf, s *LSym) {
 	if s == nil {
 		wrint(b, 0)
-		wrint(b, 0)
 		return
 	}
-
-	wrstring(b, s.Name)
-	wrint(b, int64(s.Version))
+	if s.RefIdx == 0 {
+		log.Fatalln("writing an unreferenced symbol", s.Name)
+	}
+	wrint(b, int64(s.RefIdx))
 }
+
+// relocByOff sorts relocations by their offsets.
+type relocByOff []Reloc
+
+func (x relocByOff) Len() int           { return len(x) }
+func (x relocByOff) Less(i, j int) bool { return x[i].Off < x[j].Off }
+func (x relocByOff) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }

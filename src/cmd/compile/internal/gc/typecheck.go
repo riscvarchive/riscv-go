@@ -475,7 +475,7 @@ OpSwitch:
 
 		if !Isptr[t.Etype] {
 			if top&(Erv|Etop) != 0 {
-				Yyerror("invalid indirect of %v", Nconv(n.Left, obj.FmtLong))
+				Yyerror("invalid indirect of %v", Nconv(n.Left, FmtLong))
 				n.Type = nil
 				return
 			}
@@ -706,7 +706,7 @@ OpSwitch:
 				if l.Op == OADDSTR {
 					n.List.Set(l.List.Slice())
 				} else {
-					n.List.Set([]*Node{l})
+					n.List.Set1(l)
 				}
 				if r.Op == OADDSTR {
 					n.List.AppendNodes(&r.List)
@@ -846,7 +846,7 @@ OpSwitch:
 			}
 
 			if n.Type.Etype != TFUNC || n.Type.Thistuple != 1 {
-				Yyerror("type %v has no method %v", n.Left.Type, Sconv(n.Right.Sym, obj.FmtShort))
+				Yyerror("type %v has no method %v", n.Left.Type, Sconv(n.Right.Sym, FmtShort))
 				n.Type = nil
 				n.Type = nil
 				return
@@ -946,16 +946,15 @@ OpSwitch:
 		}
 
 		if n.Type != nil && n.Type.Etype != TINTER {
-			var have *Type
-			var missing *Type
+			var missing, have *Field
 			var ptr int
 			if !implements(n.Type, t, &missing, &have, &ptr) {
 				if have != nil && have.Sym == missing.Sym {
-					Yyerror("impossible type assertion:\n\t%v does not implement %v (wrong type for %v method)\n"+"\t\thave %v%v\n\t\twant %v%v", n.Type, t, missing.Sym, have.Sym, Tconv(have.Type, obj.FmtShort|obj.FmtByte), missing.Sym, Tconv(missing.Type, obj.FmtShort|obj.FmtByte))
+					Yyerror("impossible type assertion:\n\t%v does not implement %v (wrong type for %v method)\n"+"\t\thave %v%v\n\t\twant %v%v", n.Type, t, missing.Sym, have.Sym, Tconv(have.Type, FmtShort|FmtByte), missing.Sym, Tconv(missing.Type, FmtShort|FmtByte))
 				} else if ptr != 0 {
 					Yyerror("impossible type assertion:\n\t%v does not implement %v (%v method has pointer receiver)", n.Type, t, missing.Sym)
 				} else if have != nil {
-					Yyerror("impossible type assertion:\n\t%v does not implement %v (missing %v method)\n"+"\t\thave %v%v\n\t\twant %v%v", n.Type, t, missing.Sym, have.Sym, Tconv(have.Type, obj.FmtShort|obj.FmtByte), missing.Sym, Tconv(missing.Type, obj.FmtShort|obj.FmtByte))
+					Yyerror("impossible type assertion:\n\t%v does not implement %v (missing %v method)\n"+"\t\thave %v%v\n\t\twant %v%v", n.Type, t, missing.Sym, have.Sym, Tconv(have.Type, FmtShort|FmtByte), missing.Sym, Tconv(missing.Type, FmtShort|FmtByte))
 				} else {
 					Yyerror("impossible type assertion:\n\t%v does not implement %v (missing %v method)", n.Type, t, missing.Sym)
 				}
@@ -1021,9 +1020,9 @@ OpSwitch:
 
 		case TMAP:
 			n.Etype = 0
-			defaultlit(&n.Right, t.Down)
+			defaultlit(&n.Right, t.Key())
 			if n.Right.Type != nil {
-				n.Right = assignconv(n.Right, t.Down, "map index")
+				n.Right = assignconv(n.Right, t.Key(), "map index")
 			}
 			n.Type = t.Type
 			n.Op = OINDEXMAP
@@ -1333,15 +1332,7 @@ OpSwitch:
 		}
 		ok |= Erv
 		if t.Outtuple == 1 {
-			t := l.Type.Results().Type
-			if t == nil {
-				n.Type = nil
-				return
-			}
-			if t.Etype == TFIELD {
-				t = t.Type
-			}
-			n.Type = t
+			n.Type = l.Type.Results().Field(0).Type
 
 			if n.Op == OCALLFUNC && n.Left.Op == ONAME && (compiling_runtime != 0 || n.Left.Sym.Pkg == Runtimepkg) && n.Left.Sym.Name == "getg" {
 				// Emit code for runtime.getg() directly instead of calling function.
@@ -1437,7 +1428,7 @@ OpSwitch:
 		break OpSwitch
 
 	badcall1:
-		Yyerror("invalid argument %v for %v", Nconv(n.Left, obj.FmtLong), Oconv(n.Op, 0))
+		Yyerror("invalid argument %v for %v", Nconv(n.Left, FmtLong), Oconv(n.Op, 0))
 		n.Type = nil
 		return
 
@@ -1460,9 +1451,9 @@ OpSwitch:
 				return
 			}
 
-			t = n.List.First().Type.Type
-			l = t.Nname
-			r = t.Down.Nname
+			t = n.List.First().Type
+			l = t.Field(0).Nname
+			r = t.Field(1).Nname
 		} else {
 			if !twoarg(n) {
 				n.Type = nil
@@ -1570,12 +1561,12 @@ OpSwitch:
 		l := args.First()
 		r := args.Second()
 		if l.Type != nil && l.Type.Etype != TMAP {
-			Yyerror("first argument to delete must be map; have %v", Tconv(l.Type, obj.FmtLong))
+			Yyerror("first argument to delete must be map; have %v", Tconv(l.Type, FmtLong))
 			n.Type = nil
 			return
 		}
 
-		args.SetIndex(1, assignconv(r, l.Type.Down, "delete"))
+		args.SetIndex(1, assignconv(r, l.Type.Key(), "delete"))
 		break OpSwitch
 
 	case OAPPEND:
@@ -1603,7 +1594,7 @@ OpSwitch:
 		var funarg *Type
 		if Istype(t, TSTRUCT) && t.Funarg {
 			funarg = t
-			t = t.Type.Type
+			t = t.Field(0).Type
 		}
 
 		n.Type = t
@@ -1614,7 +1605,7 @@ OpSwitch:
 				return
 			}
 
-			Yyerror("first argument to append must be slice; have %v", Tconv(t, obj.FmtLong))
+			Yyerror("first argument to append must be slice; have %v", Tconv(t, FmtLong))
 			n.Type = nil
 			return
 		}
@@ -1642,7 +1633,8 @@ OpSwitch:
 		}
 
 		if funarg != nil {
-			for t := funarg.Type.Down; t != nil; t = t.Down {
+			_, it := IterFields(funarg) // Skip first field
+			for t := it.Next(); t != nil; t = it.Next() {
 				if assignop(t.Type, n.Type.Type, nil) == 0 {
 					Yyerror("cannot append %v value to []%v", t.Type, n.Type.Type)
 				}
@@ -1696,25 +1688,25 @@ OpSwitch:
 			if Eqtype(n.Left.Type.Type, bytetype) {
 				break OpSwitch
 			}
-			Yyerror("arguments to copy have different element types: %v and string", Tconv(n.Left.Type, obj.FmtLong))
+			Yyerror("arguments to copy have different element types: %v and string", Tconv(n.Left.Type, FmtLong))
 			n.Type = nil
 			return
 		}
 
 		if !Isslice(n.Left.Type) || !Isslice(n.Right.Type) {
 			if !Isslice(n.Left.Type) && !Isslice(n.Right.Type) {
-				Yyerror("arguments to copy must be slices; have %v, %v", Tconv(n.Left.Type, obj.FmtLong), Tconv(n.Right.Type, obj.FmtLong))
+				Yyerror("arguments to copy must be slices; have %v, %v", Tconv(n.Left.Type, FmtLong), Tconv(n.Right.Type, FmtLong))
 			} else if !Isslice(n.Left.Type) {
-				Yyerror("first argument to copy should be slice; have %v", Tconv(n.Left.Type, obj.FmtLong))
+				Yyerror("first argument to copy should be slice; have %v", Tconv(n.Left.Type, FmtLong))
 			} else {
-				Yyerror("second argument to copy should be slice or string; have %v", Tconv(n.Right.Type, obj.FmtLong))
+				Yyerror("second argument to copy should be slice or string; have %v", Tconv(n.Right.Type, FmtLong))
 			}
 			n.Type = nil
 			return
 		}
 
 		if !Eqtype(n.Left.Type.Type, n.Right.Type.Type) {
-			Yyerror("arguments to copy have different element types: %v and %v", Tconv(n.Left.Type, obj.FmtLong), Tconv(n.Right.Type, obj.FmtLong))
+			Yyerror("arguments to copy have different element types: %v and %v", Tconv(n.Left.Type, FmtLong), Tconv(n.Right.Type, FmtLong))
 			n.Type = nil
 			return
 		}
@@ -1735,7 +1727,7 @@ OpSwitch:
 		n.Op = convertop(t, n.Type, &why)
 		if n.Op == 0 {
 			if n.Diag == 0 && !n.Type.Broke {
-				Yyerror("cannot convert %v to type %v%s", Nconv(n.Left, obj.FmtLong), n.Type, why)
+				Yyerror("cannot convert %v to type %v%s", Nconv(n.Left, FmtLong), n.Type, why)
 				n.Diag = 1
 			}
 
@@ -2061,7 +2053,7 @@ OpSwitch:
 		if n.Left != nil {
 			t := n.Left.Type
 			if t != nil && t.Etype != TBOOL {
-				Yyerror("non-bool %v used as for condition", Nconv(n.Left, obj.FmtLong))
+				Yyerror("non-bool %v used as for condition", Nconv(n.Left, FmtLong))
 			}
 		}
 		typecheck(&n.Right, Etop)
@@ -2076,7 +2068,7 @@ OpSwitch:
 		if n.Left != nil {
 			t := n.Left.Type
 			if t != nil && t.Etype != TBOOL {
-				Yyerror("non-bool %v used as if condition", Nconv(n.Left, obj.FmtLong))
+				Yyerror("non-bool %v used as if condition", Nconv(n.Left, FmtLong))
 			}
 		}
 		typechecklist(n.Nbody.Slice(), Etop)
@@ -2370,9 +2362,9 @@ func twoarg(n *Node) bool {
 	return true
 }
 
-func lookdot1(errnode *Node, s *Sym, t *Type, f *Type, dostrcmp int) *Type {
-	var r *Type
-	for ; f != nil; f = f.Down {
+func lookdot1(errnode *Node, s *Sym, t *Type, f *Field, dostrcmp int) *Field {
+	var r *Field
+	for f, it := RawIter(f); f != nil; f = it.Next() {
 		if dostrcmp != 0 && f.Sym.Name == s.Name {
 			return f
 		}
@@ -2403,7 +2395,7 @@ func looktypedot(n *Node, t *Type, dostrcmp int) bool {
 	s := n.Right.Sym
 
 	if t.Etype == TINTER {
-		f1 := lookdot1(n, s, t, t.Type, dostrcmp)
+		f1 := lookdot1(n, s, t, t.Fields, dostrcmp)
 		if f1 == nil {
 			return false
 		}
@@ -2417,21 +2409,20 @@ func looktypedot(n *Node, t *Type, dostrcmp int) bool {
 
 	// Find the base type: methtype will fail if t
 	// is not of the form T or *T.
-	f2 := methtype(t, 0)
-
-	if f2 == nil {
+	mt := methtype(t, 0)
+	if mt == nil {
 		return false
 	}
 
-	expandmeth(f2)
-	f2 = lookdot1(n, s, f2, f2.Xmethod, dostrcmp)
+	expandmeth(mt)
+	f2 := lookdot1(n, s, mt, mt.Xmethod, dostrcmp)
 	if f2 == nil {
 		return false
 	}
 
 	// disallow T.m if m requires *T receiver
 	if Isptr[f2.Type.Recv().Type.Etype] && !Isptr[t.Etype] && f2.Embedded != 2 && !isifacemethod(f2.Type) {
-		Yyerror("invalid method expression %v (needs pointer receiver: (*%v).%v)", n, t, Sconv(f2.Sym, obj.FmtShort))
+		Yyerror("invalid method expression %v (needs pointer receiver: (*%v).%v)", n, t, Sconv(f2.Sym, FmtShort))
 		return false
 	}
 
@@ -2456,24 +2447,24 @@ type typeSym struct {
 
 // dotField maps (*Type, *Sym) pairs to the corresponding struct field (*Type with Etype==TFIELD).
 // It is a cache for use during usefield in walk.go, only enabled when field tracking.
-var dotField = map[typeSym]*Type{}
+var dotField = map[typeSym]*Field{}
 
-func lookdot(n *Node, t *Type, dostrcmp int) *Type {
+func lookdot(n *Node, t *Type, dostrcmp int) *Field {
 	s := n.Right.Sym
 
 	dowidth(t)
-	var f1 *Type
+	var f1 *Field
 	if t.Etype == TSTRUCT || t.Etype == TINTER {
-		f1 = lookdot1(n, s, t, t.Type, dostrcmp)
+		f1 = lookdot1(n, s, t, t.Fields, dostrcmp)
 	}
 
-	var f2 *Type
+	var f2 *Field
 	if n.Left.Type == t || n.Left.Type.Sym == nil {
-		f2 = methtype(t, 0)
-		if f2 != nil {
+		mt := methtype(t, 0)
+		if mt != nil {
 			// Use f2->method, not f2->xmethod: adddot has
 			// already inserted all the necessary embedded dots.
-			f2 = lookdot1(n, s, f2, f2.Method, dostrcmp)
+			f2 = lookdot1(n, s, mt, mt.Method, dostrcmp)
 		}
 	}
 
@@ -2525,7 +2516,7 @@ func lookdot(n *Node, t *Type, dostrcmp int) *Type {
 				n.Left.Implicit = true
 				typecheck(&n.Left, Etype|Erv)
 			} else if tt.Etype == Tptr && tt.Type.Etype == Tptr && Eqtype(derefall(tt), derefall(rcvr)) {
-				Yyerror("calling method %v with receiver %v requires explicit dereference", n.Right, Nconv(n.Left, obj.FmtLong))
+				Yyerror("calling method %v with receiver %v requires explicit dereference", n.Right, Nconv(n.Left, FmtLong))
 				for tt.Etype == Tptr {
 					// Stop one level early for method with pointer receiver.
 					if rcvr.Etype == Tptr && tt.Type.Etype != Tptr {
@@ -2577,24 +2568,13 @@ func nokeys(l Nodes) bool {
 }
 
 func hasddd(t *Type) bool {
-	for tl := t.Type; tl != nil; tl = tl.Down {
+	for tl, it := IterFields(t); tl != nil; tl = it.Next() {
 		if tl.Isddd {
 			return true
 		}
 	}
 
 	return false
-}
-
-// downcount is the same as countfield
-// TODO decide if we want both (for semantic reasons)
-func downcount(t *Type) int {
-	n := 0
-	for tl := t.Type; tl != nil; tl = tl.Down {
-		n++
-	}
-
-	return n
 }
 
 // typecheck assignment: type list = expression list
@@ -2627,11 +2607,11 @@ func typecheckaste(op Op, call *Node, isddd bool, tstruct *Type, nl Nodes, desc 
 					}
 				}
 
-				tn := n.Type.Type
+				tn, it := IterFields(n.Type)
 				var why string
-				for tl := tstruct.Type; tl != nil; tl = tl.Down {
+				for tl, it2 := IterFields(tstruct); tl != nil; tl = it2.Next() {
 					if tl.Isddd {
-						for ; tn != nil; tn = tn.Down {
+						for ; tn != nil; tn = it.Next() {
 							if assignop(tn.Type, tl.Type.Type, &why) == 0 {
 								if call != nil {
 									Yyerror("cannot use %v as type %v in argument to %v%s", tn.Type, tl.Type.Type, call, why)
@@ -2655,7 +2635,7 @@ func typecheckaste(op Op, call *Node, isddd bool, tstruct *Type, nl Nodes, desc 
 						}
 					}
 
-					tn = tn.Down
+					tn = it.Next()
 				}
 
 				if tn != nil {
@@ -2691,7 +2671,7 @@ func typecheckaste(op Op, call *Node, isddd bool, tstruct *Type, nl Nodes, desc 
 	}
 
 	i = 0
-	for tl := tstruct.Type; tl != nil; tl = tl.Down {
+	for tl, it := IterFields(tstruct); tl != nil; tl = it.Next() {
 		t = tl.Type
 		if tl.Isddd {
 			if isddd {
@@ -2900,6 +2880,11 @@ func pushtype(n *Node, t *Type) {
 	}
 }
 
+// Marker type so esc, fmt, and sinit can recognize the LHS of an OKEY node
+// in a struct literal.
+// TODO(mdempsky): Find a nicer solution.
+var structkey = typ(Txxx)
+
 func typecheckcomplit(np **Node) {
 	n := *np
 	lno := lineno
@@ -3028,10 +3013,10 @@ func typecheckcomplit(np **Node) {
 			}
 
 			r = l.Left
-			pushtype(r, t.Down)
+			pushtype(r, t.Key())
 			typecheck(&r, Erv)
-			defaultlit(&r, t.Down)
-			l.Left = assignconv(r, t.Down, "map key")
+			defaultlit(&r, t.Key())
+			l.Left = assignconv(r, t.Key(), "map key")
 			if l.Left.Op != OCONV {
 				keydup(l.Left, hash)
 			}
@@ -3046,10 +3031,13 @@ func typecheckcomplit(np **Node) {
 		n.Op = OMAPLIT
 
 	case TSTRUCT:
+		// Need valid field offsets for Xoffset below.
+		dowidth(t)
+
 		bad := 0
 		if n.List.Len() != 0 && nokeys(n.List) {
 			// simple list of variables
-			f := t.Type
+			f, it := IterFields(t)
 
 			var s *Sym
 			ls := n.List.Slice()
@@ -3072,10 +3060,11 @@ func typecheckcomplit(np **Node) {
 				// No pushtype allowed here. Must name fields for that.
 				n1 = assignconv(n1, f.Type, "field value")
 				n1 = Nod(OKEY, newname(f.Sym), n1)
-				n1.Left.Type = f
+				n1.Left.Type = structkey
+				n1.Left.Xoffset = f.Width
 				n1.Left.Typecheck = 1
 				ls[i1] = n1
-				f = f.Down
+				f = it.Next()
 			}
 
 			if f != nil {
@@ -3114,15 +3103,16 @@ func typecheckcomplit(np **Node) {
 					}
 				}
 
-				f := lookdot1(nil, s, t, t.Type, 0)
+				f := lookdot1(nil, s, t, t.Fields, 0)
 				if f == nil {
 					Yyerror("unknown %v field '%v' in struct literal", t, s)
 					continue
 				}
 
 				l.Left = newname(s)
+				l.Left.Type = structkey
+				l.Left.Xoffset = f.Width
 				l.Left.Typecheck = 1
-				l.Left.Type = f
 				s = f.Sym
 				fielddup(newname(s), hash)
 				r = l.Right
@@ -3298,7 +3288,7 @@ func checkassignto(src *Type, dst *Node) {
 	var why string
 
 	if assignop(src, dst.Type, &why) == 0 {
-		Yyerror("cannot assign %v to %v in multiple assignment%s", src, Nconv(dst, obj.FmtLong), why)
+		Yyerror("cannot assign %v to %v in multiple assignment%s", src, Nconv(dst, FmtLong), why)
 		return
 	}
 }
@@ -3438,7 +3428,7 @@ func typecheckfunc(n *Node) {
 	t.Nname = n.Func.Nname
 	rcvr := t.Recv()
 	if rcvr != nil && n.Func.Shortname != nil {
-		addmethod(n.Func.Shortname.Sym, t, true, n.Func.Nname.Nointerface)
+		addmethod(n.Func.Shortname.Sym, t, nil, true, n.Func.Nname.Nointerface)
 	}
 
 	for _, ln := range n.Func.Dcl {
@@ -3478,7 +3468,7 @@ func stringtoarraylit(np **Node) {
 
 var ntypecheckdeftype int
 
-var methodqueue *NodeList
+var methodqueue []*Node
 
 func domethod(n *Node) {
 	nt := n.Type.Nname
@@ -3511,7 +3501,7 @@ func domethod(n *Node) {
 	checkwidth(n.Type)
 }
 
-var mapqueue *NodeList
+var mapqueue []*Node
 
 func copytype(n *Node, t *Type) {
 	if t.Etype == TFORW {
@@ -3561,7 +3551,7 @@ func copytype(n *Node, t *Type) {
 	// Queue check for map until all the types are done settling.
 	if maplineno != 0 {
 		t.Maplineno = int32(maplineno)
-		mapqueue = list(mapqueue, n)
+		mapqueue = append(mapqueue, n)
 	}
 }
 
@@ -3597,21 +3587,20 @@ ret:
 	// try to resolve the method types for the interfaces
 	// we just read.
 	if ntypecheckdeftype == 1 {
-		var l *NodeList
 		for {
-			l = methodqueue
-			if l == nil {
+			s := methodqueue
+			if len(s) == 0 {
 				break
 			}
 			methodqueue = nil
-			for ; l != nil; l = l.Next {
-				domethod(l.N)
+			for _, n := range s {
+				domethod(n)
 			}
 		}
 
-		for l := mapqueue; l != nil; l = l.Next {
-			lineno = l.N.Type.Maplineno
-			maptype(l.N.Type, Types[TBOOL])
+		for _, n := range mapqueue {
+			lineno = n.Type.Maplineno
+			maptype(n.Type, Types[TBOOL])
 		}
 
 		lineno = lno
@@ -3626,7 +3615,7 @@ func queuemethod(n *Node) {
 		return
 	}
 
-	methodqueue = list(methodqueue, n)
+	methodqueue = append(methodqueue, n)
 }
 
 func typecheckdef(n *Node) *Node {
@@ -3720,7 +3709,7 @@ func typecheckdef(n *Node) *Node {
 			}
 
 			if !isideal(e.Type) && !Eqtype(t, e.Type) {
-				Yyerror("cannot use %v as type %v in const initializer", Nconv(e, obj.FmtLong), t)
+				Yyerror("cannot use %v as type %v in const initializer", Nconv(e, FmtLong), t)
 				goto ret
 			}
 
@@ -3900,18 +3889,6 @@ func markbreaklist(l Nodes, implicit *Node) {
 
 		markbreak(n, implicit)
 	}
-}
-
-// Isterminating returns whether the NodeList l ends with a
-// terminating statement.
-func (l *NodeList) isterminating() bool {
-	if l == nil {
-		return false
-	}
-	for l.Next != nil {
-		l = l.Next
-	}
-	return l.N.isterminating()
 }
 
 // Isterminating whether the Nodes list ends with a terminating

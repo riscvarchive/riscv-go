@@ -276,12 +276,16 @@ func Export(out *obj.Biobuf, trace bool) int {
 	}
 	for _, sym := range funcs {
 		p.string(sym.Name)
-		// The type can only be a signature for functions. However, by always
-		// writing the complete type specification (rather than just a signature)
-		// we keep the option open of sharing common signatures across multiple
-		// functions as a means to further compress the export data.
-		p.typ(sym.Def.Type)
-		p.inlinedBody(sym.Def)
+		sig := sym.Def.Type
+		inlineable := p.isInlineable(sym.Def)
+		p.paramList(sig.Params(), inlineable)
+		p.paramList(sig.Results(), inlineable)
+		index := -1
+		if inlineable {
+			index = len(p.inlined)
+			p.inlined = append(p.inlined, sym.Def.Func)
+		}
+		p.int(index)
 		if p.trace {
 			p.tracef("\n")
 		}
@@ -332,7 +336,7 @@ func Export(out *obj.Biobuf, trace bool) int {
 	}
 	for _, f := range p.inlined {
 		if p.trace {
-			p.tracef("{ %s }\n", Hconv(f.Inl, obj.FmtSharp))
+			p.tracef("{ %s }\n", Hconv(f.Inl, FmtSharp))
 		}
 		p.nodeList(f.Inl)
 		if p.trace {
@@ -433,10 +437,6 @@ func (p *exporter) typ(t *Type) {
 
 	// pick off named types
 	if sym := t.Sym; sym != nil {
-		// Fields should be exported by p.field().
-		if t.Etype == TFIELD {
-			Fatalf("exporter: printing a field/parameter with wrong function")
-		}
 		// Predeclared types should have been found in the type map.
 		if t.Orig == t {
 			Fatalf("exporter: predeclared type missing from type map?")
@@ -464,30 +464,36 @@ func (p *exporter) typ(t *Type) {
 		// sort methods for reproducible export format
 		// TODO(gri) Determine if they are already sorted
 		// in which case we can drop this step.
-		var methods []*Type
-		for m := t.Method; m != nil; m = m.Down {
+		var methods []*Field
+		for m, it := IterMethods(t); m != nil; m = it.Next() {
 			methods = append(methods, m)
 		}
 		sort.Sort(methodbyname(methods))
 		p.int(len(methods))
 
-		if p.trace && t.Method != nil {
-			p.tracef("associated methods {>\n")
+		if p.trace && len(methods) > 0 {
+			p.tracef("associated methods {>")
 		}
 
 		for _, m := range methods {
-			p.string(m.Sym.Name)
-			p.paramList(m.Type.Recvs())
-			p.paramList(m.Type.Params())
-			p.paramList(m.Type.Results())
-			p.inlinedBody(m.Type.Nname)
-
-			if p.trace && m.Down != nil {
+			if p.trace {
 				p.tracef("\n")
 			}
+			p.string(m.Sym.Name)
+			sig := m.Type
+			inlineable := p.isInlineable(sig.Nname)
+			p.paramList(sig.Recvs(), inlineable)
+			p.paramList(sig.Params(), inlineable)
+			p.paramList(sig.Results(), inlineable)
+			index := -1
+			if inlineable {
+				index = len(p.inlined)
+				p.inlined = append(p.inlined, sig.Nname.Func)
+			}
+			p.int(index)
 		}
 
-		if p.trace && t.Method != nil {
+		if p.trace && len(methods) > 0 {
 			p.tracef("<\n} ")
 		}
 
@@ -521,8 +527,8 @@ func (p *exporter) typ(t *Type) {
 
 	case TFUNC:
 		p.tag(signatureTag)
-		p.paramList(t.Params())
-		p.paramList(t.Results())
+		p.paramList(t.Params(), false)
+		p.paramList(t.Results(), false)
 
 	case TINTER:
 		p.tag(interfaceTag)
@@ -534,8 +540,8 @@ func (p *exporter) typ(t *Type) {
 
 	case TMAP:
 		p.tag(mapTag)
-		p.typ(t.Down) // key
-		p.typ(t.Type) // val
+		p.typ(t.Key()) // key
+		p.typ(t.Type)  // val
 
 	case TCHAN:
 		p.tag(chanTag)
@@ -553,25 +559,21 @@ func (p *exporter) qualifiedName(sym *Sym) {
 }
 
 func (p *exporter) fieldList(t *Type) {
-	if p.trace && t.Type != nil {
-		p.tracef("fields {>\n")
+	if p.trace && countfield(t) > 0 {
+		p.tracef("fields {>")
 		defer p.tracef("<\n} ")
 	}
 
 	p.int(countfield(t))
-	for f := t.Type; f != nil; f = f.Down {
-		p.field(f)
-		if p.trace && f.Down != nil {
+	for f, it := IterFields(t); f != nil; f = it.Next() {
+		if p.trace {
 			p.tracef("\n")
 		}
+		p.field(f)
 	}
 }
 
-func (p *exporter) field(f *Type) {
-	if f.Etype != TFIELD {
-		Fatalf("exporter: field expected")
-	}
-
+func (p *exporter) field(f *Field) {
 	p.fieldName(f)
 	p.typ(f.Type)
 	p.note(f.Note)
@@ -586,42 +588,38 @@ func (p *exporter) note(n *string) {
 }
 
 func (p *exporter) methodList(t *Type) {
-	if p.trace && t.Type != nil {
-		p.tracef("methods {>\n")
+	if p.trace && countfield(t) > 0 {
+		p.tracef("methods {>")
 		defer p.tracef("<\n} ")
 	}
 
 	p.int(countfield(t))
-	for m := t.Type; m != nil; m = m.Down {
-		p.method(m)
-		if p.trace && m.Down != nil {
+	for m, it := IterFields(t); m != nil; m = it.Next() {
+		if p.trace {
 			p.tracef("\n")
 		}
+		p.method(m)
 	}
 }
 
-func (p *exporter) method(m *Type) {
-	if m.Etype != TFIELD {
-		Fatalf("exporter: method expected")
-	}
-
+func (p *exporter) method(m *Field) {
 	p.fieldName(m)
 	// TODO(gri) For functions signatures, we use p.typ() to export
 	// so we could share the same type with multiple functions. Do
 	// the same here, or never try to do this for functions.
-	p.paramList(m.Type.Params())
-	p.paramList(m.Type.Results())
+	p.paramList(m.Type.Params(), false)
+	p.paramList(m.Type.Results(), false)
 }
 
 // fieldName is like qualifiedName but it doesn't record the package
 // for blank (_) or exported names.
-func (p *exporter) fieldName(t *Type) {
+func (p *exporter) fieldName(t *Field) {
 	sym := t.Sym
 
 	var name string
 	if t.Embedded == 0 {
 		name = sym.Name
-	} else if bname := basetypeName(t); bname != "" && !exportname(bname) {
+	} else if bname := basetypeName(t.Type); bname != "" && !exportname(bname) {
 		// anonymous field with unexported base type name: use "?" as field name
 		// (bname != "" per spec, but we are conservative in case of errors)
 		name = "?"
@@ -644,7 +642,7 @@ func basetypeName(t *Type) string {
 	return ""
 }
 
-func (p *exporter) paramList(params *Type) {
+func (p *exporter) paramList(params *Type, numbered bool) {
 	if params.Etype != TSTRUCT || !params.Funarg {
 		Fatalf("exporter: parameter list expected")
 	}
@@ -653,19 +651,16 @@ func (p *exporter) paramList(params *Type) {
 	// (look at the first parameter only since either all
 	// names are present or all are absent)
 	n := countfield(params)
-	if n > 0 && parName(params.Type) == "" {
+	if n > 0 && parName(params.Field(0), numbered) == "" {
 		n = -n
 	}
 	p.int(n)
-	for q := params.Type; q != nil; q = q.Down {
-		p.param(q, n)
+	for q, it := IterFields(params); q != nil; q = it.Next() {
+		p.param(q, n, numbered)
 	}
 }
 
-func (p *exporter) param(q *Type, n int) {
-	if q.Etype != TFIELD {
-		Fatalf("exporter: parameter expected")
-	}
+func (p *exporter) param(q *Field, n int, numbered bool) {
 	t := q.Type
 	if q.Isddd {
 		// create a fake type to encode ... just for the p.typ call
@@ -675,7 +670,7 @@ func (p *exporter) param(q *Type, n int) {
 	}
 	p.typ(t)
 	if n > 0 {
-		p.string(parName(q))
+		p.string(parName(q, numbered))
 	}
 	// TODO(gri) This is compiler-specific (escape info).
 	// Move into compiler-specific section eventually?
@@ -686,7 +681,7 @@ func (p *exporter) param(q *Type, n int) {
 	p.note(q.Note)
 }
 
-func parName(q *Type) string {
+func parName(q *Field, numbered bool) string {
 	if q.Sym == nil {
 		return ""
 	}
@@ -703,9 +698,11 @@ func parName(q *Type) string {
 			Fatalf("exporter: unexpected parameter name: %s", name)
 		}
 	}
-	// undo gc-internal name specialization
-	if i := strings.Index(name, "·"); i > 0 {
-		name = name[:i] // cut off numbering
+	// undo gc-internal name specialization unless required
+	if !numbered {
+		if i := strings.Index(name, "·"); i > 0 {
+			name = name[:i] // cut off numbering
+		}
 	}
 	return name
 }
@@ -791,18 +788,16 @@ func (p *exporter) float(x *Mpflt) {
 // ----------------------------------------------------------------------------
 // Inlined function bodies
 
-func (p *exporter) inlinedBody(n *Node) {
-	index := -1 // index < 0 => not inlined
+func (p *exporter) isInlineable(n *Node) bool {
 	if n != nil && n.Func != nil && len(n.Func.Inl.Slice()) != 0 {
 		// when lazily typechecking inlined bodies, some re-exported ones may not have been typechecked yet.
 		// currently that can leave unresolved ONONAMEs in import-dot-ed packages in the wrong package
 		if Debug['l'] < 2 {
 			typecheckinl(n)
 		}
-		index = len(p.inlined) // index >= 0 => inlined
-		p.inlined = append(p.inlined, n.Func)
+		return true
 	}
-	p.int(index)
+	return false
 }
 
 func (p *exporter) nodeList(list Nodes) {

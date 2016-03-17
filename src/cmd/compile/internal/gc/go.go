@@ -6,6 +6,7 @@ package gc
 
 import (
 	"bytes"
+	"cmd/compile/internal/ssa"
 	"cmd/internal/obj"
 )
 
@@ -68,7 +69,6 @@ type Pkg struct {
 
 type Sym struct {
 	Flags     SymFlags
-	Uniqgen   uint32
 	Link      *Sym
 	Importdef *Pkg   // where imported definition was found
 	Linkname  string // link name
@@ -77,19 +77,19 @@ type Sym struct {
 	Pkg        *Pkg
 	Name       string // variable name
 	Def        *Node  // definition: ONAME OTYPE OPACK or OLITERAL
-	Label      *Label // corresponding label (ephemeral)
 	Block      int32  // blocknumber to catch redeclaration
 	Lastlineno int32  // last declaration for diagnostic
-	Origpkg    *Pkg   // original package for . import
-	Lsym       *obj.LSym
-	Fsym       *Sym // funcsym
+
+	Label   *Label // corresponding label (ephemeral)
+	Origpkg *Pkg   // original package for . import
+	Lsym    *obj.LSym
+	Fsym    *Sym // funcsym
 }
 
 type Label struct {
-	Sym  *Sym
-	Def  *Node
-	Use  []*Node
-	Link *Label
+	Sym *Sym
+	Def *Node
+	Use []*Node
 
 	// for use during gen
 	Gotopc   *obj.Prog // pointer to unresolved gotos
@@ -98,18 +98,6 @@ type Label struct {
 	Continpc *obj.Prog // pointer to code
 
 	Used bool
-}
-
-type InitEntry struct {
-	Xoffset int64 // struct, array only
-	Expr    *Node // bytes of run-time computed expressions
-}
-
-type InitPlan struct {
-	Lit  int64
-	Zero int64
-	Expr int64
-	E    []InitEntry
 }
 
 type SymFlags uint8
@@ -192,27 +180,6 @@ type Sig struct {
 	offset int32
 }
 
-type Dlist struct {
-	field *Type
-}
-
-// argument passing to/from
-// smagic and umagic
-type Magic struct {
-	W   int // input for both - width
-	S   int // output for both - shift
-	Bad int // output for both - unexpected failure
-
-	// magic multiplier for signed literal divisors
-	Sd int64 // input - literal divisor
-	Sm int64 // output - multiplier
-
-	// magic multiplier for unsigned literal divisors
-	Ud uint64 // input - literal divisor
-	Um uint64 // output - multiplier
-	Ua int    // output - adder
-}
-
 // note this is the runtime representation
 // of the compilers arrays.
 //
@@ -239,8 +206,6 @@ var sizeof_Array int // runtime sizeof(Array)
 // 	uchar	nel[4];		// number of elements
 // } String;
 var sizeof_String int // runtime sizeof(String)
-
-var dotlist [10]Dlist // size is max depth of embeddeds
 
 // lexlineno is the line number _after_ the most recently read rune.
 // In particular, it's advanced (or rewound) as newlines are read (or unread).
@@ -283,10 +248,6 @@ var Debug_typeassert int
 var localpkg *Pkg // package being compiled
 
 var importpkg *Pkg // package being imported
-
-var structpkg *Pkg // package that declared struct, during import
-
-var builtinpkg *Pkg // fake package for builtins
 
 var gostringpkg *Pkg // fake pkg for Go strings
 
@@ -352,7 +313,7 @@ var minfltval [NTYPE]*Mpflt
 
 var maxfltval [NTYPE]*Mpflt
 
-var xtop *NodeList
+var xtop []*Node
 
 var externdcl []*Node
 
@@ -370,7 +331,7 @@ var statuniqgen int // name generator for static temps
 
 var iota_ int32
 
-var lastconst *NodeList
+var lastconst []*Node
 
 var lasttype *Node
 
@@ -582,7 +543,6 @@ type Arch struct {
 	Ginsnop      func()
 	Gmove        func(*Node, *Node)
 	Igenindex    func(*Node, *Node, bool) *obj.Prog
-	Linkarchinit func()
 	Peep         func(*obj.Prog)
 	Proginfo     func(*obj.Prog) // fills in Prog.Info
 	Regtyp       func(*obj.Addr) bool
@@ -601,6 +561,19 @@ type Arch struct {
 	Doregbits    func(int) uint64
 	Regnames     func(*int) []string
 	Use387       bool // should 8g use 387 FP instructions instead of sse2.
+
+	// SSARegToReg maps ssa register numbers to obj register numbers.
+	SSARegToReg []int16
+
+	// SSAMarkMoves marks any MOVXconst ops that need to avoid clobbering flags.
+	SSAMarkMoves func(*SSAGenState, *ssa.Block)
+
+	// SSAGenValue emits Prog(s) for the Value.
+	SSAGenValue func(*SSAGenState, *ssa.Value)
+
+	// SSAGenBlock emits end-of-block Progs. SSAGenValue should be called
+	// for all values in the block before SSAGenBlock.
+	SSAGenBlock func(s *SSAGenState, b, next *ssa.Block)
 }
 
 var pcloc int32

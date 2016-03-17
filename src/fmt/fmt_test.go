@@ -122,9 +122,11 @@ var bslice = barray[:]
 
 type byteStringer byte
 
-func (byteStringer) String() string { return "X" }
+func (byteStringer) String() string {
+	return "X"
+}
 
-var byteStringerSlice = []byteStringer{97, 98, 99, 100}
+var byteStringerSlice = []byteStringer{'h', 'e', 'l', 'l', 'o'}
 
 type byteFormatter byte
 
@@ -132,7 +134,7 @@ func (byteFormatter) Format(f State, _ rune) {
 	Fprint(f, "X")
 }
 
-var byteFormatterSlice = []byteFormatter{97, 98, 99, 100}
+var byteFormatterSlice = []byteFormatter{'h', 'e', 'l', 'l', 'o'}
 
 var fmtTests = []struct {
 	fmt string
@@ -223,18 +225,38 @@ var fmtTests = []struct {
 	{"%+q", "abc\xffdef", `"abc\xffdef"`},
 	{"%#q", "abc\xffdef", `"abc\xffdef"`},
 	{"%#+q", "abc\xffdef", `"abc\xffdef"`},
-	{"%q", "\U0010ffff", `"\U0010ffff"`}, // Rune is not printable.
+	// Runes that are not printable.
+	{"%q", "\U0010ffff", `"\U0010ffff"`},
 	{"%+q", "\U0010ffff", `"\U0010ffff"`},
 	{"%#q", "\U0010ffff", "`􏿿`"},
 	{"%#+q", "\U0010ffff", "`􏿿`"},
-	{"%q", string(0x110000), `"�"`}, // Rune is not valid.
+	// Runes that are not valid.
+	{"%q", string(0x110000), `"�"`},
 	{"%+q", string(0x110000), `"\ufffd"`},
 	{"%#q", string(0x110000), "`�`"},
 	{"%#+q", string(0x110000), "`�`"},
 
+	// characters
+	{"%c", uint('x'), "x"},
+	{"%c", 0xe4, "ä"},
+	{"%c", 0x672c, "本"},
+	{"%c", '日', "日"},
+	{"%.0c", '⌘', "⌘"}, // Specifying precision should have no effect.
+	{"%3c", '⌘', "  ⌘"},
+	{"%-3c", '⌘', "⌘  "},
+	// Runes that are not printable.
+	{"%c", '\U00000e00', "\u0e00"},
+	{"%c", '\U0010ffff', "\U0010ffff"},
+	// Runes that are not valid.
+	{"%c", -1, "�"},
+	{"%c", 0xDC80, "�"},
+	{"%c", rune(0x110000), "�"},
+	{"%c", int64(0xFFFFFFFFF), "�"},
+	{"%c", uint64(0xFFFFFFFFF), "�"},
+
 	// escaped characters
-	{"%q", 0, `'\x00'`},
-	{"%+q", 0, `'\x00'`},
+	{"%q", uint(0), `'\x00'`},
+	{"%+q", uint(0), `'\x00'`},
 	{"%q", '"', `'"'`},
 	{"%+q", '"', `'"'`},
 	{"%q", '\'', `'\''`},
@@ -248,8 +270,9 @@ var fmtTests = []struct {
 	{"%q", '\n', `'\n'`},
 	{"%+q", '\n', `'\n'`},
 	{"%q", '☺', `'☺'`},
-	{"% q", '☺', `'☺'`}, // The space modifier should have no effect.
 	{"%+q", '☺', `'\u263a'`},
+	{"% q", '☺', `'☺'`},  // The space modifier should have no effect.
+	{"%.0q", '☺', `'☺'`}, // Specifying precision should have no effect.
 	{"%10q", '⌘', `       '⌘'`},
 	{"%+10q", '⌘', `  '\u2318'`},
 	{"%-10q", '⌘', `'⌘'       `},
@@ -258,12 +281,15 @@ var fmtTests = []struct {
 	{"%+010q", '⌘', `00'\u2318'`},
 	{"%-010q", '⌘', `'⌘'       `}, // 0 has no effect when - is present.
 	{"%+-010q", '⌘', `'\u2318'  `},
-	{"%q", '\U00000e00', `'\u0e00'`},             // Rune is not printable.
-	{"%q", '\U000c2345', `'\U000c2345'`},         // Rune is not printable.
-	{"%q", '\U0010ffff', `'\U0010ffff'`},         // Rune is not printable.
-	{"%q", rune(0x110000), `%!q(int32=1114112)`}, // Rune is not valid.
-	{"%q", int64(0x7FFFFFFF), `%!q(int64=2147483647)`},
-	{"%q", uint64(0xFFFFFFFF), `%!q(uint64=4294967295)`},
+	// Runes that are not printable.
+	{"%q", '\U00000e00', `'\u0e00'`},
+	{"%q", '\U0010ffff', `'\U0010ffff'`},
+	// Runes that are not valid.
+	{"%q", int32(-1), "%!q(int32=-1)"},
+	{"%q", 0xDC80, `'�'`},
+	{"%q", rune(0x110000), "%!q(int32=1114112)"},
+	{"%q", int64(0xFFFFFFFFF), "%!q(int64=68719476735)"},
+	{"%q", uint64(0xFFFFFFFFF), "%!q(uint64=68719476735)"},
 
 	// width
 	{"%5s", "abc", "  abc"},
@@ -289,8 +315,6 @@ var fmtTests = []struct {
 	{"%.1x", "日本語", "e6"},
 	{"%.1X", []byte("日本語"), "E6"},
 	{"%10.1q", "日本語日本語", `       "日"`},
-	{"%3c", '⌘', "  ⌘"},
-	{"%5q", '\u2026', `  '…'`},
 	{"%10v", nil, "     <nil>"},
 	{"%-10v", nil, "<nil>     "},
 
@@ -424,10 +448,6 @@ var fmtTests = []struct {
 	{"%-08g", complex(negInf, negInf), "(-Inf    -Inf    i)"},
 	{"%-08G", complex(NaN, NaN), "(NaN     +NaN    i)"},
 
-	// erroneous formats
-	{"", 2, "%!(EXTRA int=2)"},
-	{"%d", "hello", "%!d(string=hello)"},
-
 	// old test/fmt_test.go
 	{"%d", 1234, "1234"},
 	{"%d", -1234, "-1234"},
@@ -474,10 +494,6 @@ var fmtTests = []struct {
 	{"%G", -7.0, "-7"},
 	{"%G", -1e-9, "-1E-09"},
 	{"%G", float32(-1e-9), "-1E-09"},
-	{"%c", 'x', "x"},
-	{"%c", 0xe4, "ä"},
-	{"%c", 0x672c, "本"},
-	{"%c", '日', "日"},
 	{"%20.8d", 1234, "            00001234"},
 	{"%20.8d", -1234, "           -00001234"},
 	{"%20d", 1234, "                1234"},
@@ -706,7 +722,8 @@ var fmtTests = []struct {
 	{"%x", renamedString("thing"), "7468696e67"},
 	{"%d", renamedBytes([]byte{1, 2, 15}), `[1 2 15]`},
 	{"%q", renamedBytes([]byte("hello")), `"hello"`},
-	{"%x", []renamedUint8{'a', 'b', 'c'}, "616263"},
+	{"%x", []renamedUint8{'h', 'e', 'l', 'l', 'o'}, "68656c6c6f"},
+	{"%X", []renamedUint8{'h', 'e', 'l', 'l', 'o'}, "68656C6C6F"},
 	{"%s", []renamedUint8{'h', 'e', 'l', 'l', 'o'}, "hello"},
 	{"%q", []renamedUint8{'h', 'e', 'l', 'l', 'o'}, `"hello"`},
 	{"%v", renamedFloat32(22), "22"},
@@ -724,10 +741,12 @@ var fmtTests = []struct {
 	{"%#v", S{F(7), G(8)}, "fmt_test.S{F:<v=F(7)>, G:GoString(8)}"},
 
 	// %T
+	{"%T", byte(0), "uint8"},
+	{"%T", reflect.ValueOf(nil), "reflect.Value"},
 	{"%T", (4 - 3i), "complex128"},
 	{"%T", renamedComplex128(4 - 3i), "fmt_test.renamedComplex128"},
-	{"%T", intVal, "int"},
-	{"%6T", &intVal, "  *int"},
+	{"%T", intVar, "int"},
+	{"%6T", &intVar, "  *int"},
 	{"%10T", nil, "     <nil>"},
 	{"%-10T", nil, "<nil>     "},
 
@@ -771,15 +790,15 @@ var fmtTests = []struct {
 	{"%d", time.Time{}.Month(), "1"},
 
 	// erroneous things
+	{"", nil, "%!(EXTRA <nil>)"},
+	{"", 2, "%!(EXTRA int=2)"},
+	{"no args", "hello", "no args%!(EXTRA string=hello)"},
 	{"%s %", "hello", "hello %!(NOVERB)"},
 	{"%s %.2", "hello", "hello %!(NOVERB)"},
-	{"%d", "hello", "%!d(string=hello)"},
-	{"no args", "hello", "no args%!(EXTRA string=hello)"},
-	{"%s", nil, "%!s(<nil>)"},
-	{"%T", nil, "<nil>"},
-	{"%-1", 100, "%!(NOVERB)%!(EXTRA int=100)"},
 	{"%017091901790959340919092959340919017929593813360", 0, "%!(NOVERB)%!(EXTRA int=0)"},
 	{"%184467440737095516170v", 0, "%!(NOVERB)%!(EXTRA int=0)"},
+	// Extra argument errors should format without flags set.
+	{"%010.2", "12345", "%!(NOVERB)%!(EXTRA string=12345)"},
 
 	// The "<nil>" show up because maps are printed by
 	// first obtaining a list of keys and then looking up
@@ -933,19 +952,21 @@ var fmtTests = []struct {
 	{"%+010.2f", -104.66 - 440.51i, "(-000104.66-000440.51i)"},
 
 	// []T where type T is a byte with a Stringer method.
-	{"%v", byteStringerSlice, "[X X X X]"},
-	{"%s", byteStringerSlice, "abcd"},
-	{"%q", byteStringerSlice, "\"abcd\""},
-	{"%x", byteStringerSlice, "61626364"},
-	{"%#v", byteStringerSlice, "[]fmt_test.byteStringer{0x61, 0x62, 0x63, 0x64}"},
+	{"%v", byteStringerSlice, "[X X X X X]"},
+	{"%s", byteStringerSlice, "hello"},
+	{"%q", byteStringerSlice, "\"hello\""},
+	{"%x", byteStringerSlice, "68656c6c6f"},
+	{"%X", byteStringerSlice, "68656C6C6F"},
+	{"%#v", byteStringerSlice, "[]fmt_test.byteStringer{0x68, 0x65, 0x6c, 0x6c, 0x6f}"},
 
 	// And the same for Formatter.
-	{"%v", byteFormatterSlice, "[X X X X]"},
-	{"%s", byteFormatterSlice, "abcd"},
-	{"%q", byteFormatterSlice, "\"abcd\""},
-	{"%x", byteFormatterSlice, "61626364"},
+	{"%v", byteFormatterSlice, "[X X X X X]"},
+	{"%s", byteFormatterSlice, "hello"},
+	{"%q", byteFormatterSlice, "\"hello\""},
+	{"%x", byteFormatterSlice, "68656c6c6f"},
+	{"%X", byteFormatterSlice, "68656C6C6F"},
 	// This next case seems wrong, but the docs say the Formatter wins here.
-	{"%#v", byteFormatterSlice, "[]fmt_test.byteFormatter{X, X, X, X}"},
+	{"%#v", byteFormatterSlice, "[]fmt_test.byteFormatter{X, X, X, X, X}"},
 
 	// reflect.Value handled specially in Go 1.5, making it possible to
 	// see inside non-exported fields (which cannot be accessed with Interface()).
@@ -964,10 +985,13 @@ var fmtTests = []struct {
 	// Tests to check that not supported verbs generate an error string.
 	{"%☠", nil, "%!☠(<nil>)"},
 	{"%☠", interface{}(nil), "%!☠(<nil>)"},
+	{"%☠", int(0), "%!☠(int=0)"},
+	{"%☠", uint(0), "%!☠(uint=0)"},
 	{"%☠", []byte{0}, "%!☠([]uint8=[0])"},
 	{"%☠", []uint8{0}, "%!☠([]uint8=[0])"},
 	{"%☠", [1]byte{0}, "%!☠([1]uint8=[0])"},
 	{"%☠", [1]uint8{0}, "%!☠([1]uint8=[0])"},
+	{"%☠", "hello", "%!☠(string=hello)"},
 	{"%☠", 1.2345678, "%!☠(float64=1.2345678)"},
 	{"%☠", float32(1.2345678), "%!☠(float32=1.2345678)"},
 	{"%☠", 1.2345678 + 1.2345678i, "%!☠(complex128=(1.2345678+1.2345678i))"},

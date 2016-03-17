@@ -442,7 +442,7 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	cursym.Size = pc // remember the size of this symbol
 
 	// Allocate for the symbol.
-	obj.Symgrow(ctxt, cursym, cursym.Size)
+	cursym.Grow(cursym.Size)
 
 	// Lay out code.
 	bp := cursym.P
