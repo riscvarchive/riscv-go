@@ -26,6 +26,7 @@ type opInfo struct {
 	generic           bool // this is a generic (arch-independent) opcode
 	rematerializeable bool // this op is rematerializeable
 	commutative       bool // this operation is commutative (e.g. addition)
+	resultInArg0      bool // prefer v and v.Args[0] to be allocated to the same register
 }
 
 type inputInfo struct {
@@ -48,7 +49,8 @@ const (
 	auxInt16                // auxInt is a 16-bit integer
 	auxInt32                // auxInt is a 32-bit integer
 	auxInt64                // auxInt is a 64-bit integer
-	auxFloat                // auxInt is a float64 (encoded with math.Float64bits)
+	auxFloat32              // auxInt is a float32 (encoded with math.Float64bits)
+	auxFloat64              // auxInt is a float64 (encoded with math.Float64bits)
 	auxString               // auxInt is a string
 	auxSym                  // aux is a symbol
 	auxSymOff               // aux is a symbol, auxInt is an offset

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Portable half of code generator; mainly statements and control flow.
+
 package gc
 
 import (
@@ -9,11 +11,8 @@ import (
 	"fmt"
 )
 
-// portable half of code generator.
-// mainly statements and control flow.
-var labellist *Label
-
-var lastlabel *Label
+// TODO: labellist should become part of a "compilation state" for functions.
+var labellist []*Label
 
 func Sysfunc(name string) *Node {
 	n := newname(Pkglookup(name, Runtimepkg))
@@ -106,12 +105,10 @@ func addrescapes(n *Node) {
 }
 
 func clearlabels() {
-	for l := labellist; l != nil; l = l.Link {
+	for _, l := range labellist {
 		l.Sym.Label = nil
 	}
-
-	labellist = nil
-	lastlabel = nil
+	labellist = labellist[:0]
 }
 
 func newlab(n *Node) *Label {
@@ -119,14 +116,9 @@ func newlab(n *Node) *Label {
 	lab := s.Label
 	if lab == nil {
 		lab = new(Label)
-		if lastlabel == nil {
-			labellist = lab
-		} else {
-			lastlabel.Link = lab
-		}
-		lastlabel = lab
 		lab.Sym = s
 		s.Label = lab
+		labellist = append(labellist, lab)
 	}
 
 	if n.Op == OLABEL {
@@ -439,7 +431,7 @@ func cgen_dottype(n *Node, res, resok *Node, wb bool) {
 		call := Nod(OCALLFUNC, fn, nil)
 		r1.Type = byteptr
 		r2.Type = byteptr
-		setNodeSeq(&call.List, list(list(list1(&r1), &r2), typename(n.Left.Type)))
+		call.List.Set([]*Node{&r1, &r2, typename(n.Left.Type)})
 		call.List.Set(ascompatte(OCALLFUNC, call, false, fn.Type.Params(), call.List.Slice(), 0, nil))
 		gen(call)
 		Regfree(&r1)
@@ -525,7 +517,7 @@ func Cgen_As2dottype(n, res, resok *Node) {
 	fn := syslook("panicdottype")
 	dowidth(fn.Type)
 	call := Nod(OCALLFUNC, fn, nil)
-	setNodeSeq(&call.List, list(list(list1(&r1), &r2), typename(n.Left.Type)))
+	call.List.Set([]*Node{&r1, &r2, typename(n.Left.Type)})
 	call.List.Set(ascompatte(OCALLFUNC, call, false, fn.Type.Params(), call.List.Slice(), 0, nil))
 	gen(call)
 	Regfree(&r1)
@@ -646,7 +638,7 @@ func gen(n *Node) {
 
 	switch n.Op {
 	default:
-		Fatalf("gen: unknown op %v", Nconv(n, obj.FmtShort|obj.FmtSign))
+		Fatalf("gen: unknown op %v", Nconv(n, FmtShort|FmtSign))
 
 	case OCASE,
 		OFALL,
@@ -876,10 +868,10 @@ func gen(n *Node) {
 		Cgen_checknil(n.Left)
 
 	case OVARKILL:
-		gvarkill(n.Left)
+		Gvarkill(n.Left)
 
 	case OVARLIVE:
-		gvarlive(n.Left)
+		Gvarlive(n.Left)
 	}
 
 ret:
@@ -974,7 +966,7 @@ func CgenTemp(n *Node) *Node {
 }
 
 func checklabels() {
-	for lab := labellist; lab != nil; lab = lab.Link {
+	for _, lab := range labellist {
 		if lab.Def == nil {
 			for _, n := range lab.Use {
 				yyerrorl(n.Lineno, "label %v not defined", lab.Sym)
@@ -1242,10 +1234,7 @@ func visitComponents(t *Type, startOffset int64, f func(elem *Type, elemOffset i
 			Fatalf("struct not at offset 0")
 		}
 
-		for field := t.Type; field != nil; field = field.Down {
-			if field.Etype != TFIELD {
-				Fatalf("bad struct")
-			}
+		for field, it := IterFields(t); field != nil; field = it.Next() {
 			if !visitComponents(field.Type, startOffset+field.Width, f) {
 				return false
 			}

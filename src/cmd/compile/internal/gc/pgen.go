@@ -90,7 +90,7 @@ func gvardefx(n *Node, as obj.As) {
 		Fatalf("gvardef nil")
 	}
 	if n.Op != ONAME {
-		Yyerror("gvardef %v; %v", Oconv(n.Op, obj.FmtSharp), n)
+		Yyerror("gvardef %v; %v", Oconv(n.Op, FmtSharp), n)
 		return
 	}
 
@@ -108,11 +108,11 @@ func Gvardef(n *Node) {
 	gvardefx(n, obj.AVARDEF)
 }
 
-func gvarkill(n *Node) {
+func Gvarkill(n *Node) {
 	gvardefx(n, obj.AVARKILL)
 }
 
-func gvarlive(n *Node) {
+func Gvarlive(n *Node) {
 	gvardefx(n, obj.AVARLIVE)
 }
 
@@ -438,6 +438,9 @@ func compile(fn *Node) {
 	if fn.Func.Pragma&Nosplit != 0 {
 		ptxt.From3.Offset |= obj.NOSPLIT
 	}
+	if fn.Func.ReflectMethod {
+		ptxt.From3.Offset |= obj.REFLECTMETHOD
+	}
 	if fn.Func.Pragma&Systemstack != 0 {
 		ptxt.From.Sym.Cfunc = 1
 	}
@@ -456,8 +459,15 @@ func compile(fn *Node) {
 	gcargs := makefuncdatasym("gcargs·%d", obj.FUNCDATA_ArgsPointerMaps)
 	gclocals := makefuncdatasym("gclocals·%d", obj.FUNCDATA_LocalsPointerMaps)
 
-	for _, t := range Curfn.Func.Fieldtrack {
-		gtrack(tracksym(t))
+	if obj.Fieldtrack_enabled != 0 && len(Curfn.Func.FieldTrack) > 0 {
+		trackSyms := make([]*Sym, 0, len(Curfn.Func.FieldTrack))
+		for sym := range Curfn.Func.FieldTrack {
+			trackSyms = append(trackSyms, sym)
+		}
+		sort.Sort(symByName(trackSyms))
+		for _, sym := range trackSyms {
+			gtrack(sym)
+		}
 	}
 
 	for _, n := range fn.Func.Dcl {

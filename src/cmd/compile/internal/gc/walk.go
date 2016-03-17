@@ -185,7 +185,7 @@ func walkstmt(np **Node) {
 		ORECOVER,
 		OGETG:
 		if n.Typecheck == 0 {
-			Fatalf("missing typecheck: %v", Nconv(n, obj.FmtSign))
+			Fatalf("missing typecheck: %v", Nconv(n, FmtSign))
 		}
 		init := n.Ninit
 		n.Ninit.Set(nil)
@@ -199,7 +199,7 @@ func walkstmt(np **Node) {
 	// the value received.
 	case ORECV:
 		if n.Typecheck == 0 {
-			Fatalf("missing typecheck: %v", Nconv(n, obj.FmtSign))
+			Fatalf("missing typecheck: %v", Nconv(n, FmtSign))
 		}
 		init := n.Ninit
 		n.Ninit.Set(nil)
@@ -349,7 +349,7 @@ func walkstmt(np **Node) {
 	}
 
 	if n.Op == ONAME {
-		Fatalf("walkstmt ended up with name: %v", Nconv(n, obj.FmtSign))
+		Fatalf("walkstmt ended up with name: %v", Nconv(n, FmtSign))
 	}
 
 	*np = n
@@ -484,14 +484,14 @@ func walkexpr(np **Node, init *Nodes) {
 	}
 
 	if n.Typecheck != 1 {
-		Fatalf("missed typecheck: %v\n", Nconv(n, obj.FmtSign))
+		Fatalf("missed typecheck: %v\n", Nconv(n, FmtSign))
 	}
 
 opswitch:
 	switch n.Op {
 	default:
 		Dump("walk", n)
-		Fatalf("walkexpr: switch 1 unknown op %v", Nconv(n, obj.FmtShort|obj.FmtSign))
+		Fatalf("walkexpr: switch 1 unknown op %v", Nconv(n, FmtShort|FmtSign))
 
 	case OTYPE,
 		ONONAME,
@@ -632,6 +632,7 @@ opswitch:
 		}
 
 	case OCALLINTER:
+		usemethod(n)
 		t := n.Left.Type
 		if n.List.Len() != 0 && n.List.First().Op == OAS {
 			break
@@ -657,11 +658,7 @@ opswitch:
 			// Update type of OCALLFUNC node.
 			// Output arguments had not changed, but their offsets could.
 			if n.Left.Type.Outtuple == 1 {
-				t := n.Left.Type.Results().Type
-				if t.Etype == TFIELD {
-					t = t.Type
-				}
-				n.Type = t
+				n.Type = n.Left.Type.Results().Field(0).Type
 			} else {
 				n.Type = n.Left.Type.Results()
 			}
@@ -677,7 +674,7 @@ opswitch:
 
 		if n.Left.Op == ONAME && n.Left.Sym.Name == "Sqrt" && n.Left.Sym.Pkg.Path == "math" {
 			switch Thearch.Thechar {
-			case '5', '6', '7':
+			case '5', '6', '7', '9':
 				n.Op = OSQRT
 				n.Left = n.List.First()
 				n.List.Set(nil)
@@ -840,7 +837,7 @@ opswitch:
 		t := r.Left.Type
 		p := ""
 		if t.Type.Width <= 128 { // Check ../../runtime/hashmap.go:maxValueSize before changing.
-			switch algtype(t.Down) {
+			switch algtype(t.Key()) {
 			case AMEM32:
 				p = "mapaccess2_fast32"
 			case AMEM64:
@@ -876,9 +873,9 @@ opswitch:
 		// the boolean result of i.(T) is now untyped so we make it the
 		// same type as the variable on the lhs.
 		if !isblank(n.List.Second()) {
-			r.Type.Type.Down.Type = n.List.Second().Type
+			r.Type.Field(1).Type = n.List.Second().Type
 		}
-		setNodeSeq(&n.Rlist, list1(r))
+		n.Rlist.Set1(r)
 		n.Op = OAS2FUNC
 
 		// don't generate a = *var if a is _
@@ -1000,15 +997,15 @@ opswitch:
 			break
 		}
 
-		var ll *NodeList
+		var ll []*Node
 		if !Isinter(n.Left.Type) {
-			ll = list(ll, typename(n.Left.Type))
+			ll = append(ll, typename(n.Left.Type))
 		}
 		if !isnilinter(n.Type) {
-			ll = list(ll, typename(n.Type))
+			ll = append(ll, typename(n.Type))
 		}
 		if !Isinter(n.Left.Type) && !isnilinter(n.Type) {
-			sym := Pkglookup(Tconv(n.Left.Type, obj.FmtLeft)+"."+Tconv(n.Type, obj.FmtLeft), itabpkg)
+			sym := Pkglookup(Tconv(n.Left.Type, FmtLeft)+"."+Tconv(n.Type, FmtLeft), itabpkg)
 			if sym.Def == nil {
 				l := Nod(ONAME, nil, nil)
 				l.Sym = sym
@@ -1022,7 +1019,7 @@ opswitch:
 
 			l := Nod(OADDR, sym.Def, nil)
 			l.Addable = true
-			ll = list(ll, l)
+			ll = append(ll, l)
 
 			if isdirectiface(n.Left.Type) {
 				// For pointer types, we can make a special form of optimization
@@ -1042,13 +1039,13 @@ opswitch:
 
 				fn := syslook("typ2Itab")
 				n1 = Nod(OCALL, fn, nil)
-				setNodeSeq(&n1.List, ll)
+				n1.List.Set(ll)
 				typecheck(&n1, Erv)
 				walkexpr(&n1, init)
 
 				n2 := Nod(OIF, nil, nil)
 				n2.Left = Nod(OEQ, l, nodnil())
-				n2.Nbody.Set([]*Node{Nod(OAS, l, n1)})
+				n2.Nbody.Set1(Nod(OAS, l, n1))
 				n2.Likely = -1
 				typecheck(&n2, Etop)
 				init.Append(n2)
@@ -1062,7 +1059,7 @@ opswitch:
 		}
 
 		if Isinter(n.Left.Type) {
-			ll = list(ll, n.Left)
+			ll = append(ll, n.Left)
 		} else {
 			// regular types are passed by reference to avoid C vararg calls
 			// orderexpr arranged for n.Left to be a temporary for all
@@ -1071,9 +1068,9 @@ opswitch:
 			// with non-interface cases, is not visible to orderstmt, so we
 			// have to fall back on allocating a temp here.
 			if islvalue(n.Left) {
-				ll = list(ll, Nod(OADDR, n.Left, nil))
+				ll = append(ll, Nod(OADDR, n.Left, nil))
 			} else {
-				ll = list(ll, Nod(OADDR, copyexpr(n.Left, n.Left.Type, init), nil))
+				ll = append(ll, Nod(OADDR, copyexpr(n.Left, n.Left.Type, init), nil))
 			}
 			dowidth(n.Left.Type)
 			r := nodnil()
@@ -1086,7 +1083,7 @@ opswitch:
 				r = Nod(OADDR, r.Left, nil)
 				typecheck(&r, Erv)
 			}
-			ll = list(ll, r)
+			ll = append(ll, r)
 		}
 
 		fn := syslook(convFuncName(n.Left.Type, n.Type))
@@ -1097,7 +1094,7 @@ opswitch:
 		}
 		dowidth(fn.Type)
 		n = Nod(OCALL, fn, nil)
-		setNodeSeq(&n.List, ll)
+		n.List.Set(ll)
 		typecheck(&n, Erv)
 		walkexpr(&n, init)
 
@@ -1247,7 +1244,7 @@ opswitch:
 		t := n.Left.Type
 		p := ""
 		if t.Type.Width <= 128 { // Check ../../runtime/hashmap.go:maxValueSize before changing.
-			switch algtype(t.Down) {
+			switch algtype(t.Key()) {
 			case AMEM32:
 				p = "mapaccess1_fast32"
 			case AMEM64:
@@ -1439,7 +1436,7 @@ opswitch:
 		}
 
 		fn := syslook("makemap")
-		substArgTypes(&fn, hmap(t), mapbucket(t), t.Down, t.Type)
+		substArgTypes(&fn, hmap(t), mapbucket(t), t.Key(), t.Type)
 		n = mkcall1(fn, n.Type, init, typename(n.Type), conv(n.Left, Types[TINT64]), a, r)
 
 	case OMAKESLICE:
@@ -1678,7 +1675,7 @@ func ascompatee(op Op, nl, nr []*Node, init *Nodes) []*Node {
 		var nln, nrn Nodes
 		nln.Set(nl)
 		nrn.Set(nr)
-		Yyerror("error in shape across %v %v %v / %d %d [%s]", Hconv(nln, obj.FmtSign), Oconv(op, 0), Hconv(nrn, obj.FmtSign), nodeSeqLen(nl), nodeSeqLen(nr), Curfn.Func.Nname.Sym.Name)
+		Yyerror("error in shape across %v %v %v / %d %d [%s]", Hconv(nln, FmtSign), Oconv(op, 0), Hconv(nrn, FmtSign), len(nl), len(nr), Curfn.Func.Nname.Sym.Name)
 	}
 	return nn
 }
@@ -1755,7 +1752,7 @@ func ascompatet(op Op, nl Nodes, nr *Type, fp int, init *Nodes) []*Node {
 }
 
 // package all the arguments that match a ... T parameter into a []T.
-func mkdotargslice(lr0, nn []*Node, l *Type, fp int, init *Nodes, ddd *Node) []*Node {
+func mkdotargslice(lr0, nn []*Node, l *Field, fp int, init *Nodes, ddd *Node) []*Node {
 	esc := uint16(EscUnknown)
 	if ddd != nil {
 		esc = ddd.Esc
@@ -1766,7 +1763,7 @@ func mkdotargslice(lr0, nn []*Node, l *Type, fp int, init *Nodes, ddd *Node) []*
 	tslice.Bound = -1
 
 	var n *Node
-	if nodeSeqLen(lr0) == 0 {
+	if len(lr0) == 0 {
 		n = nodnil()
 		n.Type = tslice
 	} else {
@@ -1795,7 +1792,7 @@ func dumptypes(nl *Type, what string) string {
 		if s != "" {
 			s += ", "
 		}
-		s += Tconv(l, 0)
+		s += Fldconv(l, 0)
 	}
 	if s == "" {
 		s = fmt.Sprintf("[no arguments %s]", what)
@@ -1825,13 +1822,13 @@ func ascompatte(op Op, call *Node, isddd bool, nl *Type, lr []*Node, fp int, ini
 	lr0 := lr
 	l, savel := IterFields(nl)
 	var r *Node
-	if nodeSeqLen(lr) > 0 {
-		r = nodeSeqFirst(lr)
+	if len(lr) > 0 {
+		r = lr[0]
 	}
 	var nn []*Node
 
 	// f(g()) where g has multiple return values
-	if r != nil && nodeSeqLen(lr) <= 1 && r.Type.Etype == TSTRUCT && r.Type.Funarg {
+	if r != nil && len(lr) <= 1 && r.Type.Etype == TSTRUCT && r.Type.Funarg {
 		// optimization - can do block copy
 		if eqtypenoname(r.Type, nl) {
 			arg := nodarg(nl, fp)
@@ -1857,7 +1854,7 @@ func ascompatte(op Op, call *Node, isddd bool, nl *Type, lr []*Node, fp int, ini
 		walkstmt(&a)
 		init.Append(a)
 		lr = alist
-		r = nodeSeqFirst(lr)
+		r = lr[0]
 		l, savel = IterFields(nl)
 	}
 
@@ -2007,13 +2004,7 @@ func walkprint(nn *Node, init *Nodes) *Node {
 			continue
 		}
 
-		t = on.Type.Params()
-		if t != nil {
-			t = t.Type
-		}
-		if t != nil {
-			t = t.Type
-		}
+		t = on.Type.Params().Field(0).Type
 
 		if !Eqtype(t, n.Type) {
 			n = Nod(OCONV, n, nil)
@@ -2146,6 +2137,12 @@ func needwritebarrier(l *Node, r *Node) bool {
 	// No write barrier for storing address of global, which
 	// is live no matter what.
 	if r.Op == OADDR && isglobal(r.Left) {
+		return false
+	}
+
+	// No write barrier for storing global function, which is live
+	// no matter what.
+	if r.Op == ONAME && r.Class == PFUNC {
 		return false
 	}
 
@@ -2311,7 +2308,7 @@ func reorder3(all []*Node) []*Node {
 
 		switch l.Op {
 		default:
-			Fatalf("reorder3 unexpected lvalue %v", Oconv(l.Op, obj.FmtSharp))
+			Fatalf("reorder3 unexpected lvalue %v", Oconv(l.Op, FmtSharp))
 
 		case ONAME:
 			break
@@ -2690,7 +2687,7 @@ func mapfn(name string, t *Type) *Node {
 		Fatalf("mapfn %v", t)
 	}
 	fn := syslook(name)
-	substArgTypes(&fn, t.Down, t.Type, t.Down, t.Type)
+	substArgTypes(&fn, t.Key(), t.Type, t.Key(), t.Type)
 	return fn
 }
 
@@ -2699,7 +2696,7 @@ func mapfndel(name string, t *Type) *Node {
 		Fatalf("mapfn %v", t)
 	}
 	fn := syslook(name)
-	substArgTypes(&fn, t.Down, t.Type, t.Down)
+	substArgTypes(&fn, t.Key(), t.Type, t.Key())
 	return fn
 }
 
@@ -2776,10 +2773,12 @@ func addstr(n *Node, init *Nodes) *Node {
 // expand append(l1, l2...) to
 //   init {
 //     s := l1
-//     if n := len(l1) + len(l2) - cap(s); n > 0 {
-//       s = growslice_n(s, n)
+//     n := len(s) + len(l2)
+//     // Compare as uint so growslice can panic on overflow.
+//     if uint(n) > uint(cap(s)) {
+//       s = growslice(s, n)
 //     }
-//     s = s[:len(l1)+len(l2)]
+//     s = s[:n]
 //     memmove(&s[len(l1)], &l2[0], len(l2)*sizeof(T))
 //   }
 //   s
@@ -2799,31 +2798,38 @@ func appendslice(n *Node, init *Nodes) *Node {
 	l1 := n.List.First()
 	l2 := n.List.Second()
 
-	s := temp(l1.Type) // var s []T
 	var l []*Node
+
+	// var s []T
+	s := temp(l1.Type)
 	l = append(l, Nod(OAS, s, l1)) // s = l1
 
-	nt := temp(Types[TINT])
+	// n := len(s) + len(l2)
+	nn := temp(Types[TINT])
+	l = append(l, Nod(OAS, nn, Nod(OADD, Nod(OLEN, s, nil), Nod(OLEN, l2, nil))))
 
+	// if uint(n) > uint(cap(s))
 	nif := Nod(OIF, nil, nil)
+	nif.Left = Nod(OGT, Nod(OCONV, nn, nil), Nod(OCONV, Nod(OCAP, s, nil), nil))
+	nif.Left.Left.Type = Types[TUINT]
+	nif.Left.Right.Type = Types[TUINT]
 
-	// n := len(s) + len(l2) - cap(s)
-	setNodeSeq(&nif.Ninit, list1(Nod(OAS, nt, Nod(OSUB, Nod(OADD, Nod(OLEN, s, nil), Nod(OLEN, l2, nil)), Nod(OCAP, s, nil)))))
-
-	nif.Left = Nod(OGT, nt, Nodintconst(0))
-
-	// instantiate growslice_n(Type*, []any, int) []any
-	fn := syslook("growslice_n") //   growslice_n(<type>, old []T, n int64) (ret []T)
+	// instantiate growslice(Type*, []any, int) []any
+	fn := syslook("growslice")
 	substArgTypes(&fn, s.Type.Type, s.Type.Type)
 
-	// s = growslice_n(T, s, n)
-	nif.Nbody.Set([]*Node{Nod(OAS, s, mkcall1(fn, s.Type, &nif.Ninit, typename(s.Type), s, nt))})
-
+	// s = growslice(T, s, n)
+	nif.Nbody.Set1(Nod(OAS, s, mkcall1(fn, s.Type, &nif.Ninit, typename(s.Type), s, nn)))
 	l = append(l, nif)
 
+	// s = s[:n]
+	nt := Nod(OSLICE, s, Nod(OKEY, nil, nn))
+	nt.Etype = 1
+	l = append(l, Nod(OAS, s, nt))
+
 	if haspointers(l1.Type.Type) {
-		// copy(s[len(l1):len(l1)+len(l2)], l2)
-		nptr1 := Nod(OSLICE, s, Nod(OKEY, Nod(OLEN, l1, nil), Nod(OADD, Nod(OLEN, l1, nil), Nod(OLEN, l2, nil))))
+		// copy(s[len(l1):], l2)
+		nptr1 := Nod(OSLICE, s, Nod(OKEY, Nod(OLEN, l1, nil), nil))
 
 		nptr1.Etype = 1
 		nptr2 := l2
@@ -2835,8 +2841,8 @@ func appendslice(n *Node, init *Nodes) *Node {
 		l = append(ln.Slice(), nt)
 	} else if instrumenting {
 		// rely on runtime to instrument copy.
-		// copy(s[len(l1):len(l1)+len(l2)], l2)
-		nptr1 := Nod(OSLICE, s, Nod(OKEY, Nod(OLEN, l1, nil), Nod(OADD, Nod(OLEN, l1, nil), Nod(OLEN, l2, nil))))
+		// copy(s[len(l1):], l2)
+		nptr1 := Nod(OSLICE, s, Nod(OKEY, Nod(OLEN, l1, nil), nil))
 
 		nptr1.Etype = 1
 		nptr2 := l2
@@ -2854,8 +2860,8 @@ func appendslice(n *Node, init *Nodes) *Node {
 	} else {
 		// memmove(&s[len(l1)], &l2[0], len(l2)*sizeof(T))
 		nptr1 := Nod(OINDEX, s, Nod(OLEN, l1, nil))
-
 		nptr1.Bounded = true
+
 		nptr1 = Nod(OADDR, nptr1, nil)
 
 		nptr2 := Nod(OSPTR, l2, nil)
@@ -2871,13 +2877,6 @@ func appendslice(n *Node, init *Nodes) *Node {
 		nt := mkcall1(fn, nil, &ln, nptr1, nptr2, nwid)
 		l = append(ln.Slice(), nt)
 	}
-
-	// s = s[:len(l1)+len(l2)]
-	nt = Nod(OADD, Nod(OLEN, l1, nil), Nod(OLEN, l2, nil))
-
-	nt = Nod(OSLICE, s, Nod(OKEY, nil, nt))
-	nt.Etype = 1
-	l = append(l, Nod(OAS, s, nt))
 
 	typechecklist(l, Etop)
 	walkstmtlist(l)
@@ -2953,7 +2952,9 @@ func walkappend(n *Node, init *Nodes, dst *Node) *Node {
 	fn := syslook("growslice") //   growslice(<type>, old []T, mincap int) (ret []T)
 	substArgTypes(&fn, ns.Type.Type, ns.Type.Type)
 
-	nx.Nbody.Set([]*Node{Nod(OAS, ns, mkcall1(fn, ns.Type, &nx.Ninit, typename(ns.Type), ns, Nod(OADD, Nod(OLEN, ns, nil), na)))})
+	nx.Nbody.Set1(Nod(OAS, ns,
+		mkcall1(fn, ns.Type, &nx.Ninit, typename(ns.Type), ns,
+			Nod(OADD, Nod(OLEN, ns, nil), na))))
 
 	l = append(l, nx)
 
@@ -3074,14 +3075,6 @@ func eqfor(t *Type, needsize *int) *Node {
 	typecheck(&ntype, Etype)
 	n.Type = ntype.Type
 	*needsize = 0
-	return n
-}
-
-func countfield(t *Type) int {
-	n := 0
-	for t1 := t.Type; t1 != nil; t1 = t1.Down {
-		n++
-	}
 	return n
 }
 
@@ -3230,7 +3223,7 @@ func walkcompare(np **Node, init *Nodes) {
 		// Inline comparisons.
 		var li *Node
 		var ri *Node
-		for t1 := t.Type; t1 != nil; t1 = t1.Down {
+		for t1, it := IterFields(t); t1 != nil; t1 = it.Next() {
 			if isblanksym(t1.Sym) {
 				continue
 			}
@@ -3761,6 +3754,48 @@ func bounded(n *Node, max int64) bool {
 	return false
 }
 
+// usemethod check interface method calls for uses of reflect.Type.Method.
+func usemethod(n *Node) {
+	t := n.Left.Type
+
+	// Looking for either of:
+	//	Method(int) reflect.Method
+	//	MethodByName(string) (reflect.Method, bool)
+	//
+	// TODO(crawshaw): improve precision of match by working out
+	//                 how to check the method name.
+	if n := countfield(t.Params()); n != 1 {
+		return
+	}
+	if n := countfield(t.Results()); n != 1 && n != 2 {
+		return
+	}
+	p0 := t.Params().Field(0)
+	res0 := t.Results().Field(0)
+	var res1 *Field
+	if countfield(t.Results()) == 2 {
+		res1 = t.Results().Field(1)
+	}
+
+	if res1 == nil {
+		if p0.Type.Etype != TINT {
+			return
+		}
+	} else {
+		if p0.Type.Etype != TSTRING {
+			return
+		}
+		if res1.Type.Etype != TBOOL {
+			return
+		}
+	}
+	if Tconv(res0.Type, 0) != "reflect.Method" {
+		return
+	}
+
+	Curfn.Func.ReflectMethod = true
+}
+
 func usefield(n *Node) {
 	if obj.Fieldtrack_enabled == 0 {
 		return
@@ -3791,23 +3826,22 @@ func usefield(n *Node) {
 		return
 	}
 
-	// dedup on list
-	if field.Lastfn == Curfn {
-		return
+	outer := n.Left.Type
+	if Isptr[outer.Etype] {
+		outer = outer.Type
 	}
-	field.Lastfn = Curfn
-	field.Outer = n.Left.Type
-	if Isptr[field.Outer.Etype] {
-		field.Outer = field.Outer.Type
-	}
-	if field.Outer.Sym == nil {
+	if outer.Sym == nil {
 		Yyerror("tracked field must be in named struct type")
 	}
 	if !exportname(field.Sym.Name) {
 		Yyerror("tracked field must be exported (upper case)")
 	}
 
-	Curfn.Func.Fieldtrack = append(Curfn.Func.Fieldtrack, field)
+	sym := tracksym(outer, field)
+	if Curfn.Func.FieldTrack == nil {
+		Curfn.Func.FieldTrack = make(map[*Sym]struct{})
+	}
+	Curfn.Func.FieldTrack[sym] = struct{}{}
 }
 
 func candiscardlist(l Nodes) bool {
@@ -3960,13 +3994,13 @@ func walkprintfunc(np **Node, init *Nodes) {
 	typecheck(&a, Etop)
 	walkstmt(&a)
 
-	fn.Nbody.Set([]*Node{a})
+	fn.Nbody.Set1(a)
 
 	funcbody(fn)
 
 	typecheck(&fn, Etop)
 	typechecklist(fn.Nbody.Slice(), Etop)
-	xtop = list(xtop, fn)
+	xtop = append(xtop, fn)
 	Curfn = oldfn
 
 	a = Nod(OCALL, nil, nil)

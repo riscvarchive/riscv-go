@@ -4,8 +4,6 @@
 
 package gc
 
-import "cmd/internal/obj"
-
 // range
 func typecheckrange(n *Node) {
 	var toomany int
@@ -48,7 +46,7 @@ func typecheckrange(n *Node) {
 	toomany = 0
 	switch t.Etype {
 	default:
-		Yyerror("cannot range over %v", Nconv(n.Right, obj.FmtLong))
+		Yyerror("cannot range over %v", Nconv(n.Right, FmtLong))
 		goto out
 
 	case TARRAY:
@@ -56,7 +54,7 @@ func typecheckrange(n *Node) {
 		t2 = t.Type
 
 	case TMAP:
-		t1 = t.Down
+		t1 = t.Key()
 		t2 = t.Type
 
 	case TCHAN:
@@ -95,7 +93,7 @@ func typecheckrange(n *Node) {
 	// present."
 	if isblank(v2) {
 		if v1 != nil {
-			n.List.Set([]*Node{v1})
+			n.List.Set1(v1)
 		}
 		v2 = nil
 	}
@@ -104,7 +102,7 @@ func typecheckrange(n *Node) {
 		if v1.Name != nil && v1.Name.Defn == n {
 			v1.Type = t1
 		} else if v1.Type != nil && assignop(t1, v1.Type, &why) == 0 {
-			Yyerror("cannot assign type %v to %v in range%s", t1, Nconv(v1, obj.FmtLong), why)
+			Yyerror("cannot assign type %v to %v in range%s", t1, Nconv(v1, FmtLong), why)
 		}
 		checkassign(n, v1)
 	}
@@ -113,7 +111,7 @@ func typecheckrange(n *Node) {
 		if v2.Name != nil && v2.Name.Defn == n {
 			v2.Type = t2
 		} else if v2.Type != nil && assignop(t2, v2.Type, &why) == 0 {
-			Yyerror("cannot assign type %v to %v in range%s", t2, Nconv(v2, obj.FmtLong), why)
+			Yyerror("cannot assign type %v to %v in range%s", t2, Nconv(v2, FmtLong), why)
 		}
 		checkassign(n, v2)
 	}
@@ -216,7 +214,7 @@ func walkrange(n *Node) {
 			tmp.Right.Typecheck = 1
 			a = Nod(OAS, hp, tmp)
 			typecheck(&a, Etop)
-			n.Right.Ninit.Set([]*Node{a})
+			n.Right.Ninit.Set1(a)
 		}
 
 		// orderstmt allocated the iterator for us.
@@ -228,12 +226,12 @@ func walkrange(n *Node) {
 		hit := prealloc[n]
 		hit.Type = th
 		n.Left = nil
-		keyname := newname(th.Type.Sym)      // depends on layout of iterator struct.  See reflect.go:hiter
-		valname := newname(th.Type.Down.Sym) // ditto
+		keyname := newname(th.Field(0).Sym) // depends on layout of iterator struct.  See reflect.go:hiter
+		valname := newname(th.Field(1).Sym) // ditto
 
 		fn := syslook("mapiterinit")
 
-		substArgTypes(&fn, t.Down, t.Type, th)
+		substArgTypes(&fn, t.Key(), t.Type, th)
 		init = append(init, mkcall1(fn, nil, nil, typename(t), ha, Nod(OADDR, hit, nil)))
 		n.Left = Nod(ONE, Nod(ODOT, hit, keyname), nodnil())
 
@@ -273,8 +271,8 @@ func walkrange(n *Node) {
 		a := Nod(OAS2RECV, nil, nil)
 		a.Typecheck = 1
 		a.List.Set([]*Node{hv1, hb})
-		a.Rlist.Set([]*Node{Nod(ORECV, ha, nil)})
-		n.Left.Ninit.Set([]*Node{a})
+		a.Rlist.Set1(Nod(ORECV, ha, nil))
+		n.Left.Ninit.Set1(a)
 		if v1 == nil {
 			body = nil
 		} else {
@@ -299,7 +297,7 @@ func walkrange(n *Node) {
 			a = Nod(OAS2, nil, nil)
 			a.List.Set([]*Node{hv1, hv2})
 			fn := syslook("stringiter2")
-			a.Rlist.Set([]*Node{mkcall1(fn, fn.Type.Results(), nil, ha, hv1)})
+			a.Rlist.Set1(mkcall1(fn, fn.Type.Results(), nil, ha, hv1))
 		}
 
 		n.Left = Nod(ONE, hv1, Nodintconst(0))

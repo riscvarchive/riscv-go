@@ -5,6 +5,7 @@
 package gc
 
 import (
+	"bufio"
 	"bytes"
 	"cmd/internal/obj"
 	"fmt"
@@ -201,8 +202,11 @@ func reexportdep(n *Node) {
 		OMAKECHAN:
 		t := n.Type
 
-		if t.Sym == nil && t.Type != nil {
-			t = t.Type
+		switch t.Etype {
+		case TARRAY, TCHAN, TPTR32, TPTR64:
+			if t.Sym == nil {
+				t = t.Type
+			}
 		}
 		if t != nil && t.Sym != nil && t.Sym.Def != nil && !exportedsym(t.Sym) {
 			if Debug['E'] != 0 {
@@ -231,9 +235,9 @@ func dumpexportconst(s *Sym) {
 	dumpexporttype(t)
 
 	if t != nil && !isideal(t) {
-		exportf("\tconst %v %v = %v\n", Sconv(s, obj.FmtSharp), Tconv(t, obj.FmtSharp), Vconv(n.Val(), obj.FmtSharp))
+		exportf("\tconst %v %v = %v\n", Sconv(s, FmtSharp), Tconv(t, FmtSharp), Vconv(n.Val(), FmtSharp))
 	} else {
-		exportf("\tconst %v = %v\n", Sconv(s, obj.FmtSharp), Vconv(n.Val(), obj.FmtSharp))
+		exportf("\tconst %v = %v\n", Sconv(s, FmtSharp), Vconv(n.Val(), FmtSharp))
 	}
 }
 
@@ -257,19 +261,19 @@ func dumpexportvar(s *Sym) {
 			}
 
 			// NOTE: The space after %#S here is necessary for ld's export data parser.
-			exportf("\tfunc %v %v { %v }\n", Sconv(s, obj.FmtSharp), Tconv(t, obj.FmtShort|obj.FmtSharp), Hconv(n.Func.Inl, obj.FmtSharp|obj.FmtBody))
+			exportf("\tfunc %v %v { %v }\n", Sconv(s, FmtSharp), Tconv(t, FmtShort|FmtSharp), Hconv(n.Func.Inl, FmtSharp|FmtBody))
 
 			reexportdeplist(n.Func.Inl)
 		} else {
-			exportf("\tfunc %v %v\n", Sconv(s, obj.FmtSharp), Tconv(t, obj.FmtShort|obj.FmtSharp))
+			exportf("\tfunc %v %v\n", Sconv(s, FmtSharp), Tconv(t, FmtShort|FmtSharp))
 		}
 	} else {
-		exportf("\tvar %v %v\n", Sconv(s, obj.FmtSharp), Tconv(t, obj.FmtSharp))
+		exportf("\tvar %v %v\n", Sconv(s, FmtSharp), Tconv(t, FmtSharp))
 	}
 }
 
 // methodbyname sorts types by symbol name.
-type methodbyname []*Type
+type methodbyname []*Field
 
 func (x methodbyname) Len() int           { return len(x) }
 func (x methodbyname) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
@@ -284,25 +288,38 @@ func dumpexporttype(t *Type) {
 	}
 	t.Printed = true
 
-	if t.Sym != nil && t.Etype != TFIELD {
+	if t.Sym != nil {
 		dumppkg(t.Sym.Pkg)
 	}
 
-	dumpexporttype(t.Type)
-	dumpexporttype(t.Down)
+	switch t.Etype {
+	case TSTRUCT, TINTER:
+		for f, it := IterFields(t); f != nil; f = it.Next() {
+			dumpexporttype(f.Type)
+		}
+	case TFUNC:
+		dumpexporttype(t.Recvs())
+		dumpexporttype(t.Results())
+		dumpexporttype(t.Params())
+	case TMAP:
+		dumpexporttype(t.Type)
+		dumpexporttype(t.Down) // key
+	case TARRAY, TCHAN, TPTR32, TPTR64:
+		dumpexporttype(t.Type)
+	}
 
-	if t.Sym == nil || t.Etype == TFIELD {
+	if t.Sym == nil {
 		return
 	}
 
-	var m []*Type
-	for f := t.Method; f != nil; f = f.Down {
-		dumpexporttype(f)
+	var m []*Field
+	for f, it := IterMethods(t); f != nil; f = it.Next() {
+		dumpexporttype(f.Type)
 		m = append(m, f)
 	}
 	sort.Sort(methodbyname(m))
 
-	exportf("\ttype %v %v\n", Sconv(t.Sym, obj.FmtSharp), Tconv(t, obj.FmtSharp|obj.FmtLong))
+	exportf("\ttype %v %v\n", Sconv(t.Sym, FmtSharp), Tconv(t, FmtSharp|FmtLong))
 	for _, f := range m {
 		if f.Nointerface {
 			exportf("\t//go:nointerface\n")
@@ -314,10 +331,10 @@ func dumpexporttype(t *Type) {
 			if Debug['l'] < 2 {
 				typecheckinl(f.Type.Nname)
 			}
-			exportf("\tfunc (%v) %v %v { %v }\n", Tconv(f.Type.Recv(), obj.FmtSharp), Sconv(f.Sym, obj.FmtShort|obj.FmtByte|obj.FmtSharp), Tconv(f.Type, obj.FmtShort|obj.FmtSharp), Hconv(f.Type.Nname.Func.Inl, obj.FmtSharp))
+			exportf("\tfunc %v %v %v { %v }\n", Tconv(f.Type.Recvs(), FmtSharp), Sconv(f.Sym, FmtShort|FmtByte|FmtSharp), Tconv(f.Type, FmtShort|FmtSharp), Hconv(f.Type.Nname.Func.Inl, FmtSharp))
 			reexportdeplist(f.Type.Nname.Func.Inl)
 		} else {
-			exportf("\tfunc (%v) %v %v\n", Tconv(f.Type.Recv(), obj.FmtSharp), Sconv(f.Sym, obj.FmtShort|obj.FmtByte|obj.FmtSharp), Tconv(f.Type, obj.FmtShort|obj.FmtSharp))
+			exportf("\tfunc %v %v %v\n", Tconv(f.Type.Recvs(), FmtSharp), Sconv(f.Sym, FmtShort|FmtByte|FmtSharp), Tconv(f.Type, FmtShort|FmtSharp))
 		}
 	}
 }
@@ -387,7 +404,7 @@ func dumpexport() {
 			pkgMap = make(map[string]*Pkg)
 			pkgs = nil
 			importpkg = mkpkg("")
-			Import(obj.Binitr(&copy)) // must not die
+			Import(bufio.NewReader(&copy)) // must not die
 			importpkg = nil
 			pkgs = savedPkgs
 			pkgMap = savedPkgMap
@@ -535,7 +552,7 @@ func importvar(s *Sym, t *Type) {
 	declare(n, PEXTERN)
 
 	if Debug['E'] != 0 {
-		fmt.Printf("import var %v %v\n", s, Tconv(t, obj.FmtLong))
+		fmt.Printf("import var %v %v\n", s, Tconv(t, FmtLong))
 	}
 }
 
@@ -556,11 +573,11 @@ func importtype(pt *Type, t *Type) {
 		declare(n, PEXTERN)
 		checkwidth(pt)
 	} else if !Eqtype(pt.Orig, t) {
-		Yyerror("inconsistent definition for type %v during import\n\t%v (in %q)\n\t%v (in %q)", pt.Sym, Tconv(pt, obj.FmtLong), pt.Sym.Importdef.Path, Tconv(t, obj.FmtLong), importpkg.Path)
+		Yyerror("inconsistent definition for type %v during import\n\t%v (in %q)\n\t%v (in %q)", pt.Sym, Tconv(pt, FmtLong), pt.Sym.Importdef.Path, Tconv(t, FmtLong), importpkg.Path)
 	}
 
 	if Debug['E'] != 0 {
-		fmt.Printf("import type %v %v\n", pt, Tconv(t, obj.FmtLong))
+		fmt.Printf("import type %v %v\n", pt, Tconv(t, FmtLong))
 	}
 }
 
@@ -576,7 +593,7 @@ func dumpasmhdr() {
 		}
 		switch n.Op {
 		case OLITERAL:
-			fmt.Fprintf(b, "#define const_%s %v\n", n.Sym.Name, Vconv(n.Val(), obj.FmtSharp))
+			fmt.Fprintf(b, "#define const_%s %v\n", n.Sym.Name, Vconv(n.Val(), FmtSharp))
 
 		case OTYPE:
 			t := n.Type
@@ -584,7 +601,7 @@ func dumpasmhdr() {
 				break
 			}
 			fmt.Fprintf(b, "#define %s__size %d\n", t.Sym.Name, int(t.Width))
-			for t = t.Type; t != nil; t = t.Down {
+			for t, it := IterFields(t); t != nil; t = it.Next() {
 				if !isblanksym(t.Sym) {
 					fmt.Fprintf(b, "#define %s_%s %d\n", n.Sym.Name, t.Sym.Name, int(t.Width))
 				}

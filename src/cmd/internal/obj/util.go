@@ -129,18 +129,6 @@ func Bgetc(b *Biobuf) int {
 	return int(c)
 }
 
-func Bgetrune(b *Biobuf) int {
-	r, _, err := b.r.ReadRune()
-	if err != nil {
-		return -1
-	}
-	return int(r)
-}
-
-func Bungetrune(b *Biobuf) {
-	b.r.UnreadRune()
-}
-
 func (b *Biobuf) Read(p []byte) (int, error) {
 	return b.r.Read(p)
 }
@@ -156,17 +144,6 @@ func Brdline(b *Biobuf, delim int) string {
 	}
 	b.linelen = len(s)
 	return string(s)
-}
-
-func Brdstr(b *Biobuf, delim int, cut int) string {
-	s, err := b.r.ReadString(byte(delim))
-	if err != nil {
-		log.Fatalf("reading input: %v", err)
-	}
-	if len(s) > 0 && cut > 0 {
-		s = s[:len(s)-1]
-	}
-	return s
 }
 
 func Blinelen(b *Biobuf) int {
@@ -311,7 +288,7 @@ func (p *Prog) String() string {
 		sep = ", "
 	}
 	if p.From3Type() != TYPE_NONE {
-		if p.From3.Type == TYPE_CONST && (p.As == ADATA || p.As == ATEXT || p.As == AGLOBL) {
+		if p.From3.Type == TYPE_CONST && (p.As == ATEXT || p.As == AGLOBL) {
 			// Special case - omit $.
 			fmt.Fprintf(&buf, "%s%d", sep, p.From3.Offset)
 		} else {
@@ -406,7 +383,7 @@ func Dconv(p *Prog, a *Addr) string {
 		if a.Index != REG_NONE {
 			str += fmt.Sprintf("(%v*%d)", Rconv(int(a.Index)), int(a.Scale))
 		}
-		if p.As == ATYPE && a.Gotype != nil {
+		if p != nil && p.As == ATYPE && a.Gotype != nil {
 			str += fmt.Sprintf("%s", a.Gotype.Name)
 		}
 
@@ -627,7 +604,6 @@ var Anames = []string{
 	"XXX",
 	"CALL",
 	"CHECKNIL",
-	"DATA",
 	"DUFFCOPY",
 	"DUFFZERO",
 	"END",

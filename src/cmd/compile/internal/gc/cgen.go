@@ -361,7 +361,7 @@ func cgen_wb(n, res *Node, wb bool) {
 	default:
 		Dump("cgen", n)
 		Dump("cgen-res", res)
-		Fatalf("cgen: unknown op %v", Nconv(n, obj.FmtShort|obj.FmtSign))
+		Fatalf("cgen: unknown op %v", Nconv(n, FmtShort|FmtSign))
 
 	case OOROR, OANDAND,
 		OEQ, ONE,
@@ -592,7 +592,7 @@ func cgen_wb(n, res *Node, wb bool) {
 			break
 		}
 
-		Fatalf("cgen: OLEN: unknown type %v", Tconv(nl.Type, obj.FmtLong))
+		Fatalf("cgen: OLEN: unknown type %v", Tconv(nl.Type, FmtLong))
 
 	case OCAP:
 		if Istype(nl.Type, TCHAN) {
@@ -630,7 +630,7 @@ func cgen_wb(n, res *Node, wb bool) {
 			break
 		}
 
-		Fatalf("cgen: OCAP: unknown type %v", Tconv(nl.Type, obj.FmtLong))
+		Fatalf("cgen: OCAP: unknown type %v", Tconv(nl.Type, FmtLong))
 
 	case OADDR:
 		if n.Bounded { // let race detector avoid nil checks
@@ -802,7 +802,7 @@ func cgen_wbptr(n, res *Node) {
 	}
 
 	wbVar := syslook("writeBarrier")
-	wbEnabled := Nod(ODOT, wbVar, newname(wbVar.Type.Type.Sym))
+	wbEnabled := Nod(ODOT, wbVar, newname(wbVar.Type.Field(0).Sym))
 	wbEnabled = typecheck(&wbEnabled, Erv)
 	pbr := Thearch.Ginscmp(ONE, Types[TUINT8], wbEnabled, Nodintconst(0), -1)
 	Thearch.Gins(Thearch.Optoas(OAS, Types[Tptr]), &src, &dst)
@@ -1541,7 +1541,7 @@ func Agen(n *Node, res *Node) {
 
 	switch n.Op {
 	default:
-		Fatalf("agen: unknown op %v", Nconv(n, obj.FmtShort|obj.FmtSign))
+		Fatalf("agen: unknown op %v", Nconv(n, FmtShort|FmtSign))
 
 	case OCALLMETH:
 		cgen_callmeth(n, 0)
@@ -1856,7 +1856,7 @@ func bgenx(n, res *Node, wantTrue bool, likely int, to *obj.Prog) {
 	case OLITERAL:
 		// n is a constant.
 		if !Isconst(n, CTBOOL) {
-			Fatalf("bgen: non-bool const %v\n", Nconv(n, obj.FmtLong))
+			Fatalf("bgen: non-bool const %v\n", Nconv(n, FmtLong))
 		}
 		if genval {
 			Cgen(Nodbool(wantTrue == n.Val().U.(bool)), res)
@@ -2225,9 +2225,9 @@ func stkof(n *Node) int64 {
 			t = t.Type
 		}
 
-		t = t.Results().Field(0)
-		if t != nil {
-			return t.Width + Ctxt.FixedFrameSize()
+		f := t.Results().Field(0)
+		if f != nil {
+			return f.Width + Ctxt.FixedFrameSize()
 		}
 	}
 

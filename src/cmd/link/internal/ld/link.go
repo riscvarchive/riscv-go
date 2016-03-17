@@ -105,6 +105,7 @@ const (
 	AttrHidden
 	AttrOnList
 	AttrLocal
+	AttrReflectMethod
 )
 
 func (a Attribute) DuplicateOK() bool      { return a&AttrDuplicateOK != 0 }
@@ -118,6 +119,7 @@ func (a Attribute) StackCheck() bool       { return a&AttrStackCheck != 0 }
 func (a Attribute) Hidden() bool           { return a&AttrHidden != 0 }
 func (a Attribute) OnList() bool           { return a&AttrOnList != 0 }
 func (a Attribute) Local() bool            { return a&AttrLocal != 0 }
+func (a Attribute) ReflectMethod() bool    { return a&AttrReflectMethod != 0 }
 
 func (a Attribute) CgoExport() bool {
 	return a.CgoExportDynamic() || a.CgoExportStatic()
@@ -159,17 +161,23 @@ type Shlib struct {
 }
 
 type Link struct {
-	Thechar    int32
-	Thestring  string
-	Goarm      int32
-	Headtype   int
-	Arch       *LinkArch
-	Debugasm   int32
-	Debugvlog  int32
-	Bso        *obj.Biobuf
-	Windows    int32
-	Goroot     string
-	Hash       map[symVer]*LSym
+	Thechar   int32
+	Thestring string
+	Goarm     int32
+	Headtype  int
+	Arch      *LinkArch
+	Debugasm  int32
+	Debugvlog int32
+	Bso       *obj.Biobuf
+	Windows   int32
+	Goroot    string
+
+	// Map for fast access of symbols based on name.
+	HashName map[string]*LSym
+	// Fallback map based also on version, for symbols
+	// with more than one version (see func _lookup).
+	HashVersion map[symVer]*LSym
+
 	Allsym     []*LSym
 	Nsymbol    int32
 	Tlsg       *LSym
@@ -186,6 +194,7 @@ type Link struct {
 	Filesyms   *LSym
 	Moduledata *LSym
 	LSymBatch  []LSym
+	CurRefs    []*LSym // List of symbol references for the file being read.
 }
 
 // The smallest possible offset from the hardware stack pointer to a local

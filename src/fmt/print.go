@@ -116,7 +116,6 @@ type pp struct {
 	reordered bool
 	// goodArgNum records whether the most recent reordering directive was valid.
 	goodArgNum bool
-	runeBuf    [utf8.UTFMax]byte
 	fmt        fmt
 }
 
@@ -340,29 +339,19 @@ func (p *pp) fmtBool(v bool, verb rune) {
 	}
 }
 
-// fmtC formats a rune for the 'c' format.
-func (p *pp) fmtC(c int64) {
-	r := rune(c) // Check for overflow.
-	if int64(r) != c {
-		r = utf8.RuneError
-	}
-	w := utf8.EncodeRune(p.runeBuf[0:utf8.UTFMax], r)
-	p.fmt.pad(p.runeBuf[0:w])
-}
-
 func (p *pp) fmtInt64(v int64, verb rune) {
 	switch verb {
 	case 'b':
 		p.fmt.integer(v, 2, signed, ldigits)
 	case 'c':
-		p.fmtC(v)
+		p.fmt.fmt_c(uint64(v))
 	case 'd', 'v':
 		p.fmt.integer(v, 10, signed, ldigits)
 	case 'o':
 		p.fmt.integer(v, 8, signed, ldigits)
 	case 'q':
 		if 0 <= v && v <= utf8.MaxRune {
-			p.fmt.fmt_qc(v)
+			p.fmt.fmt_qc(uint64(v))
 		} else {
 			p.badVerb(verb)
 		}
@@ -413,7 +402,7 @@ func (p *pp) fmtUint64(v uint64, verb rune) {
 	case 'b':
 		p.fmt.integer(int64(v), 2, unsigned, ldigits)
 	case 'c':
-		p.fmtC(int64(v))
+		p.fmt.fmt_c(v)
 	case 'd':
 		p.fmt.integer(int64(v), 10, unsigned, ldigits)
 	case 'v':
@@ -426,7 +415,7 @@ func (p *pp) fmtUint64(v uint64, verb rune) {
 		p.fmt.integer(int64(v), 8, unsigned, ldigits)
 	case 'q':
 		if 0 <= v && v <= utf8.MaxRune {
-			p.fmt.fmt_qc(int64(v))
+			p.fmt.fmt_qc(v)
 		} else {
 			p.badVerb(verb)
 		}
@@ -578,11 +567,6 @@ func (p *pp) fmtPointer(value reflect.Value, verb rune) {
 	}
 }
 
-var (
-	intBits     = reflect.TypeOf(0).Bits()
-	uintptrBits = reflect.TypeOf(uintptr(0)).Bits()
-)
-
 func (p *pp) catchPanic(arg interface{}, verb rune) {
 	if err := recover(); err != nil {
 		// If it's a nil pointer, just say "<nil>". The likeliest causes are a
@@ -705,10 +689,10 @@ func (p *pp) printArg(arg interface{}, verb rune, depth int) {
 	// %T (the value's type) and %p (its address) are special; we always do them first.
 	switch verb {
 	case 'T':
-		p.printArg(reflect.TypeOf(arg).String(), 's', 0)
+		p.fmt.fmt_s(reflect.TypeOf(arg).String())
 		return
 	case 'p':
-		p.fmtPointer(reflect.ValueOf(arg), verb)
+		p.fmtPointer(reflect.ValueOf(arg), 'p')
 		return
 	}
 
@@ -765,26 +749,16 @@ func (p *pp) printArg(arg interface{}, verb rune, depth int) {
 	p.arg = nil
 }
 
-// printValue is like printArg but starts with a reflect value, not an interface{} value.
+// printValue is similar to printArg but starts with a reflect value, not an interface{} value.
+// It does not handle 'p' and 'T' verbs because these should have been already handled by printArg.
 func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 	if !value.IsValid() {
 		switch verb {
-		case 'T', 'v':
+		case 'v':
 			p.buf.WriteString(nilAngleString)
 		default:
 			p.badVerb(verb)
 		}
-		return
-	}
-
-	// Special processing considerations.
-	// %T (the value's type) and %p (its address) are special; we always do them first.
-	switch verb {
-	case 'T':
-		p.printArg(value.Type().String(), 's', 0)
-		return
-	case 'p':
-		p.fmtPointer(value, verb)
 		return
 	}
 
@@ -894,12 +868,14 @@ BigSwitch:
 			p.printValue(value, verb, depth+1)
 		}
 	case reflect.Array, reflect.Slice:
-		// Byte slices are special:
+		// Byte arrays and slices are special:
 		// - Handle []byte (== []uint8) with fmtBytes.
 		// - Handle []T, where T is a named byte type, with fmtBytes only
-		//   for the s, q, an x verbs. For other verbs, T might be a
+		//   for the s, q, x and X verbs. For other verbs, T might be a
 		//   Stringer, so we use printValue to print each element.
-		if typ := f.Type(); typ.Elem().Kind() == reflect.Uint8 && (typ.Elem() == byteType || verb == 's' || verb == 'q' || verb == 'x') {
+		typ := f.Type()
+		if typ.Elem().Kind() == reflect.Uint8 &&
+			(typ.Elem() == byteType || verb == 's' || verb == 'q' || verb == 'x' || verb == 'X') {
 			var bytes []byte
 			if f.Kind() == reflect.Slice {
 				bytes = f.Bytes()
@@ -918,7 +894,7 @@ BigSwitch:
 			break
 		}
 		if p.fmt.sharpV {
-			p.buf.WriteString(value.Type().String())
+			p.buf.WriteString(typ.String())
 			if f.Kind() == reflect.Slice && f.IsNil() {
 				p.buf.WriteString(nilParenString)
 				break
@@ -1167,8 +1143,6 @@ func (p *pp) doPrintf(format string, a []interface{}) {
 			p.buf.WriteString(missingString)
 			continue
 		}
-		arg := a[argNum]
-		argNum++
 
 		if c == 'v' {
 			if p.fmt.sharp {
@@ -1188,23 +1162,26 @@ func (p *pp) doPrintf(format string, a []interface{}) {
 			p.fmt.zero = false
 		}
 
-		p.printArg(arg, c, 0)
+		p.printArg(a[argNum], c, 0)
+		argNum++
 	}
 
 	// Check for extra arguments unless the call accessed the arguments
 	// out of order, in which case it's too expensive to detect if they've all
 	// been used and arguably OK if they're not.
 	if !p.reordered && argNum < len(a) {
+		p.fmt.clearflags()
 		p.buf.WriteString(extraString)
-		for ; argNum < len(a); argNum++ {
-			arg := a[argNum]
-			if arg != nil {
+		for i, arg := range a[argNum:] {
+			if i > 0 {
+				p.buf.WriteString(commaSpaceString)
+			}
+			if arg == nil {
+				p.buf.WriteString(nilAngleString)
+			} else {
 				p.buf.WriteString(reflect.TypeOf(arg).String())
 				p.buf.WriteByte('=')
-			}
-			p.printArg(arg, 'v', 0)
-			if argNum+1 < len(a) {
-				p.buf.WriteString(commaSpaceString)
+				p.printArg(arg, 'v', 0)
 			}
 		}
 		p.buf.WriteByte(')')
