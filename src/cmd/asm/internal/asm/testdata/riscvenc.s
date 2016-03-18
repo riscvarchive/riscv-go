@@ -41,6 +41,12 @@ start:
 	// invisible stack pointer adjustment.)
 	JMP	start		// JMP	2	// 6ff01ff8
 	JAL	T0, start	// JAL T0, 2	// eff2dff7
+	BEQ	T0, T1, start	// BEQ T0, T1, 2	// e38c62f6
+	BNE	T0, T1, start	// BNE T0, T1, 2	// e39a62f6
+	BLT	T0, T1, start	// BLT T0, T1, 2	// e3c862f6
+	BGE	T0, T1, start	// BGE T0, T1, 2	// e3d662f6
+	BLTU	T0, T1, start	// BLTU T0, T1, 2	// e3e462f6
+	BGEU	T0, T1, start	// BGEU T0, T1, 2	// e3f262f6
 
 	SCALL					// 73000000
 	RDCYCLE	T0				// f32200c0

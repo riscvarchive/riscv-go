@@ -37,6 +37,9 @@ const (
 	// Instructions which get compiled as jump-and-link, including JMP.
 	type_jal
 
+	// Conditional branches.
+	type_branch
+
 	// System instructions (read counters).  These are encoded using a
 	// variant of the I-type encoding.
 	type_system
@@ -61,6 +64,13 @@ var optab = []Optab{
 	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
 
 	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
+
+	{ABEQ, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABNE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABLT, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABGE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABLTU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABGEU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
 
 	{AJAL, C_REGI, C_NONE, C_RELADDR, type_jal, 4},
 
@@ -330,6 +340,25 @@ func instr_i(ctxt *obj.Link, imm int64, rs1 int16, funct3 uint32, rd int16, opco
 	return immi(ctxt, imm, 12)<<20 | reg(ctxt, rs1)<<15 | funct3<<12 | reg(ctxt, rd)<<7 | opcode
 }
 
+// Encodes an SB-type instruction.
+func instr_sb(ctxt *obj.Link, imm64 int64, rs2 int16, rs1 int16, funct3 uint32, opcode uint32) uint32 {
+	if funct3>>3 != 0 {
+		ctxt.Diag("instr_sb: too large funct3 %#x", funct3)
+	}
+	if opcode>>7 != 0 {
+		ctxt.Diag("instr_sb: too large opcode %#x", opcode)
+	}
+	imm := immi(ctxt, imm64, 13)
+	return (imm>>12)<<31 |
+		((imm>>5)&0x3f)<<25 |
+		reg(ctxt, rs2)<<20 |
+		reg(ctxt, rs1)<<15 |
+		funct3<<12 |
+		((imm>>1)&0xf)<<8 |
+		((imm>>11)&0x1)<<7 |
+		opcode
+}
+
 // Encodes a UJ-type instruction.
 func instr_uj(ctxt *obj.Link, imm64 int64, rd int16, opcode uint32) uint32 {
 	if opcode>>7 != 0 {
@@ -359,16 +388,22 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	case type_regi2:
 		encoded := encode(o.as)
 		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+	case type_branch:
+		encoded := encode(o.as)
+		// Compute the branch offset.  We couldn't do this in progedit,
+		// because the offset is relative and we didn't know what the
+		// code would look like laid out.
+		offset := p.Pcond.Pc - p.Pc
+		// TODO(bbaren): Do something reasonable if offset is too large.
+		if offset%4 != 0 {
+			ctxt.Diag("asmout: misaligned branch offset %d", offset)
+		}
+		result = instr_sb(ctxt, offset, p.Reg, p.From.Reg, encoded.funct3, encoded.opcode)
 	case type_jal:
 		// Compute the jump offset.  We couldn't do this in progedit,
 		// because the offset is relative and we didn't know what the
 		// code would look like laid out.
-		var offset int64
-		if p.Pcond == nil {
-			offset = 0
-		} else {
-			offset = p.Pcond.Pc - p.Pc
-		}
+		offset := p.Pcond.Pc - p.Pc
 		// TODO(bbaren): Do something reasonable if immediate is too large.
 		if offset%4 != 0 {
 			ctxt.Diag("asmout: misaligned jump offset %d", offset)
