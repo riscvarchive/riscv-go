@@ -65,12 +65,12 @@ var optab = []Optab{
 
 	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
 
-	{ABEQ, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABNE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABLT, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABGE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABLTU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABGEU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
+	{ABEQ, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
+	{ABNE, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
+	{ABLT, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
+	{ABGE, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
+	{ABLTU, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
+	{ABGEU, C_REGI, C_REGI, C_RELADDR, type_branch, 8},
 
 	{AJAL, C_REGI, C_NONE, C_RELADDR, type_jal, 4},
 
@@ -373,9 +373,39 @@ func instr_uj(ctxt *obj.Link, imm64 int64, rd int16, opcode uint32) uint32 {
 		opcode
 }
 
+// Encodes a JAL.
+func instr_JAL(ctxt *obj.Link, rd int16, offset int64) uint32 {
+	if offset%4 != 0 {
+		ctxt.Diag("instr_JAL: misaligned jump offset %d", offset)
+	}
+	// TODO(bbaren): Do something reasonable if offset is too large.
+	return instr_uj(ctxt, offset, rd, encode(AJAL).opcode)
+}
+
+// Inverts a branch.
+func invbr(i obj.As) obj.As {
+	switch i {
+	case ABEQ:
+		return ABNE
+	case ABNE:
+		return ABEQ
+	case ABLT:
+		return ABGE
+	case ABGE:
+		return ABLT
+	case ABLTU:
+		return ABGEU
+	case ABGEU:
+		return ABLTU
+	}
+	return obj.ANOP
+}
+
 // Encodes a machine instruction.
-func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
-	result := uint32(0)
+func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) [2]uint32 {
+	nop_encoding := encode(AADDI)
+	nop := instr_i(ctxt, 0, REG_ZERO, nop_encoding.funct3, REG_ZERO, nop_encoding.opcode)
+	result := [2]uint32{nop, nop}
 	switch o.type_ {
 	default:
 		ctxt.Diag("unknown type %d", o.type_)
@@ -384,21 +414,28 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 	case type_regi_immi:
 		encoded := encode(o.as)
 		// TODO(bbaren): Do something reasonable if immediate is too large.
-		result = instr_i(ctxt, p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result[0] = instr_i(ctxt, p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_regi2:
 		encoded := encode(o.as)
-		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
+		result[0] = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
 	case type_branch:
 		encoded := encode(o.as)
 		// Compute the branch offset.  We couldn't do this in progedit,
 		// because the offset is relative and we didn't know what the
 		// code would look like laid out.
 		offset := p.Pcond.Pc - p.Pc
-		// TODO(bbaren): Do something reasonable if offset is too large.
 		if offset%4 != 0 {
 			ctxt.Diag("asmout: misaligned branch offset %d", offset)
 		}
-		result = instr_sb(ctxt, offset, p.Reg, p.From.Reg, encoded.funct3, encoded.opcode)
+		if -4096 <= offset && offset < 4096 {
+			result[0] = instr_sb(ctxt, offset, p.Reg, p.From.Reg, encoded.funct3, encoded.opcode)
+		} else {
+			// Offset is too large to fit in a branch.  Emit a jump
+			// instead.
+			encoded = encode(invbr(o.as))
+			result[0] = instr_sb(ctxt, 8, p.Reg, p.From.Reg, encoded.funct3, encoded.opcode)
+			result[1] = instr_JAL(ctxt, REG_ZERO, offset-4)
+		}
 	case type_jal:
 		// Compute the jump offset.  We couldn't do this in progedit,
 		// because the offset is relative and we didn't know what the
@@ -408,14 +445,14 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 		if offset%4 != 0 {
 			ctxt.Diag("asmout: misaligned jump offset %d", offset)
 		}
-		result = instr_uj(ctxt, offset, p.From.Reg, encode(o.as).opcode)
+		result[0] = instr_JAL(ctxt, p.From.Reg, offset)
 	case type_system:
 		encoded := encode(o.as)
 		switch p.To.Class {
 		case C_REGI:
-			result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
+			result[0] = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
 		case C_NONE:
-			result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, REG_ZERO, encoded.opcode)
+			result[0] = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, REG_ZERO, encoded.opcode)
 		default:
 			ctxt.Diag("unknown instruction %d", o.as)
 		}
@@ -470,8 +507,11 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 
 		o := oplook(ctxt, p)
 		if o.size != 0 {
-			ctxt.Arch.ByteOrder.PutUint32(bp, asmout(ctxt, p, o))
-			bp = bp[4:]
+			bytes := asmout(ctxt, p, o)
+			for i := int8(0); i < o.size/4; i++ {
+				ctxt.Arch.ByteOrder.PutUint32(bp, bytes[i])
+				bp = bp[4:]
+			}
 		}
 	}
 }
