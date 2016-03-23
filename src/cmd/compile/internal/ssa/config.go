@@ -117,6 +117,11 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.PtrSize = 4
 		c.lowerBlock = rewriteBlockAMD64
 		c.lowerValue = rewriteValueAMD64 // TODO(khr): full 32-bit support
+	case "riscv":
+		c.IntSize = 8
+		c.PtrSize = 8
+		c.lowerBlock = rewriteBlockRISCV
+		c.lowerValue = rewriteValueRISCV
 	default:
 		fe.Unimplementedf(0, "arch %s not implemented", arch)
 	}

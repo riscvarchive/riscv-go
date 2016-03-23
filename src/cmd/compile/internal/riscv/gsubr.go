@@ -14,5 +14,5 @@ import (
 func gins(as obj.As, f *gc.Node, t *gc.Node) *obj.Prog {
 	log.Printf("gins")
 
-	return gc.Prog(obj.AJMP) // dummy return
+	return gc.Ctxt.NewProg() // dummy return
 }
