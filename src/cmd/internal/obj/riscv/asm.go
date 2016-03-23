@@ -262,7 +262,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		case obj.ARET:
 			// Function exit. Stack teardown and exit.
 			q = p
-			q = obj.Appendp(ctxt, q)
 			q.As = AADDI
 			q.From.Type = obj.TYPE_CONST
 			q.From.Offset = stackSize
@@ -277,11 +276,13 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			aclass(ctxt, &q.To)
 
 			q = obj.Appendp(ctxt, q)
-			q.As = AJAL
+			q.As = AJALR
 			q.From.Type = obj.TYPE_REG
-			q.From.Reg = REG_RA
-			q.To.Type = obj.TYPE_REG
-			q.To.Reg = REG_ZERO
+			q.From.Reg = REG_ZERO
+			q.From3 = &obj.Addr{}
+			q.From3.Class = C_NONE
+			q.To.Type = obj.TYPE_MEM
+			q.To.Reg = REG_RA
 		}
 		aclass(ctxt, &q.From)
 		aclass(ctxt, q.From3)
