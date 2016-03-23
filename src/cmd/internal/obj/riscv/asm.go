@@ -37,6 +37,9 @@ const (
 	// Instructions which get compiled as jump-and-link, including JMP.
 	type_jal
 
+	// Instructions which get compiled as register jump-and-link.
+	type_jalr
+
 	// Conditional branches.
 	type_branch
 
@@ -72,7 +75,11 @@ var optab = []Optab{
 	{ABLTU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
 	{ABGEU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
 
+	// Note that these are backwards from what one would expect.
+	// The link destination register is in src1 because the Go toolchain
+	// requires the jump address to be in dest.
 	{AJAL, C_REGI, C_NONE, C_RELADDR, type_jal, 4},
+	{AJALR, C_REGI, C_NONE, C_MEM, type_jalr, 4},
 
 	{AADDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
 	{ASLLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
@@ -125,7 +132,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// There is no third operand for this operation.  Create one to
 		// make other code have to deal with fewer special cases.
 		p.From3 = &obj.Addr{}
-		if p.As != AJAL && (p.From.Class == C_REGI || p.From.Class == C_IMMI) {
+		if p.As != AJAL && p.As != AJALR && (p.From.Class == C_REGI || p.From.Class == C_IMMI) {
 			p.From3.Reg = p.To.Reg
 			p.From3.Class = C_REGI
 		} else {
@@ -409,6 +416,15 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
 			ctxt.Diag("asmout: misaligned jump offset %d", offset)
 		}
 		result = instr_uj(ctxt, offset, p.From.Reg, encode(o.as).opcode)
+	case type_jalr:
+		encoded := encode(o.as)
+		if p.From.Name != obj.NAME_NONE {
+			ctxt.Diag("asmout: unsupported symbol in addr: %#v", p)
+		}
+		if p.From.Scale != 0 {
+			ctxt.Diag("asmout: unsupported scale in addr: %#v", p)
+		}
+		result = instr_i(ctxt, p.To.Offset, p.To.Reg, encoded.funct3, p.From.Reg, encoded.opcode)
 	case type_system:
 		encoded := encode(o.as)
 		switch p.To.Class {
