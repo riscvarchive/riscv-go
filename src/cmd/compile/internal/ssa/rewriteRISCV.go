@@ -8,10 +8,470 @@ import "math"
 var _ = math.MinInt8 // in case not otherwise used
 func rewriteValueRISCV(v *Value, config *Config) bool {
 	switch v.Op {
+	case OpAdd16:
+		return rewriteValueRISCV_OpAdd16(v, config)
+	case OpAdd32:
+		return rewriteValueRISCV_OpAdd32(v, config)
+	case OpAdd32F:
+		return rewriteValueRISCV_OpAdd32F(v, config)
 	case OpAdd64:
 		return rewriteValueRISCV_OpAdd64(v, config)
+	case OpAdd64F:
+		return rewriteValueRISCV_OpAdd64F(v, config)
+	case OpAdd8:
+		return rewriteValueRISCV_OpAdd8(v, config)
+	case OpAddPtr:
+		return rewriteValueRISCV_OpAddPtr(v, config)
+	case OpAddr:
+		return rewriteValueRISCV_OpAddr(v, config)
+	case OpAnd16:
+		return rewriteValueRISCV_OpAnd16(v, config)
+	case OpAnd32:
+		return rewriteValueRISCV_OpAnd32(v, config)
+	case OpAnd64:
+		return rewriteValueRISCV_OpAnd64(v, config)
+	case OpAnd8:
+		return rewriteValueRISCV_OpAnd8(v, config)
+	case OpAvg64u:
+		return rewriteValueRISCV_OpAvg64u(v, config)
+	case OpCom16:
+		return rewriteValueRISCV_OpCom16(v, config)
+	case OpCom32:
+		return rewriteValueRISCV_OpCom32(v, config)
+	case OpCom64:
+		return rewriteValueRISCV_OpCom64(v, config)
+	case OpCom8:
+		return rewriteValueRISCV_OpCom8(v, config)
+	case OpCvt32Fto32:
+		return rewriteValueRISCV_OpCvt32Fto32(v, config)
+	case OpCvt32Fto64:
+		return rewriteValueRISCV_OpCvt32Fto64(v, config)
+	case OpCvt32Fto64F:
+		return rewriteValueRISCV_OpCvt32Fto64F(v, config)
+	case OpCvt32to32F:
+		return rewriteValueRISCV_OpCvt32to32F(v, config)
+	case OpCvt32to64F:
+		return rewriteValueRISCV_OpCvt32to64F(v, config)
+	case OpCvt64Fto32:
+		return rewriteValueRISCV_OpCvt64Fto32(v, config)
+	case OpCvt64Fto32F:
+		return rewriteValueRISCV_OpCvt64Fto32F(v, config)
+	case OpCvt64Fto64:
+		return rewriteValueRISCV_OpCvt64Fto64(v, config)
+	case OpCvt64to32F:
+		return rewriteValueRISCV_OpCvt64to32F(v, config)
+	case OpCvt64to64F:
+		return rewriteValueRISCV_OpCvt64to64F(v, config)
+	case OpDiv16:
+		return rewriteValueRISCV_OpDiv16(v, config)
+	case OpDiv16u:
+		return rewriteValueRISCV_OpDiv16u(v, config)
+	case OpDiv32:
+		return rewriteValueRISCV_OpDiv32(v, config)
+	case OpDiv32F:
+		return rewriteValueRISCV_OpDiv32F(v, config)
+	case OpDiv32u:
+		return rewriteValueRISCV_OpDiv32u(v, config)
+	case OpDiv64:
+		return rewriteValueRISCV_OpDiv64(v, config)
+	case OpDiv64F:
+		return rewriteValueRISCV_OpDiv64F(v, config)
+	case OpDiv64u:
+		return rewriteValueRISCV_OpDiv64u(v, config)
+	case OpDiv8:
+		return rewriteValueRISCV_OpDiv8(v, config)
+	case OpDiv8u:
+		return rewriteValueRISCV_OpDiv8u(v, config)
+	case OpEq16:
+		return rewriteValueRISCV_OpEq16(v, config)
+	case OpEq32:
+		return rewriteValueRISCV_OpEq32(v, config)
+	case OpEq32F:
+		return rewriteValueRISCV_OpEq32F(v, config)
+	case OpEq64:
+		return rewriteValueRISCV_OpEq64(v, config)
+	case OpEq64F:
+		return rewriteValueRISCV_OpEq64F(v, config)
+	case OpEq8:
+		return rewriteValueRISCV_OpEq8(v, config)
+	case OpEqPtr:
+		return rewriteValueRISCV_OpEqPtr(v, config)
+	case OpGeq16:
+		return rewriteValueRISCV_OpGeq16(v, config)
+	case OpGeq16U:
+		return rewriteValueRISCV_OpGeq16U(v, config)
+	case OpGeq32:
+		return rewriteValueRISCV_OpGeq32(v, config)
+	case OpGeq32F:
+		return rewriteValueRISCV_OpGeq32F(v, config)
+	case OpGeq32U:
+		return rewriteValueRISCV_OpGeq32U(v, config)
+	case OpGeq64:
+		return rewriteValueRISCV_OpGeq64(v, config)
+	case OpGeq64F:
+		return rewriteValueRISCV_OpGeq64F(v, config)
+	case OpGeq64U:
+		return rewriteValueRISCV_OpGeq64U(v, config)
+	case OpGeq8:
+		return rewriteValueRISCV_OpGeq8(v, config)
+	case OpGeq8U:
+		return rewriteValueRISCV_OpGeq8U(v, config)
+	case OpGreater16:
+		return rewriteValueRISCV_OpGreater16(v, config)
+	case OpGreater16U:
+		return rewriteValueRISCV_OpGreater16U(v, config)
+	case OpGreater32:
+		return rewriteValueRISCV_OpGreater32(v, config)
+	case OpGreater32F:
+		return rewriteValueRISCV_OpGreater32F(v, config)
+	case OpGreater32U:
+		return rewriteValueRISCV_OpGreater32U(v, config)
+	case OpGreater64:
+		return rewriteValueRISCV_OpGreater64(v, config)
+	case OpGreater64F:
+		return rewriteValueRISCV_OpGreater64F(v, config)
+	case OpGreater64U:
+		return rewriteValueRISCV_OpGreater64U(v, config)
+	case OpGreater8:
+		return rewriteValueRISCV_OpGreater8(v, config)
+	case OpGreater8U:
+		return rewriteValueRISCV_OpGreater8U(v, config)
+	case OpHmul16:
+		return rewriteValueRISCV_OpHmul16(v, config)
+	case OpHmul16u:
+		return rewriteValueRISCV_OpHmul16u(v, config)
+	case OpHmul32:
+		return rewriteValueRISCV_OpHmul32(v, config)
+	case OpHmul32u:
+		return rewriteValueRISCV_OpHmul32u(v, config)
+	case OpHmul64:
+		return rewriteValueRISCV_OpHmul64(v, config)
+	case OpHmul64u:
+		return rewriteValueRISCV_OpHmul64u(v, config)
+	case OpHmul8:
+		return rewriteValueRISCV_OpHmul8(v, config)
+	case OpHmul8u:
+		return rewriteValueRISCV_OpHmul8u(v, config)
+	case OpLeq16:
+		return rewriteValueRISCV_OpLeq16(v, config)
+	case OpLeq16U:
+		return rewriteValueRISCV_OpLeq16U(v, config)
+	case OpLeq32:
+		return rewriteValueRISCV_OpLeq32(v, config)
+	case OpLeq32F:
+		return rewriteValueRISCV_OpLeq32F(v, config)
+	case OpLeq32U:
+		return rewriteValueRISCV_OpLeq32U(v, config)
+	case OpLeq64:
+		return rewriteValueRISCV_OpLeq64(v, config)
+	case OpLeq64F:
+		return rewriteValueRISCV_OpLeq64F(v, config)
+	case OpLeq64U:
+		return rewriteValueRISCV_OpLeq64U(v, config)
+	case OpLeq8:
+		return rewriteValueRISCV_OpLeq8(v, config)
+	case OpLeq8U:
+		return rewriteValueRISCV_OpLeq8U(v, config)
+	case OpLess16:
+		return rewriteValueRISCV_OpLess16(v, config)
+	case OpLess16U:
+		return rewriteValueRISCV_OpLess16U(v, config)
+	case OpLess32:
+		return rewriteValueRISCV_OpLess32(v, config)
+	case OpLess32F:
+		return rewriteValueRISCV_OpLess32F(v, config)
+	case OpLess32U:
+		return rewriteValueRISCV_OpLess32U(v, config)
+	case OpLess64:
+		return rewriteValueRISCV_OpLess64(v, config)
+	case OpLess64F:
+		return rewriteValueRISCV_OpLess64F(v, config)
+	case OpLess64U:
+		return rewriteValueRISCV_OpLess64U(v, config)
+	case OpLess8:
+		return rewriteValueRISCV_OpLess8(v, config)
+	case OpLess8U:
+		return rewriteValueRISCV_OpLess8U(v, config)
+	case OpLoad:
+		return rewriteValueRISCV_OpLoad(v, config)
+	case OpLrot16:
+		return rewriteValueRISCV_OpLrot16(v, config)
+	case OpLrot32:
+		return rewriteValueRISCV_OpLrot32(v, config)
+	case OpLrot64:
+		return rewriteValueRISCV_OpLrot64(v, config)
+	case OpLrot8:
+		return rewriteValueRISCV_OpLrot8(v, config)
+	case OpLsh16x16:
+		return rewriteValueRISCV_OpLsh16x16(v, config)
+	case OpLsh16x32:
+		return rewriteValueRISCV_OpLsh16x32(v, config)
+	case OpLsh16x64:
+		return rewriteValueRISCV_OpLsh16x64(v, config)
+	case OpLsh16x8:
+		return rewriteValueRISCV_OpLsh16x8(v, config)
+	case OpLsh32x16:
+		return rewriteValueRISCV_OpLsh32x16(v, config)
+	case OpLsh32x32:
+		return rewriteValueRISCV_OpLsh32x32(v, config)
+	case OpLsh32x64:
+		return rewriteValueRISCV_OpLsh32x64(v, config)
+	case OpLsh32x8:
+		return rewriteValueRISCV_OpLsh32x8(v, config)
+	case OpLsh64x16:
+		return rewriteValueRISCV_OpLsh64x16(v, config)
+	case OpLsh64x32:
+		return rewriteValueRISCV_OpLsh64x32(v, config)
+	case OpLsh64x64:
+		return rewriteValueRISCV_OpLsh64x64(v, config)
+	case OpLsh64x8:
+		return rewriteValueRISCV_OpLsh64x8(v, config)
+	case OpLsh8x16:
+		return rewriteValueRISCV_OpLsh8x16(v, config)
+	case OpLsh8x32:
+		return rewriteValueRISCV_OpLsh8x32(v, config)
+	case OpLsh8x64:
+		return rewriteValueRISCV_OpLsh8x64(v, config)
+	case OpLsh8x8:
+		return rewriteValueRISCV_OpLsh8x8(v, config)
+	case OpMod16:
+		return rewriteValueRISCV_OpMod16(v, config)
+	case OpMod16u:
+		return rewriteValueRISCV_OpMod16u(v, config)
+	case OpMod32:
+		return rewriteValueRISCV_OpMod32(v, config)
+	case OpMod32u:
+		return rewriteValueRISCV_OpMod32u(v, config)
+	case OpMod64:
+		return rewriteValueRISCV_OpMod64(v, config)
+	case OpMod64u:
+		return rewriteValueRISCV_OpMod64u(v, config)
+	case OpMod8:
+		return rewriteValueRISCV_OpMod8(v, config)
+	case OpMod8u:
+		return rewriteValueRISCV_OpMod8u(v, config)
+	case OpMul16:
+		return rewriteValueRISCV_OpMul16(v, config)
+	case OpMul32:
+		return rewriteValueRISCV_OpMul32(v, config)
+	case OpMul32F:
+		return rewriteValueRISCV_OpMul32F(v, config)
+	case OpMul64:
+		return rewriteValueRISCV_OpMul64(v, config)
+	case OpMul64F:
+		return rewriteValueRISCV_OpMul64F(v, config)
+	case OpMul8:
+		return rewriteValueRISCV_OpMul8(v, config)
+	case OpNeg16:
+		return rewriteValueRISCV_OpNeg16(v, config)
+	case OpNeg32:
+		return rewriteValueRISCV_OpNeg32(v, config)
+	case OpNeg32F:
+		return rewriteValueRISCV_OpNeg32F(v, config)
+	case OpNeg64:
+		return rewriteValueRISCV_OpNeg64(v, config)
+	case OpNeg64F:
+		return rewriteValueRISCV_OpNeg64F(v, config)
+	case OpNeg8:
+		return rewriteValueRISCV_OpNeg8(v, config)
+	case OpNeq16:
+		return rewriteValueRISCV_OpNeq16(v, config)
+	case OpNeq32:
+		return rewriteValueRISCV_OpNeq32(v, config)
+	case OpNeq32F:
+		return rewriteValueRISCV_OpNeq32F(v, config)
+	case OpNeq64:
+		return rewriteValueRISCV_OpNeq64(v, config)
+	case OpNeq64F:
+		return rewriteValueRISCV_OpNeq64F(v, config)
+	case OpNeq8:
+		return rewriteValueRISCV_OpNeq8(v, config)
+	case OpNeqPtr:
+		return rewriteValueRISCV_OpNeqPtr(v, config)
 	case OpNilCheck:
 		return rewriteValueRISCV_OpNilCheck(v, config)
+	case OpOr16:
+		return rewriteValueRISCV_OpOr16(v, config)
+	case OpOr32:
+		return rewriteValueRISCV_OpOr32(v, config)
+	case OpOr64:
+		return rewriteValueRISCV_OpOr64(v, config)
+	case OpOr8:
+		return rewriteValueRISCV_OpOr8(v, config)
+	case OpRsh16Ux16:
+		return rewriteValueRISCV_OpRsh16Ux16(v, config)
+	case OpRsh16Ux32:
+		return rewriteValueRISCV_OpRsh16Ux32(v, config)
+	case OpRsh16Ux64:
+		return rewriteValueRISCV_OpRsh16Ux64(v, config)
+	case OpRsh16Ux8:
+		return rewriteValueRISCV_OpRsh16Ux8(v, config)
+	case OpRsh16x16:
+		return rewriteValueRISCV_OpRsh16x16(v, config)
+	case OpRsh16x32:
+		return rewriteValueRISCV_OpRsh16x32(v, config)
+	case OpRsh16x64:
+		return rewriteValueRISCV_OpRsh16x64(v, config)
+	case OpRsh16x8:
+		return rewriteValueRISCV_OpRsh16x8(v, config)
+	case OpRsh32Ux16:
+		return rewriteValueRISCV_OpRsh32Ux16(v, config)
+	case OpRsh32Ux32:
+		return rewriteValueRISCV_OpRsh32Ux32(v, config)
+	case OpRsh32Ux64:
+		return rewriteValueRISCV_OpRsh32Ux64(v, config)
+	case OpRsh32Ux8:
+		return rewriteValueRISCV_OpRsh32Ux8(v, config)
+	case OpRsh32x16:
+		return rewriteValueRISCV_OpRsh32x16(v, config)
+	case OpRsh32x32:
+		return rewriteValueRISCV_OpRsh32x32(v, config)
+	case OpRsh32x64:
+		return rewriteValueRISCV_OpRsh32x64(v, config)
+	case OpRsh32x8:
+		return rewriteValueRISCV_OpRsh32x8(v, config)
+	case OpRsh64Ux16:
+		return rewriteValueRISCV_OpRsh64Ux16(v, config)
+	case OpRsh64Ux32:
+		return rewriteValueRISCV_OpRsh64Ux32(v, config)
+	case OpRsh64Ux64:
+		return rewriteValueRISCV_OpRsh64Ux64(v, config)
+	case OpRsh64Ux8:
+		return rewriteValueRISCV_OpRsh64Ux8(v, config)
+	case OpRsh64x16:
+		return rewriteValueRISCV_OpRsh64x16(v, config)
+	case OpRsh64x32:
+		return rewriteValueRISCV_OpRsh64x32(v, config)
+	case OpRsh64x64:
+		return rewriteValueRISCV_OpRsh64x64(v, config)
+	case OpRsh64x8:
+		return rewriteValueRISCV_OpRsh64x8(v, config)
+	case OpRsh8Ux16:
+		return rewriteValueRISCV_OpRsh8Ux16(v, config)
+	case OpRsh8Ux32:
+		return rewriteValueRISCV_OpRsh8Ux32(v, config)
+	case OpRsh8Ux64:
+		return rewriteValueRISCV_OpRsh8Ux64(v, config)
+	case OpRsh8Ux8:
+		return rewriteValueRISCV_OpRsh8Ux8(v, config)
+	case OpRsh8x16:
+		return rewriteValueRISCV_OpRsh8x16(v, config)
+	case OpRsh8x32:
+		return rewriteValueRISCV_OpRsh8x32(v, config)
+	case OpRsh8x64:
+		return rewriteValueRISCV_OpRsh8x64(v, config)
+	case OpRsh8x8:
+		return rewriteValueRISCV_OpRsh8x8(v, config)
+	case OpSignExt16to32:
+		return rewriteValueRISCV_OpSignExt16to32(v, config)
+	case OpSignExt16to64:
+		return rewriteValueRISCV_OpSignExt16to64(v, config)
+	case OpSignExt32to64:
+		return rewriteValueRISCV_OpSignExt32to64(v, config)
+	case OpSignExt8to16:
+		return rewriteValueRISCV_OpSignExt8to16(v, config)
+	case OpSignExt8to32:
+		return rewriteValueRISCV_OpSignExt8to32(v, config)
+	case OpSignExt8to64:
+		return rewriteValueRISCV_OpSignExt8to64(v, config)
+	case OpSqrt:
+		return rewriteValueRISCV_OpSqrt(v, config)
+	case OpStore:
+		return rewriteValueRISCV_OpStore(v, config)
+	case OpSub16:
+		return rewriteValueRISCV_OpSub16(v, config)
+	case OpSub32:
+		return rewriteValueRISCV_OpSub32(v, config)
+	case OpSub32F:
+		return rewriteValueRISCV_OpSub32F(v, config)
+	case OpSub64:
+		return rewriteValueRISCV_OpSub64(v, config)
+	case OpSub64F:
+		return rewriteValueRISCV_OpSub64F(v, config)
+	case OpSub8:
+		return rewriteValueRISCV_OpSub8(v, config)
+	case OpSubPtr:
+		return rewriteValueRISCV_OpSubPtr(v, config)
+	case OpTrunc16to8:
+		return rewriteValueRISCV_OpTrunc16to8(v, config)
+	case OpTrunc32to16:
+		return rewriteValueRISCV_OpTrunc32to16(v, config)
+	case OpTrunc32to8:
+		return rewriteValueRISCV_OpTrunc32to8(v, config)
+	case OpTrunc64to16:
+		return rewriteValueRISCV_OpTrunc64to16(v, config)
+	case OpTrunc64to32:
+		return rewriteValueRISCV_OpTrunc64to32(v, config)
+	case OpTrunc64to8:
+		return rewriteValueRISCV_OpTrunc64to8(v, config)
+	case OpXor16:
+		return rewriteValueRISCV_OpXor16(v, config)
+	case OpXor32:
+		return rewriteValueRISCV_OpXor32(v, config)
+	case OpXor64:
+		return rewriteValueRISCV_OpXor64(v, config)
+	case OpXor8:
+		return rewriteValueRISCV_OpXor8(v, config)
+	case OpZeroExt16to32:
+		return rewriteValueRISCV_OpZeroExt16to32(v, config)
+	case OpZeroExt16to64:
+		return rewriteValueRISCV_OpZeroExt16to64(v, config)
+	case OpZeroExt32to64:
+		return rewriteValueRISCV_OpZeroExt32to64(v, config)
+	case OpZeroExt8to16:
+		return rewriteValueRISCV_OpZeroExt8to16(v, config)
+	case OpZeroExt8to32:
+		return rewriteValueRISCV_OpZeroExt8to32(v, config)
+	case OpZeroExt8to64:
+		return rewriteValueRISCV_OpZeroExt8to64(v, config)
+	}
+	return false
+}
+func rewriteValueRISCV_OpAdd16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Add16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAdd32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Add32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAdd32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Add32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
 	}
 	return false
 }
@@ -31,18 +491,3229 @@ func rewriteValueRISCV_OpAdd64(v *Value, config *Config) bool {
 	}
 	return false
 }
+func rewriteValueRISCV_OpAdd64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Add64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAdd8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Add8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAddPtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (AddPtr x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAddr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Addr {sym} base)
+	// cond:
+	// result: (MOVmem {sym} base)
+	for {
+		sym := v.Aux
+		base := v.Args[0]
+		v.reset(OpRISCVMOVmem)
+		v.Aux = sym
+		v.AddArg(base)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAnd16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (And16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAnd32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (And32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAnd64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (And64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAnd8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (And8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpAvg64u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Avg64u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCom16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Com16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCom32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Com32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCom64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Com64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCom8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Com8 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt32Fto32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt32Fto32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt32Fto64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt32Fto64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt32Fto64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt32Fto64F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt32to32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt32to32F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt32to64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt32to64F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt64Fto32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt64Fto32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt64Fto32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt64Fto32F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt64Fto64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt64Fto64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt64to32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt64to32F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpCvt64to64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Cvt64to64F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv16u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div16u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv32u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div32u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv64u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div64u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpDiv8u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Div8u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEq8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Eq8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (EqPtr x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq16U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq16U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq32U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq32U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq64U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq64U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq8  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGeq8U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Geq8U  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater16U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater16U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater32U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater32U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater64U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater64U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater8  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpGreater8U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Greater8U  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul16u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul16u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul32u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul32u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul64u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul64u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpHmul8u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Hmul8u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq16U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq16U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq32U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq32U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq64U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq64U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq8  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLeq8U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Leq8U  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess16U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less16U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess32U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less32U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess64U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less64U x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less8  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLess8U(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Less8U  x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Load ptr mem)
+	// cond:
+	// result: (LD ptr mem)
+	for {
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVLD)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLrot16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot16 x [c])
+	// cond:
+	// result: (ADD x [c])
+	for {
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AuxInt = c
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLrot32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot32 x [c])
+	// cond:
+	// result: (ADD x [c])
+	for {
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AuxInt = c
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLrot64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot64 x [c])
+	// cond:
+	// result: (ADD x [c])
+	for {
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AuxInt = c
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLrot8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot8 x [c])
+	// cond:
+	// result: (ADD x [c])
+	for {
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AuxInt = c
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh16x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh16x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh16x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh16x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh16x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh16x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh16x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh16x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh32x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh32x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh32x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh32x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh32x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh32x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh32x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh32x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh64x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh64x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh64x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh64x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh64x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh64x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh64x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh64x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh8x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh8x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh8x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh8x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh8x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh8x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpLsh8x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lsh8x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod16u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod16u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod32u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod32u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod64u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod64u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMod8u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mod8u x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMul8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Mul8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg32F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg64F x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeg8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg8 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeq8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neq8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpNeqPtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (NeqPtr x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
 func rewriteValueRISCV_OpNilCheck(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
 	// match: (NilCheck ptr mem)
 	// cond:
-	// result: (ADD ptr mem)
+	// result: (LoweredNilCheck ptr mem)
 	for {
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVLoweredNilCheck)
 		v.AddArg(ptr)
 		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpOr16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Or16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpOr32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Or32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpOr64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Or64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpOr8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Or8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16Ux16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16Ux16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16Ux32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16Ux32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16Ux64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16Ux64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16Ux8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16Ux8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh16x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh16x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32Ux16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32Ux16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32Ux32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32Ux32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32Ux64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32Ux64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32Ux8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32Ux8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh32x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh32x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64Ux16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64Ux16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64Ux32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64Ux32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64Ux64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64Ux64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64Ux8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64Ux8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh64x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh64x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8Ux16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8Ux16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8Ux32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8Ux32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8Ux64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8Ux64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8Ux8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8Ux8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8x16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8x16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8x32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8x32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8x64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8x64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRsh8x8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Rsh8x8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt16to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt16to32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt16to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt16to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt32to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt32to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt8to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt8to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSqrt(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sqrt x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Store ptr val mem)
+	// cond:
+	// result: (SD ptr val mem)
+	for {
+		ptr := v.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSD)
+		v.AddArg(ptr)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub32F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub64F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub64F x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSub8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sub8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpSubPtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SubPtr x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc16to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc16to8 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc32to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc32to16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc32to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc32to8 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc64to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc64to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpTrunc64to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to8 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpXor16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Xor16 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpXor32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Xor32 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpXor64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Xor64 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpXor8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Xor8 x y)
+	// cond:
+	// result: (ADD x y)
+	for {
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt16to32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt16to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt16to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt32to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt32to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt8to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to16 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt8to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to32 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpZeroExt8to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to64 x)
+	// cond:
+	// result: (ADD x x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVADD)
+		v.AddArg(x)
+		v.AddArg(x)
 		return true
 	}
 	return false

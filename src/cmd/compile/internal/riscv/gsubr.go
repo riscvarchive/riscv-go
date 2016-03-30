@@ -11,8 +11,13 @@ import (
 	"cmd/internal/obj"
 )
 
-func gins(as obj.As, f *gc.Node, t *gc.Node) *obj.Prog {
-	log.Printf("gins")
+// gins generates one instruction.
+func gins(as obj.As, from *gc.Node, to *gc.Node) *obj.Prog {
+	log.Printf("gins %v", as)
 
-	return gc.Ctxt.NewProg() // dummy return
+	p := gc.Prog(as)
+	gc.Naddr(&p.From, from)
+	gc.Naddr(&p.To, to)
+
+	return p
 }

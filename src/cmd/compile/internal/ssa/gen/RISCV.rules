@@ -2,7 +2,280 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// FIXME(prattmic): obviously these shouldn't all be ADD
+
+// Lowering arithmetic
 (Add64 x y) -> (ADD x y)
+(AddPtr x y) -> (ADD x y)
+(Add32 x y) -> (ADD x y)
+(Add16 x y) -> (ADD x y)
+(Add8 x y) -> (ADD x y)
+(Add32F x y) -> (ADD x y)
+(Add64F x y) -> (ADD x y)
+
+(Sub64 x y) -> (ADD x y)
+(SubPtr x y) -> (ADD x y)
+(Sub32 x y) -> (ADD x y)
+(Sub16 x y) -> (ADD x y)
+(Sub8 x y) -> (ADD x y)
+(Sub32F x y) -> (ADD x y)
+(Sub64F x y) -> (ADD x y)
+
+(Mul64 x y) -> (ADD x y)
+(Mul32 x y) -> (ADD x y)
+(Mul16 x y) -> (ADD x y)
+(Mul8 x y) -> (ADD x y)
+(Mul32F x y) -> (ADD x y)
+(Mul64F x y) -> (ADD x y)
+
+(Div32F x y) -> (ADD x y)
+(Div64F x y) -> (ADD x y)
+
+(Div64 x y) -> (ADD x y)
+(Div64u x y) -> (ADD x y)
+(Div32 x y) -> (ADD x y)
+(Div32u x y) -> (ADD x y)
+(Div16 x y) -> (ADD x y)
+(Div16u x y) -> (ADD x y)
+(Div8 x y) ->  (ADD x y)
+(Div8u x y) ->  (ADD x y)
+
+(Hmul64 x y) -> (ADD x y)
+(Hmul64u x y) -> (ADD x y)
+(Hmul32 x y) -> (ADD x y)
+(Hmul32u x y) -> (ADD x y)
+(Hmul16 x y) -> (ADD x y)
+(Hmul16u x y) -> (ADD x y)
+(Hmul8 x y) ->  (ADD x y)
+(Hmul8u x y) ->  (ADD x y)
+
+(Avg64u x y) -> (ADD x y)
+
+(Mod64 x y) -> (ADD x y)
+(Mod64u x y) -> (ADD x y)
+(Mod32 x y) -> (ADD x y)
+(Mod32u x y) -> (ADD x y)
+(Mod16 x y) -> (ADD x y)
+(Mod16u x y) -> (ADD x y)
+(Mod8 x y) ->  (ADD x y)
+(Mod8u x y) ->  (ADD x y)
+
+(And64 x y) -> (ADD x y)
+(And32 x y) -> (ADD x y)
+(And16 x y) -> (ADD x y)
+(And8 x y) -> (ADD x y)
+
+(Or64 x y) -> (ADD x y)
+(Or32 x y) -> (ADD x y)
+(Or16 x y) -> (ADD x y)
+(Or8 x y) -> (ADD x y)
+
+(Xor64 x y) -> (ADD x y)
+(Xor32 x y) -> (ADD x y)
+(Xor16 x y) -> (ADD x y)
+(Xor8 x y) -> (ADD x y)
+
+(Neg64 x) -> (ADD x x)
+(Neg32 x) -> (ADD x x)
+(Neg16 x) -> (ADD x x)
+(Neg8 x) -> (ADD x x)
+(Neg32F x) -> (ADD x x)
+(Neg64F x) -> (ADD x x)
+
+(Com64 x) -> (ADD x x)
+(Com32 x) -> (ADD x x)
+(Com16 x) -> (ADD x x)
+(Com8 x) -> (ADD x x)
+
+(Sqrt x) -> (ADD x x)
+
+(SignExt8to16 x) -> (ADD x x)
+(SignExt8to32 x) -> (ADD x x)
+(SignExt8to64 x) -> (ADD x x)
+(SignExt16to32 x) -> (ADD x x)
+(SignExt16to64 x) -> (ADD x x)
+(SignExt32to64 x) -> (ADD x x)
+
+(ZeroExt8to16 x) -> (ADD x x)
+(ZeroExt8to32 x) -> (ADD x x)
+(ZeroExt8to64 x) -> (ADD x x)
+(ZeroExt16to32 x) -> (ADD x x)
+(ZeroExt16to64 x) -> (ADD x x)
+(ZeroExt32to64 x) -> (ADD x x)
+
+(Cvt32to32F x) -> (ADD x x)
+(Cvt32to64F x) -> (ADD x x)
+(Cvt64to32F x) -> (ADD x x)
+(Cvt64to64F x) -> (ADD x x)
+
+(Cvt32Fto32 x) -> (ADD x x)
+(Cvt32Fto64 x) -> (ADD x x)
+(Cvt64Fto32 x) -> (ADD x x)
+(Cvt64Fto64 x) -> (ADD x x)
+
+(Cvt32Fto64F x) -> (ADD x x)
+(Cvt64Fto32F x) -> (ADD x x)
+
+(Trunc16to8 x) -> (ADD x x)
+(Trunc32to8 x) -> (ADD x x)
+(Trunc32to16 x) -> (ADD x x)
+(Trunc64to8 x) -> (ADD x x)
+(Trunc64to16 x) -> (ADD x x)
+(Trunc64to32 x) -> (ADD x x)
+
+// Shifts
+(Lsh8x8 x y) -> (ADD x y)
+(Lsh8x16 x y) -> (ADD x y)
+(Lsh8x32 x y) -> (ADD x y)
+(Lsh8x64 x y) -> (ADD x y)
+(Lsh16x8 x y) -> (ADD x y)
+(Lsh16x16 x y) -> (ADD x y)
+(Lsh16x32 x y) -> (ADD x y)
+(Lsh16x64 x y) -> (ADD x y)
+(Lsh32x8 x y) -> (ADD x y)
+(Lsh32x16 x y) -> (ADD x y)
+(Lsh32x32 x y) -> (ADD x y)
+(Lsh32x64 x y) -> (ADD x y)
+(Lsh64x8 x y) -> (ADD x y)
+(Lsh64x16 x y) -> (ADD x y)
+(Lsh64x32 x y) -> (ADD x y)
+(Lsh64x64 x y) -> (ADD x y)
+
+(Rsh8x8 x y) -> (ADD x y)
+(Rsh8x16 x y) -> (ADD x y)
+(Rsh8x32 x y) -> (ADD x y)
+(Rsh8x64 x y) -> (ADD x y)
+(Rsh16x8 x y) -> (ADD x y)
+(Rsh16x16 x y) -> (ADD x y)
+(Rsh16x32 x y) -> (ADD x y)
+(Rsh16x64 x y) -> (ADD x y)
+(Rsh32x8 x y) -> (ADD x y)
+(Rsh32x16 x y) -> (ADD x y)
+(Rsh32x32 x y) -> (ADD x y)
+(Rsh32x64 x y) -> (ADD x y)
+(Rsh64x8 x y) -> (ADD x y)
+(Rsh64x16 x y) -> (ADD x y)
+(Rsh64x32 x y) -> (ADD x y)
+(Rsh64x64 x y) -> (ADD x y)
+
+(Rsh8Ux8 x y) -> (ADD x y)
+(Rsh8Ux16 x y) -> (ADD x y)
+(Rsh8Ux32 x y) -> (ADD x y)
+(Rsh8Ux64 x y) -> (ADD x y)
+(Rsh16Ux8 x y) -> (ADD x y)
+(Rsh16Ux16 x y) -> (ADD x y)
+(Rsh16Ux32 x y) -> (ADD x y)
+(Rsh16Ux64 x y) -> (ADD x y)
+(Rsh32Ux8 x y) -> (ADD x y)
+(Rsh32Ux16 x y) -> (ADD x y)
+(Rsh32Ux32 x y) -> (ADD x y)
+(Rsh32Ux64 x y) -> (ADD x y)
+(Rsh64Ux8 x y) -> (ADD x y)
+(Rsh64Ux16 x y) -> (ADD x y)
+(Rsh64Ux32 x y) -> (ADD x y)
+(Rsh64Ux64 x y) -> (ADD x y)
+
+(Lrot8 x [c]) -> (ADD x [c])
+(Lrot16 x [c]) -> (ADD x [c])
+(Lrot32 x [c]) -> (ADD x [c])
+(Lrot64 x [c]) -> (ADD x [c])
+
+(Less64 x y) -> (ADD x y)
+(Less32 x y) -> (ADD x y)
+(Less16 x y) -> (ADD x y)
+(Less8  x y) -> (ADD x y)
+(Less64U x y) -> (ADD x y)
+(Less32U x y) -> (ADD x y)
+(Less16U x y) -> (ADD x y)
+(Less8U  x y) -> (ADD x y)
+(Less64F x y) -> (ADD x y)
+(Less32F x y) -> (ADD x y)
+
+(Leq64 x y) -> (ADD x y)
+(Leq32 x y) -> (ADD x y)
+(Leq16 x y) -> (ADD x y)
+(Leq8  x y) -> (ADD x y)
+(Leq64U x y) -> (ADD x y)
+(Leq32U x y) -> (ADD x y)
+(Leq16U x y) -> (ADD x y)
+(Leq8U  x y) -> (ADD x y)
+(Leq64F x y) -> (ADD x y)
+(Leq32F x y) -> (ADD x y)
+
+(Greater64 x y) -> (ADD x y)
+(Greater32 x y) -> (ADD x y)
+(Greater16 x y) -> (ADD x y)
+(Greater8  x y) -> (ADD x y)
+(Greater64U x y) -> (ADD x y)
+(Greater32U x y) -> (ADD x y)
+(Greater16U x y) -> (ADD x y)
+(Greater8U  x y) -> (ADD x y)
+(Greater64F x y) -> (ADD x y)
+(Greater32F x y) -> (ADD x y)
+
+(Geq64 x y) -> (ADD x y)
+(Geq32 x y) -> (ADD x y)
+(Geq16 x y) -> (ADD x y)
+(Geq8  x y) -> (ADD x y)
+(Geq64U x y) -> (ADD x y)
+(Geq32U x y) -> (ADD x y)
+(Geq16U x y) -> (ADD x y)
+(Geq8U  x y) -> (ADD x y)
+(Geq64F x y) -> (ADD x y)
+(Geq32F x y) -> (ADD x y)
+
+(Eq64 x y) -> (ADD x y)
+(Eq32 x y) -> (ADD x y)
+(Eq16 x y) -> (ADD x y)
+(Eq8 x y) -> (ADD x y)
+(EqPtr x y) -> (ADD x y)
+(Eq64F x y) -> (ADD x y)
+(Eq32F x y) -> (ADD x y)
+
+(Neq64 x y) -> (ADD x y)
+(Neq32 x y) -> (ADD x y)
+(Neq16 x y) -> (ADD x y)
+(Neq8 x y) -> (ADD x y)
+(NeqPtr x y) -> (ADD x y)
+(Neq64F x y) -> (ADD x y)
+(Neq32F x y) -> (ADD x y)
+
+// Loads and stores
+(Load ptr mem) -> (LD ptr mem)
+(Store ptr val mem) -> (SD ptr val mem)
+
+//(Convert x y) ->
 
 // Checks
-(NilCheck ptr mem) -> (ADD ptr mem)
+//(IsNonNil p) ->
+//(IsInBounds idx len) ->
+//(IsSliceInBounds idx len) ->
+(NilCheck ptr mem) -> (LoweredNilCheck ptr mem)
+
+// Moves
+//(Move dst src _) ->
+
+//(Not x) ->
+
+//(OffPtr [off] ptr) ->
+
+//(Const8 [val]) ->
+//(Const16 [val]) ->
+//(Const32 [val]) ->
+//(Const64 [val]) ->
+//(Const32F [val]) ->
+//(Const64F [val]) ->
+//(ConstNil) ->
+//(ConstBool [b]) ->
+
+(Addr {sym} base) -> (MOVmem {sym} base)
+
+//(ITab) ->
+
+//(If cond yes no) ->
+
+//(StaticCall [argwid] {target} _) ->
+//(ClosureCall entry _ mem) ->
+//(DeferCall [argwid] mem) ->
+//(GoCall [argwid] mem) ->
+//(InterCall [argwid] _ mem) ->
