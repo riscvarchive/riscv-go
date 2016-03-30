@@ -40,9 +40,8 @@ var (
 	// Registers is a map of register names to integer IDs.
 	Registers = make(map[string]int16)
 
-	// regNames is a map for register IDs to names. We use
-	// the ABI name.
-	regNames = map[int16]string{
+	// RegNames is a map for register IDs to names. We use the ABI name.
+	RegNames = map[int16]string{
 		0: "NONE",
 
 		// General registers with ABI names.
@@ -212,16 +211,16 @@ func initRegisters() {
 	Registers["FT11"] = REG_FT11
 }
 
-// checkRegNames asserts that regNames includes all registers.
+// checkRegNames asserts that RegNames includes all registers.
 func checkRegNames() {
 	for i := REG_X0; i <= REG_X31; i++ {
-		if _, ok := regNames[int16(i)]; !ok {
-			panic(fmt.Sprintf("REG_X%d missing from regNames", i))
+		if _, ok := RegNames[int16(i)]; !ok {
+			panic(fmt.Sprintf("REG_X%d missing from RegNames", i))
 		}
 	}
 	for i := REG_F0; i <= REG_F31; i++ {
-		if _, ok := regNames[int16(i)]; !ok {
-			panic(fmt.Sprintf("REG_F%d missing from regNames", i))
+		if _, ok := RegNames[int16(i)]; !ok {
+			panic(fmt.Sprintf("REG_F%d missing from RegNames", i))
 		}
 	}
 }
@@ -248,7 +247,7 @@ func init() {
 }
 
 func PrettyPrintReg(r int) string {
-	name, ok := regNames[int16(r)]
+	name, ok := RegNames[int16(r)]
 	if !ok {
 		name = fmt.Sprintf("R???%d", r) // Similar format to Aconv.
 	}
