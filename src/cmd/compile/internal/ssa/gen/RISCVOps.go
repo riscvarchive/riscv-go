@@ -32,6 +32,11 @@ func init() {
 
 	RISCVops := []opData{
 		{name: "ADD", argLength: 2, reg: gp, asm: "ADD", commutative: true, resultInArg0: true}, // arg0 + arg1
+		{name: "MOVmem", argLength: 1, reg: gp, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
+		{name: "LD", argLength: 2, reg: gp, asm: "LD", aux: "SymOff"},  // load byte from arg0+auxint+aux, arg1=mem
+		{name: "SD", argLength: 3, reg: gp, asm: "SD", aux: "SymOff", typ: "Mem"},  // store 8 bytes in arg1 to arg0+auxint+aux. arg2=mem
+		//arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		{name: "LoweredNilCheck", argLength: 2, reg: gp},
 	}
 
 	RISCVblocks := []blockData{

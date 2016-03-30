@@ -602,6 +602,10 @@ const (
 	OpVarLive
 
 	OpRISCVADD
+	OpRISCVMOVmem
+	OpRISCVLD
+	OpRISCVSD
+	OpRISCVLoweredNilCheck
 )
 
 var opcodeTable = [...]opInfo{
@@ -5408,6 +5412,60 @@ var opcodeTable = [...]opInfo{
 		commutative:  true,
 		resultInArg0: true,
 		asm:          riscv.AADD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "MOVmem",
+		auxType: auxSymOff,
+		argLen:  1,
+		asm:     riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "LD",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.ALD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "SD",
+		auxType: auxSymOff,
+		argLen:  3,
+		asm:     riscv.ASD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:   "LoweredNilCheck",
+		argLen: 2,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6

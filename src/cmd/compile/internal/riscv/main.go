@@ -5,9 +5,16 @@
 package riscv
 
 import (
+	"log"
+
 	"cmd/compile/internal/gc"
+	"cmd/internal/obj"
 	"cmd/internal/obj/riscv"
 )
+
+func proginfo(p *obj.Prog) {
+	log.Printf("proginfo")
+}
 
 func betypeinit() {
 	gc.Widthptr = 8
@@ -32,6 +39,7 @@ func Main() {
 	gc.Thearch.MAXWIDTH = 1 << 50
 
 	gc.Thearch.Gins = gins
+	gc.Thearch.Proginfo = proginfo
 
 	// TODO(prattmic): other fields?
 
