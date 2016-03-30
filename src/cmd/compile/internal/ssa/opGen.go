@@ -5,6 +5,7 @@ package ssa
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/obj/riscv"
 	"cmd/internal/obj/x86"
 )
 
@@ -36,6 +37,13 @@ const (
 	BlockExit
 	BlockFirst
 	BlockDead
+
+	BlockRISCVEQ
+	BlockRISCVNE
+	BlockRISCVLT
+	BlockRISCVGE
+	BlockRISCVLTU
+	BlockRISCVGEU
 )
 
 var blockString = [...]string{
@@ -66,6 +74,13 @@ var blockString = [...]string{
 	BlockExit:   "Exit",
 	BlockFirst:  "First",
 	BlockDead:   "Dead",
+
+	BlockRISCVEQ:  "EQ",
+	BlockRISCVNE:  "NE",
+	BlockRISCVLT:  "LT",
+	BlockRISCVGE:  "GE",
+	BlockRISCVLTU: "LTU",
+	BlockRISCVGEU: "GEU",
 }
 
 func (k BlockKind) String() string { return blockString[k] }
@@ -585,6 +600,8 @@ const (
 	OpVarDef
 	OpVarKill
 	OpVarLive
+
+	OpRISCVADD
 )
 
 var opcodeTable = [...]opInfo{
@@ -5383,6 +5400,22 @@ var opcodeTable = [...]opInfo{
 		auxType: auxSym,
 		argLen:  1,
 		generic: true,
+	},
+
+	{
+		name:         "ADD",
+		argLen:       2,
+		commutative:  true,
+		resultInArg0: true,
+		asm:          riscv.AADD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
 	},
 }
 
