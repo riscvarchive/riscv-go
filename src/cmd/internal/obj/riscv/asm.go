@@ -18,126 +18,45 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+// Like all Go assemblers, this assembler proceeds in four steps: progedit,
+// follow, preprocess, and assemble.
+
 package riscv
 
-import "cmd/internal/obj"
+import (
+	"fmt"
 
-const (
-	// Things which the assembler treats as instructions but which do not
-	// correspond to actual RISC-V instructions (e.g., the TEXT directive at
-	// the start of each symbol, MOVs).
-	type_pseudo = iota
-
-	// Integer register-immediate instructions, such as ADDI.
-	type_regi_immi
-
-	// Integer register-register instructions, such as ADD.
-	type_regi2
-
-	// Instructions which get compiled as jump-and-link, including JMP.
-	type_jal
-
-	// Conditional branches.
-	type_branch
-
-	// System instructions (read counters).  These are encoded using a
-	// variant of the I-type encoding.
-	type_system
+	"cmd/internal/obj"
 )
 
-type Optab struct {
-	as    obj.As
-	src1  int8
-	src2  int8
-	dest  int8
-	type_ int8 // internal instruction type used to dispatch in asmout
-	size  int8 // bytes
+// err is the type of errors which intermediate assembler steps can produce.
+type err string
+
+func (e err) Error() string {
+	return string(e)
 }
 
-var optab = []Optab{
-	// This is a Go (liblink) NOP, not a RISC-V NOP; it's only used to make
-	// the assembler happy with otherwise empty symbols.  It thus occupies
-	// zero bytes.  (RISC-V NOPs are not currently supported.)
-	//
-	// TODO(bbaren, mpratt): Can we strip these out in progedit or
-	// preprocess?
-	{obj.ANOP, C_NONE, C_NONE, C_NONE, type_pseudo, 0},
-
-	{obj.ATEXT, C_MEM, C_IMMI, C_TEXTSIZE, type_pseudo, 0},
-
-	{ABEQ, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABNE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABLT, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABGE, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABLTU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-	{ABGEU, C_REGI, C_REGI, C_RELADDR, type_branch, 4},
-
-	{AJAL, C_REGI, C_NONE, C_RELADDR, type_jal, 4},
-
-	{AADDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASLLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AXORI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASRLI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{ASRAI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AORI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-	{AANDI, C_IMMI, C_REGI, C_REGI, type_regi_immi, 4},
-
-	{AADD, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASUB, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASLL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AXOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASRL, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{ASRA, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AOR, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-	{AAND, C_REGI, C_REGI, C_REGI, type_regi2, 4},
-
-	{ASCALL, C_NONE, C_NONE, C_NONE, type_system, 4},
-
-	{ARDCYCLE, C_NONE, C_NONE, C_REGI, type_system, 4},
-	{ARDTIME, C_NONE, C_NONE, C_REGI, type_system, 4},
-	{ARDINSTRET, C_NONE, C_NONE, C_REGI, type_system, 4},
-}
-
-// progedit is called individually for each Prog.
-// TODO(myenik)
+// progedit is called individually for each Prog.  It normalizes instruction
+// formats and eliminates as many pseudoinstructions as it can.
 func progedit(ctxt *obj.Link, p *obj.Prog) {
-	// Rewrite branches as TYPE_BRANCH
-	switch p.As {
-	case AJAL,
-		AJALR,
-		ABEQ,
-		ABNE,
-		ABLT,
-		ABLTU,
-		ABGE,
-		ABGEU,
-		obj.ARET,
-		obj.ADUFFZERO,
-		obj.ADUFFCOPY:
-		if p.To.Sym != nil {
-			p.To.Type = obj.TYPE_BRANCH
-		}
-	}
-
-	// Populate the Class field in the operands.
-	aclass(ctxt, &p.From)
+	// Ensure everything has a From3 to eliminate a ton of nil-pointer
+	// checks later.
 	if p.From3 == nil {
-		// There is no third operand for this operation.  Create one to
-		// make other code have to deal with fewer special cases.
-		p.From3 = &obj.Addr{}
-		if p.As != AJAL && (p.From.Class == C_REGI || p.From.Class == C_IMMI) {
-			p.From3.Reg = p.To.Reg
-			p.From3.Class = C_REGI
-		} else {
-			p.From3.Class = C_NONE
-		}
-	} else {
-		aclass(ctxt, p.From3)
+		p.From3 = &obj.Addr{Type: obj.TYPE_NONE}
 	}
-	aclass(ctxt, &p.To)
 
-	// Rewrite pseudoinstructions.
-	if p.From.Class == C_IMMI {
+	// Expand binary instructions to ternary ones.
+	if p.From3.Type == obj.TYPE_NONE {
+		switch p.As {
+		case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND:
+			p.From3.Type = obj.TYPE_REG
+			p.From3.Reg = p.To.Reg
+		}
+	}
+
+	// Rewrite instructions with constant operands to refer to the immediate
+	// form of the instruction.
+	if p.From.Type == obj.TYPE_CONST {
 		switch p.As {
 		case AADD:
 			p.As = AADDI
@@ -155,323 +74,265 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AXORI
 		}
 	}
+
+	// Do additional single-instruction rewriting.
 	switch p.As {
+	// Turn JMP into JAL ZERO.
+	case obj.AJMP:
+		p.As = AJAL
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_ZERO
+
+	case ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+		i := encode(p.As)
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = i.csr
+		p.From3.Type = obj.TYPE_REG
+		p.From3.Reg = REG_ZERO
+		if p.To.Type == obj.TYPE_NONE {
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = REG_ZERO
+		}
+
+	// Rewrite MOV.
 	case AMOV:
-		switch p.From.Class {
-		case C_REGI:
+		switch p.From.Type {
+		case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
 			p.As = AADDI
 			*p.From3 = p.From
 			p.From.Type = obj.TYPE_CONST
 			p.From.Offset = 0
-			aclass(ctxt, &p.From)
-		case C_IMMI:
+		case obj.TYPE_CONST: // MOV $c, R -> ADD $c, ZERO, R
 			p.As = AADDI
 			p.From3.Type = obj.TYPE_REG
 			p.From3.Reg = REG_ZERO
-			aclass(ctxt, p.From3)
-		default:
-			ctxt.Diag("progedit: unsupported MOV")
 		}
-	case obj.AJMP:
-		// Convert "JMP label" into "JAL ZERO, label".
-		p.As = AJAL
-		p.From.Type = obj.TYPE_REG
-		p.From.Reg = REG_ZERO
-		aclass(ctxt, &p.From)
 	}
 }
 
-// TODO(myenik)
-func follow(ctxt *obj.Link, s *obj.LSym) {
+// follow can do some optimization on the structure of the program.  Currently,
+// follow does nothing.
+func follow(ctxt *obj.Link, s *obj.LSym) {}
+
+// setpcs sets the Pc field in all instructions reachable from p.  It uses pc as
+// the initial value.
+func setpcs(p *obj.Prog, pc int64) {
+	for ; p != nil; p = p.Link {
+		p.Pc = pc
+		if p.As != obj.ATEXT { // if this is a real instruction
+			pc += 4
+		}
+	}
 }
 
-// Given an Addr, reads the Addr's high-level Type and converts it to a
-// low-level Class.
-func aclass(ctxt *obj.Link, a *obj.Addr) {
-	switch a.Type {
-	case obj.TYPE_NONE:
-		a.Class = C_NONE
-
-	case obj.TYPE_REG:
-		if REG_X0 <= a.Reg && a.Reg <= REG_X31 {
-			a.Class = C_REGI
-		} else if REG_F0 <= a.Reg && a.Reg <= REG_F31 {
-			ctxt.Diag("aclass: floating-point registers are unsupported")
-		} else {
-			ctxt.Diag("aclass: unknown register %v", a.Reg)
-		}
-
-	case obj.TYPE_CONST:
-		a.Class = C_IMMI
-
-	case obj.TYPE_BRANCH:
-		a.Class = C_RELADDR
-
-	case obj.TYPE_TEXTSIZE:
-		a.Class = C_TEXTSIZE
-
-	case obj.TYPE_MEM:
-		a.Class = C_MEM
-
+// invbr inverts the condition of a conditional branch.
+func invbr(i obj.As) obj.As {
+	switch i {
+	case ABEQ:
+		return ABNE
+	case ABNE:
+		return ABEQ
+	case ABLT:
+		return ABGE
+	case ABGE:
+		return ABLT
+	case ABLTU:
+		return ABGEU
+	case ABGEU:
+		return ABLTU
 	default:
-		ctxt.Diag("aclass: unsupported type %v", a.Type)
+		panic("invbr: not a branch")
 	}
 }
 
-// preprocess is responsible for:
-// * Updating the SP on function entry and exit
-// * Rewriting RET to a real return instruction
+// preprocess is called once for each linker symbol.  It generates prolog and
+// epilog code and computes PC-relative branch and jump offsets.  By the time
+// preprocess finishes, all instructions in the symbol are concrete, real RISC-V
+// instructions.
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
-	ctxt.Cursym = cursym
-
-	if cursym.Text == nil || cursym.Text.Link == nil {
+	// Generate the prolog.
+	text := cursym.Text
+	if text.As != obj.ATEXT {
+		ctxt.Diag("preprocess: found symbol that does not start with TEXT directive")
 		return
 	}
+	stacksize := text.To.Offset
+	// Insert stack adjustment.  Do not overwrite the TEXT directive itself;
+	// other parts of the assembler assume it's there.
+	spadj := obj.Appendp(ctxt, text)
+	spadj.As = AADDI
+	spadj.From.Type = obj.TYPE_CONST
+	spadj.From.Offset = -stacksize
+	spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+	spadj.To.Type = obj.TYPE_REG
+	spadj.To.Reg = REG_SP
+	spadj.Spadj = int32(-stacksize)
+	// Do, however, skip over the TEXT directive when generating assembly.
+	// (It's not a valid RISC-V instruction, after all.)
+	cursym.Text = spadj
 
-	stackSize := cursym.Text.To.Offset
+	// Expand each long branch into a short branch and a jump.  This is a
+	// fairly inefficient algorithm in theory, but it's only pathological
+	// when there are a large quantity of long branches, which is unusual.
+	setpcs(cursym.Text, 0)
+	for p := cursym.Text; p != nil; {
+		switch p.As {
+		case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
+			if p.To.Type != obj.TYPE_BRANCH {
+				panic("assemble: instruction with branch-like opcode lacks destination")
+				p = p.Link
+				continue
+			}
+			offset := p.Pcond.Pc - p.Pc
+			if offset < -4096 || 4096 <= offset {
+				// Branch is long.  Replace it with a jump.
+				jmp := obj.Appendp(ctxt, p)
+				jmp.As = AJAL
+				jmp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+				jmp.To = obj.Addr{Type: obj.TYPE_BRANCH}
+				jmp.Pcond = p.Pcond
 
-	// TODO(prattmic): explain what these are really for,
-	// once I figure it out.
-	cursym.Args = cursym.Text.To.Val.(int32)
-	cursym.Locals = int32(stackSize)
+				p.As = invbr(p.As)
+				p.Pcond = jmp.Link
+				// All future PCs are now invalid, so recompute
+				// them.
+				setpcs(jmp, p.Pc+4)
+				// We may have made previous branches too long,
+				// so recheck them.
+				p = cursym.Text
+			} else {
+				// Branch is short.  No big deal.
+				p = p.Link
+			}
+		default:
+			p = p.Link
+		}
+	}
 
-	var q *obj.Prog
+	// Now that there are no long branches, resolve branch and jump targets.
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
-		case obj.ATEXT:
-			// Function entry. Setup stack.
-			// TODO(prattmic): handle calls to morestack.
-			q = p
-			q = obj.Appendp(ctxt, q)
-			q.As = AADDI
-			q.From.Type = obj.TYPE_CONST
-			q.From.Offset = -stackSize
-			q.From3 = &obj.Addr{}
-			q.From3.Type = obj.TYPE_REG
-			q.From3.Reg = REG_SP
-			q.To.Type = obj.TYPE_REG
-			q.To.Reg = REG_SP
-			q.Spadj = int32(-stackSize)
-		case obj.ARET:
-			// Function exit. Stack teardown and exit.
-			q = p
-			q = obj.Appendp(ctxt, q)
-			q.As = AADDI
-			q.From.Type = obj.TYPE_CONST
-			q.From.Offset = stackSize
-			q.From3 = &obj.Addr{}
-			q.From3.Type = obj.TYPE_REG
-			q.From3.Reg = REG_SP
-			q.To.Type = obj.TYPE_REG
-			q.To.Reg = REG_SP
-			q.Spadj = int32(stackSize)
-			aclass(ctxt, &q.From)
-			aclass(ctxt, q.From3)
-			aclass(ctxt, &q.To)
-
-			q = obj.Appendp(ctxt, q)
-			q.As = AJAL
-			q.From.Type = obj.TYPE_REG
-			q.From.Reg = REG_RA
-			q.To.Type = obj.TYPE_REG
-			q.To.Reg = REG_ZERO
+		case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU, AJAL:
+			switch p.To.Type {
+			case obj.TYPE_BRANCH:
+				p.To.Type = obj.TYPE_CONST
+				p.To.Offset = p.Pcond.Pc - p.Pc
+			case obj.TYPE_MEM:
+				panic("unhandled type")
+			}
 		}
-		aclass(ctxt, &q.From)
-		aclass(ctxt, q.From3)
-		aclass(ctxt, &q.To)
 	}
 }
 
-// Looks up an operation in the operation table.
-func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
-	for i := 0; i < len(optab); i++ {
-		o := optab[i]
-		if o.as == p.As &&
-			o.src1 == p.From.Class &&
-			o.src2 == p.From3.Class &&
-			o.dest == p.To.Class {
-			return &o
-		}
-	}
-	ctxt.Diag("oplook: could not find op %#v (%#v)", p, *p.From3)
-	return nil
-}
-
-// Encodes a register.
-func reg(ctxt *obj.Link, r int16) uint32 {
-	if r < REG_X0 || REG_END <= r {
-		ctxt.Diag("reg: invalid register %d", r)
+// regival validates an integer register.
+func regival(r int16) uint32 {
+	if r < REG_X0 || REG_X31 < r {
+		panic("register out of range")
 	}
 	return uint32(r - obj.RBaseRISCV)
 }
 
-// Encodes a signed integer immediate.
-func immi(ctxt *obj.Link, i int64, nbits uint) uint32 {
-	if i < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < i {
-		// The immediate will not fit in the bits allotted to it in the
-		// instruction.
-		ctxt.Diag("immi: too large immediate %d", i)
+// regi extracts the integer register from an Addr.
+func regi(a obj.Addr) uint32 {
+	if a.Type != obj.TYPE_REG {
+		panic(fmt.Sprintf("ill typed: %+v", a))
 	}
-	return uint32(i)
+	return regival(a.Reg)
 }
 
-// Encodes an R-type instruction.
-func instr_r(ctxt *obj.Link, funct7 uint32, rs2 int16, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
-	if funct7>>7 != 0 {
-		ctxt.Diag("instr_r: too large funct7 %#x", funct7)
+// immi extracts the integer literal of the specified size from an Addr.
+func immi(a obj.Addr, nbits uint) uint32 {
+	if a.Type != obj.TYPE_CONST {
+		panic(fmt.Sprintf("ill typed: %+v", a))
 	}
-	if funct3>>3 != 0 {
-		ctxt.Diag("instr_r: too large funct3 %#x", funct3)
+	if a.Offset < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < a.Offset {
+		panic(fmt.Sprintf("immediate cannot fit in %d bits", nbits))
 	}
-	if opcode>>7 != 0 {
-		ctxt.Diag("instr_r: too large opcode %#x", opcode)
-	}
-	return funct7<<25 | reg(ctxt, rs2)<<20 | reg(ctxt, rs1)<<15 | funct3<<12 | reg(ctxt, rd)<<7 | opcode
+	return uint32(a.Offset)
 }
 
-// Encodes an I-type instruction.
-func instr_i(ctxt *obj.Link, imm int64, rs1 int16, funct3 uint32, rd int16, opcode uint32) uint32 {
-	if funct3>>3 != 0 {
-		ctxt.Diag("instr_i: too large funct3 %#x", funct3)
+func instr_r(p *obj.Prog) uint32 {
+	rs2 := regi(p.From)
+	rs1 := regi(*p.From3)
+	rd := regi(p.To)
+	i := encode(p.As)
+	if i == nil {
+		panic("instr_r: could not encode instruction")
 	}
-	if opcode>>7 != 0 {
-		ctxt.Diag("instr_i: too large opcode %#x", opcode)
-	}
-	return immi(ctxt, imm, 12)<<20 | reg(ctxt, rs1)<<15 | funct3<<12 | reg(ctxt, rd)<<7 | opcode
+	return i.funct7<<25 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-// Encodes an SB-type instruction.
-func instr_sb(ctxt *obj.Link, imm64 int64, rs2 int16, rs1 int16, funct3 uint32, opcode uint32) uint32 {
-	if funct3>>3 != 0 {
-		ctxt.Diag("instr_sb: too large funct3 %#x", funct3)
+func instr_i(p *obj.Prog) uint32 {
+	imm := immi(p.From, 12)
+	rs1 := regi(*p.From3)
+	rd := regi(p.To)
+	i := encode(p.As)
+	if i == nil {
+		panic("instr_i: could not encode instruction")
 	}
-	if opcode>>7 != 0 {
-		ctxt.Diag("instr_sb: too large opcode %#x", opcode)
+	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
+}
+
+func instr_sb(p *obj.Prog) uint32 {
+	imm := immi(p.To, 13)
+	rs2 := regival(p.Reg)
+	rs1 := regi(p.From)
+	i := encode(p.As)
+	if i == nil {
+		panic("instr_sb: could not encode instruction")
 	}
-	imm := immi(ctxt, imm64, 13)
 	return (imm>>12)<<31 |
 		((imm>>5)&0x3f)<<25 |
-		reg(ctxt, rs2)<<20 |
-		reg(ctxt, rs1)<<15 |
-		funct3<<12 |
+		rs2<<20 |
+		rs1<<15 |
+		i.funct3<<12 |
 		((imm>>1)&0xf)<<8 |
 		((imm>>11)&0x1)<<7 |
-		opcode
+		i.opcode
 }
 
-// Encodes a UJ-type instruction.
-func instr_uj(ctxt *obj.Link, imm64 int64, rd int16, opcode uint32) uint32 {
-	if opcode>>7 != 0 {
-		ctxt.Diag("instr_i: too large opcode %#x", opcode)
+func instr_uj(p *obj.Prog) uint32 {
+	imm := immi(p.To, 21)
+	rd := regi(p.From)
+	i := encode(p.As)
+	if i == nil {
+		panic("instr_uj: could not encode instruction")
 	}
-	imm := immi(ctxt, imm64, 21)
 	return (imm>>20)<<31 |
 		((imm>>1)&0x3ff)<<21 |
 		((imm>>11)&0x1)<<20 |
 		((imm>>12)&0xff)<<12 |
-		reg(ctxt, rd)<<7 |
-		opcode
+		rd<<7 |
+		i.opcode
 }
 
-// Encodes a machine instruction.
-func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab) uint32 {
-	result := uint32(0)
-	switch o.type_ {
-	default:
-		ctxt.Diag("unknown type %d", o.type_)
-	case type_pseudo:
-		ctxt.Diag("asmout: found pseudoinstruction %v", o.as)
-	case type_regi_immi:
-		encoded := encode(o.as)
-		// TODO(bbaren): Do something reasonable if immediate is too large.
-		result = instr_i(ctxt, p.From.Offset, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
-	case type_regi2:
-		encoded := encode(o.as)
-		result = instr_r(ctxt, encoded.funct7, p.From.Reg, p.From3.Reg, encoded.funct3, p.To.Reg, encoded.opcode)
-	case type_branch:
-		encoded := encode(o.as)
-		// Compute the branch offset.  We couldn't do this in progedit,
-		// because the offset is relative and we didn't know what the
-		// code would look like laid out.
-		offset := p.Pcond.Pc - p.Pc
-		// TODO(bbaren): Do something reasonable if offset is too large.
-		if offset%4 != 0 {
-			ctxt.Diag("asmout: misaligned branch offset %d", offset)
-		}
-		result = instr_sb(ctxt, offset, p.Reg, p.From.Reg, encoded.funct3, encoded.opcode)
-	case type_jal:
-		// Compute the jump offset.  We couldn't do this in progedit,
-		// because the offset is relative and we didn't know what the
-		// code would look like laid out.
-		offset := p.Pcond.Pc - p.Pc
-		// TODO(bbaren): Do something reasonable if immediate is too large.
-		if offset%4 != 0 {
-			ctxt.Diag("asmout: misaligned jump offset %d", offset)
-		}
-		result = instr_uj(ctxt, offset, p.From.Reg, encode(o.as).opcode)
-	case type_system:
-		encoded := encode(o.as)
-		switch p.To.Class {
-		case C_REGI:
-			result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, p.To.Reg, encoded.opcode)
-		case C_NONE:
-			result = instr_i(ctxt, encoded.csr, REG_ZERO, encoded.funct3, REG_ZERO, encoded.opcode)
-		default:
-			ctxt.Diag("unknown instruction %d", o.as)
-		}
+// asmout generates the machine code for a Prog.
+func asmout(p *obj.Prog) uint32 {
+	switch p.As {
+	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND:
+		return instr_r(p)
+	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, ASCALL,
+		ARDCYCLE, ARDTIME, ARDINSTRET:
+		return instr_i(p)
+	case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
+		return instr_sb(p)
+	case AJAL:
+		return instr_uj(p)
 	}
-	return result
+	panic("asmout: unrecognized instruction")
+	return 0
 }
 
+// assemble is called at the very end of the assembly process.  It actually
+// emits machine code.
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
-	if cursym.Text == nil || cursym.Text.Link == nil {
-		// We're being asked to assemble an external function or an ELF
-		// section symbol.  Do nothing.
-		return
+	var symcode []uint32 // machine code for this symbol
+	for p := cursym.Text; p != nil; p = p.Link {
+		symcode = append(symcode, asmout(p))
 	}
 
-	ctxt.Cursym = cursym
-
-	// Determine how many bytes this symbol will wind up using.
-	pc := int64(0) // program counter relative to the start of the symbol
-	ctxt.Autosize = int32(cursym.Text.To.Offset + 4)
-	for p := cursym.Text; p != nil; p = p.Link {
-		ctxt.Curp = p
-		ctxt.Pc = pc
-		p.Pc = pc
-
-		m := oplook(ctxt, p).size
-
-		// All operations should be 32 bits wide.
-		if m%4 != 0 || p.Pc%4 != 0 {
-			ctxt.Diag("!pc invalid: %v size=%d", p, m)
-		}
-
-		if m == 0 {
-			// TODO(bbaren): Once everything's all done, do something like
-			//   if not a nop {
-			//     bail out
-			//   }
-			continue
-		}
-
-		pc += int64(m)
-	}
-	cursym.Size = pc // remember the size of this symbol
-
-	// Allocate for the symbol.
-	cursym.Grow(cursym.Size)
-
-	// Lay out code.
-	bp := cursym.P
-	for p := cursym.Text; p != nil; p = p.Link {
-		ctxt.Curp = p
-		ctxt.Pc = p.Pc
-
-		o := oplook(ctxt, p)
-		if o.size != 0 {
-			ctxt.Arch.ByteOrder.PutUint32(bp, asmout(ctxt, p, o))
-			bp = bp[4:]
-		}
+	cursym.Grow(int64(4 * len(symcode)))
+	for p, i := cursym.P, 0; i < len(symcode); p, i = p[4:], i+1 {
+		ctxt.Arch.ByteOrder.PutUint32(p, symcode[i])
 	}
 }
