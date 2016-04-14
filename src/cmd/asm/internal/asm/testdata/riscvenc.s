@@ -48,6 +48,15 @@ start:
 	BLTU	T0, T1, start	// BLTU T0, T1, 2	// e3e462f6
 	BGEU	T0, T1, start	// BGEU T0, T1, 2	// e3f262f6
 
+	JMP	(T0)				// 67800200
+	JMP	4(T0)				// 67804200
+
+	// Jump to T0, link address in T1.
+	JALR	T1, (T0)			// 67830200
+	JALR	T1, 4(T0)			// 67834200
+
+	RET					// 13010100
+
 	SCALL					// 73000000
 	RDCYCLE	T0				// f32200c0
 	RDTIME	T0				// f32210c0
@@ -1084,5 +1093,5 @@ farbranch:
 	ADD	$0, ZERO, ZERO
 	ADD	$0, ZERO, ZERO
 	ADD	$0, ZERO, ZERO
-	BEQ	ZERO, ZERO, farbranch	// BEQ ZERO, ZERO, 49	// 63140000
+	BEQ	ZERO, ZERO, farbranch	// BEQ ZERO, ZERO, 54	// 63140000
 	ADD	$0, ZERO, ZERO
