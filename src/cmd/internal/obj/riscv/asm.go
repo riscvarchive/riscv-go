@@ -42,6 +42,23 @@ import (
 	"cmd/internal/obj"
 )
 
+// lowerjalr normalizes a JALR instruction.
+func lowerjalr(p *obj.Prog) {
+	if p.As != AJALR {
+		panic("lowerjalr: not a JALR")
+	}
+
+	// JALR gets parsed like JAL--the linkage pointer goes in From, and the
+	// target is in To.  However, we need to assemble it as an I-type
+	// instruction--the linkage pointer will go in To, the target register
+	// in From3, and the offset in From.
+	//
+	// TODO(bbaren): Handle sym, symkind, index, and scale.
+	p.From, *p.From3, p.To = p.To, p.To, p.From
+	p.From.Type = obj.TYPE_CONST
+	p.From3.Type = obj.TYPE_REG
+}
+
 // progedit is called individually for each Prog.  It normalizes instruction
 // formats and eliminates as many pseudoinstructions as it can.
 func progedit(ctxt *obj.Link, p *obj.Prog) {
@@ -83,12 +100,23 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 
 	// Do additional single-instruction rewriting.
 	switch p.As {
-	// Turn JMP into JAL ZERO.
+	// Turn JMP into JAL ZERO or JALR ZERO.
 	case obj.AJMP:
-		p.As = AJAL
 		// p.From is actually an _output_ for this instruction.
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = REG_ZERO
+		switch p.To.Type {
+		case obj.TYPE_BRANCH:
+			p.As = AJAL
+		case obj.TYPE_MEM:
+			p.As = AJALR
+			lowerjalr(p)
+		default:
+			panic("unhandled type")
+		}
+
+	case AJALR:
+		lowerjalr(p)
 
 	case ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
 		i, ok := encode(p.As)
@@ -183,6 +211,27 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Do, however, skip over the TEXT directive when generating assembly.
 	// (It's not a valid RISC-V instruction, after all.)
 	cursym.Text = spadj
+
+	// Replace RET with epilogue.
+	for p := cursym.Text; p != nil; p = p.Link {
+		if p.As == obj.ARET {
+			p.As = AADDI
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = stacksize
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = REG_SP
+			p.Spadj = int32(stacksize)
+
+			p = obj.Appendp(ctxt, p)
+			p.As = AJALR
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = 0
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = REG_ZERO
+		}
+	}
 
 	// Expand each long branch into a short branch and a jump.  This is a
 	// fairly inefficient algorithm in theory, but it's only pathological
