@@ -189,4 +189,10 @@ var Anames = []string{
 	"EBREAK",
 	"ERET",
 	"MOV",
+	"MOVB",
+	"MOVH",
+	"MOVW",
+	"MOVBU",
+	"MOVHU",
+	"MOVWU",
 }
