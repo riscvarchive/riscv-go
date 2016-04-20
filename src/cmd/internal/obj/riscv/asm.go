@@ -147,6 +147,14 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AXORI
 		}
 	}
+	if p.From3.Type == obj.TYPE_CONST {
+		switch p.As {
+		case ASLT:
+			p.As = ASLTI
+		case ASLTU:
+			p.As = ASLTIU
+		}
+	}
 
 	// Concretize pseudo-registers.
 	resolvepseudoreg(&p.From)
@@ -238,6 +246,13 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		default:
 			ctxt.Diag("progedit: unsupported MOV at %v", p)
 		}
+
+	// The semantics for SLT are designed to make sense when writing
+	// assembly from right to left--for instance, slt t2,t1,t0 sets t2 if
+	// t1 < t0.  Go assembly is written from left to right, though, so
+	// switch the operands around so you can write SLT T0, T1, T2 instead.
+	case ASLT, ASLTI, ASLTU, ASLTIU:
+		p.From, *p.From3 = *p.From3, p.From
 	}
 }
 
@@ -477,11 +492,11 @@ func instr_uj(p *obj.Prog) uint32 {
 // asmout generates the machine code for a Prog.
 func asmout(p *obj.Prog) uint32 {
 	switch p.As {
-	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND:
+	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND, ASLT, ASLTU:
 		return instr_r(p)
 	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, ASCALL,
 		ARDCYCLE, ARDTIME, ARDINSTRET, ALB, ALH, ALW, ALD, ALBU, ALHU,
-		ALWU:
+		ALWU, ASLTI, ASLTIU:
 		return instr_i(p)
 	case ASB, ASH, ASW, ASD:
 		return instr_s(p)

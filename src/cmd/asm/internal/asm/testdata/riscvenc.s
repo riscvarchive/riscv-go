@@ -85,6 +85,11 @@ start:
 	MOV	T0, (T1)			// 23305300
 	MOV	T0, 4(T1)			// 23325300
 
+	SLT	T0, T1, T2			// b3a36200
+	SLT	T0, $55, T2			// 93a37203
+	SLTU	T0, T1, T2			// b3b36200
+	SLTU	T0, $55, T2			// 93b37203
+
 	// Test far branch handling.
 farbranch:
 	ADD	$0, ZERO, ZERO
@@ -1114,5 +1119,5 @@ farbranch:
 	ADD	$0, ZERO, ZERO
 	// TODO(bbaren): This expands to two instructions, but trying to test
 	// both does not work.  Figure out why and test the second instruction.
-	BEQ	ZERO, ZERO, farbranch	// BEQ ZERO, ZERO, 70	// 63140000
+	BEQ	ZERO, ZERO, farbranch	// BEQ ZERO, ZERO, 74	// 63140000
 	ADD	$0, ZERO, ZERO
