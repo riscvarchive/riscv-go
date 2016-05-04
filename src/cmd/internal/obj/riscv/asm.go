@@ -59,6 +59,46 @@ func lowerjalr(p *obj.Prog) {
 	p.From3.Type = obj.TYPE_REG
 }
 
+// movtol converts a MOV[BHW]?U? mnemonic into the corresponding L[BHWD]
+// instruction.
+func movtol(mnemonic obj.As) obj.As {
+	switch mnemonic {
+	case AMOV:
+		return ALD
+	case AMOVB:
+		return ALB
+	case AMOVH:
+		return ALH
+	case AMOVW:
+		return ALW
+	case AMOVBU:
+		return ALBU
+	case AMOVHU:
+		return ALHU
+	case AMOVWU:
+		return ALWU
+	default:
+		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
+	}
+}
+
+// movtos converts a MOV[BHW]? mnemonic into the corresponding S[BHWD]
+// instruction.
+func movtos(mnemonic obj.As) obj.As {
+	switch mnemonic {
+	case AMOV:
+		return ASD
+	case AMOVB:
+		return ASB
+	case AMOVH:
+		return ASH
+	case AMOVW:
+		return ASW
+	default:
+		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
+	}
+}
+
 // progedit is called individually for each Prog.  It normalizes instruction
 // formats and eliminates as many pseudoinstructions as it can.
 func progedit(ctxt *obj.Link, p *obj.Prog) {
@@ -136,17 +176,52 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		}
 
 	// Rewrite MOV.
-	case AMOV:
+	case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU:
 		switch p.From.Type {
-		case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
-			p.As = AADDI
+		case obj.TYPE_MEM: // MOV c(Rs), Rd -> L $c, Rs, Rd
+			if p.To.Type != obj.TYPE_REG {
+				ctxt.Diag("progedit: unsupported load at %v", p)
+			}
+			p.As = movtol(p.As)
 			*p.From3 = p.From
 			p.From.Type = obj.TYPE_CONST
-			p.From.Offset = 0
+			p.From3.Type = obj.TYPE_REG
+		case obj.TYPE_REG:
+			switch p.To.Type {
+			case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
+				if p.As != AMOV {
+					ctxt.Diag("progedit: unsupported register-register move at %v", p)
+				}
+				p.As = AADDI
+				*p.From3 = p.From
+				p.From.Type = obj.TYPE_CONST
+				p.From.Offset = 0
+			case obj.TYPE_MEM: // MOV Rs, c(Rd) -> S $c, Rs, Rd
+				switch p.As {
+				case AMOVBU, AMOVHU, AMOVWU:
+					ctxt.Diag("progedit: unsupported unsigned store at %v", p)
+				}
+				p.As = movtos(p.As)
+				// The destination address goes in p.From and
+				// p.To here, with the offset in p.From and the
+				// register in p.To.  The data register goes in
+				// p.From3.
+				p.From, *p.From3 = p.To, p.From
+				p.From.Type = obj.TYPE_CONST
+				p.From3.Type = obj.TYPE_REG
+				p.To.Type = obj.TYPE_REG
+			default:
+				ctxt.Diag("progedit: unsupported MOV at %v", p)
+			}
 		case obj.TYPE_CONST: // MOV $c, R -> ADD $c, ZERO, R
+			if p.As != AMOV {
+				ctxt.Diag("progedit: unsupported constant load at %v", p)
+			}
 			p.As = AADDI
 			p.From3.Type = obj.TYPE_REG
 			p.From3.Reg = REG_ZERO
+		default:
+			ctxt.Diag("progedit: unsupported MOV at %v", p)
 		}
 	}
 }
@@ -335,6 +410,22 @@ func instr_i(p *obj.Prog) uint32 {
 	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
+func instr_s(p *obj.Prog) uint32 {
+	imm := immi(p.From, 12)
+	rs2 := regi(*p.From3)
+	rs1 := regi(p.To)
+	i, ok := encode(p.As)
+	if !ok {
+		panic("instr_i: could not encode instruction")
+	}
+	return (imm>>5)<<25 |
+		rs2<<20 |
+		rs1<<15 |
+		i.funct3<<12 |
+		(imm&0x1f)<<7 |
+		i.opcode
+}
+
 func instr_sb(p *obj.Prog) uint32 {
 	imm := immi(p.To, 13)
 	rs2 := regival(p.Reg)
@@ -374,8 +465,11 @@ func asmout(p *obj.Prog) uint32 {
 	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND:
 		return instr_r(p)
 	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, ASCALL,
-		ARDCYCLE, ARDTIME, ARDINSTRET:
+		ARDCYCLE, ARDTIME, ARDINSTRET, ALB, ALH, ALW, ALD, ALBU, ALHU,
+		ALWU:
 		return instr_i(p)
+	case ASB, ASH, ASW, ASD:
+		return instr_s(p)
 	case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
 		return instr_sb(p)
 	case AJAL:

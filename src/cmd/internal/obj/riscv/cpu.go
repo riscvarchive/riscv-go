@@ -391,6 +391,12 @@ const (
 	// Fake instructions.  These get translated by the assembler into other
 	// instructions, based on their operands.
 	AMOV
+	AMOVB
+	AMOVH
+	AMOVW
+	AMOVBU
+	AMOVHU
+	AMOVWU
 )
 
 // All unary instructions which write to their arguments (as opposed to reading
