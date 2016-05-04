@@ -342,7 +342,8 @@ func InvertBranch(i obj.As) obj.As {
 }
 
 // preprocess is called once for each linker symbol.  It generates prologue and
-// epilogue code and computes PC-relative branch and jump offsets.  By the time
+// epilogue code, computes PC-relative branch and jump offsets, and expands
+// literal MOVs that are too large to fit in a single instruction.  By the time
 // preprocess finishes, all instructions in the symbol are concrete, real RISC-V
 // instructions.
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
@@ -411,6 +412,33 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		}
 	}
 
+	// Expand too-large MOVs.
+	for p := cursym.Text; p != nil; p = p.Link {
+		if p.As == AADDI &&
+			p.From.Type == obj.TYPE_CONST && (p.From.Offset < -2048 || 2047 < p.From.Offset) &&
+			p.From3.Type == obj.TYPE_REG && p.From3.Reg == REG_ZERO &&
+			p.To.Type == obj.TYPE_REG {
+			hi := p.From.Offset >> 12
+			lo := int64(uint64(p.From.Offset) & 0x0fff)
+			if 2047 < lo && lo <= 4096 {
+				hi++
+				lo -= 4096
+			}
+
+			p.As = ALUI
+			p.From.Offset = hi
+			p.From3.Type = obj.TYPE_NONE
+
+			add := obj.Appendp(ctxt, p)
+			add.From3 = &obj.Addr{}
+			add.As = AADDI
+			add.From.Type = obj.TYPE_CONST
+			add.From.Offset = lo
+			*add.From3 = p.To
+			add.To = p.To
+		}
+	}
+
 	// Expand each long branch into a short branch and a jump.  This is a
 	// fairly inefficient algorithm in theory, but it's only pathological
 	// when there are a large quantity of long branches, which is unusual.
@@ -429,6 +457,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				jmp := obj.Appendp(ctxt, p)
 				jmp.As = AJAL
 				jmp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+				jmp.From3 = &obj.Addr{}
 				jmp.To = obj.Addr{Type: obj.TYPE_BRANCH}
 				jmp.Pcond = p.Pcond
 

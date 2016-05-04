@@ -48,6 +48,9 @@ start:
 	BLTU	T0, T1, start	// BLTU T0, T1, 2	// e3e462f6
 	BGEU	T0, T1, start	// BGEU T0, T1, 2	// e3f262f6
 
+	// Ditto.  (This large constant load expands into a lui+addi.)
+	MOV	$54321, T0			// b7d20000
+
 	JMP	(T0)				// 67800200
 	JMP	4(T0)				// 67804200
 
