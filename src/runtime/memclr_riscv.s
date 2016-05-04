@@ -8,8 +8,8 @@
 
 // void runtime·memclr(void*, uintptr)
 TEXT runtime·memclr(SB),NOSPLIT,$0-16
-	MOV	0(FP), T0
-	MOV	8(FP), T1
+	MOV	ptr+0(FP), T0
+	MOV	n+8(FP), T1
 	ADD	T0, T1, T3
 
 out:

@@ -42,6 +42,16 @@ import (
 	"cmd/internal/obj"
 )
 
+// resolvepseudoreg concretizes pseudo-registers in an Addr.
+func resolvepseudoreg(a *obj.Addr) {
+	if a.Type == obj.TYPE_MEM {
+		switch a.Name {
+		case obj.NAME_PARAM:
+			a.Reg = REG_FP
+		}
+	}
+}
+
 // lowerjalr normalizes a JALR instruction.
 func lowerjalr(p *obj.Prog) {
 	if p.As != AJALR {
@@ -137,6 +147,11 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AXORI
 		}
 	}
+
+	// Concretize pseudo-registers.
+	resolvepseudoreg(&p.From)
+	resolvepseudoreg(p.From3)
+	resolvepseudoreg(&p.To)
 
 	// Do additional single-instruction rewriting.
 	switch p.As {
