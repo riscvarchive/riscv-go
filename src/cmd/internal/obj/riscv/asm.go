@@ -490,7 +490,7 @@ func asmout(p *obj.Prog) uint32 {
 	case AJAL:
 		return instr_uj(p)
 	}
-	panic("asmout: unrecognized instruction")
+	panic(fmt.Sprintf("asmout: unrecognized instruction %s", obj.Aconv(p.As)))
 }
 
 // assemble is called at the very end of the assembly process.  It actually
