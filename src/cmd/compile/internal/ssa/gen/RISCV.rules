@@ -241,8 +241,8 @@
 (Neq32F x y) -> (ADD x y)
 
 // Loads and stores
-(Load ptr mem) -> (LD ptr mem)
-(Store ptr val mem) -> (SD ptr val mem)
+(Load ptr mem) -> (MOVload ptr mem)
+(Store ptr val mem) -> (MOVstore ptr val mem)
 
 //(Convert x y) ->
 

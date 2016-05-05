@@ -1890,11 +1890,11 @@ func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 	_ = b
 	// match: (Load ptr mem)
 	// cond:
-	// result: (LD ptr mem)
+	// result: (MOVload ptr mem)
 	for {
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVLD)
+		v.reset(OpRISCVMOVload)
 		v.AddArg(ptr)
 		v.AddArg(mem)
 		return true
@@ -3349,12 +3349,12 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	_ = b
 	// match: (Store ptr val mem)
 	// cond:
-	// result: (SD ptr val mem)
+	// result: (MOVstore ptr val mem)
 	for {
 		ptr := v.Args[0]
 		val := v.Args[1]
 		mem := v.Args[2]
-		v.reset(OpRISCVSD)
+		v.reset(OpRISCVMOVstore)
 		v.AddArg(ptr)
 		v.AddArg(val)
 		v.AddArg(mem)

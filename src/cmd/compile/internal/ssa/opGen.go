@@ -603,8 +603,8 @@ const (
 
 	OpRISCVADD
 	OpRISCVMOVmem
-	OpRISCVLD
-	OpRISCVSD
+	OpRISCVMOVload
+	OpRISCVMOVstore
 	OpRISCVLoweredNilCheck
 )
 
@@ -5436,10 +5436,10 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LD",
+		name:    "MOVload",
 		auxType: auxSymOff,
 		argLen:  2,
-		asm:     riscv.ALD,
+		asm:     riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
@@ -5450,10 +5450,10 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SD",
+		name:    "MOVstore",
 		auxType: auxSymOff,
 		argLen:  3,
-		asm:     riscv.ASD,
+		asm:     riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
