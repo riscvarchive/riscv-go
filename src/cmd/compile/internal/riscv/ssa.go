@@ -49,16 +49,66 @@ var ssaRegToReg = []int16{
 	riscv.REG_X31,
 }
 
+func loadByType(t ssa.Type) obj.As {
+	width := t.Size()
+	if t.IsFloat() {
+		panic("float unsupported")
+	}
+
+	switch width {
+	case 1:
+		return riscv.AMOVB
+	case 2:
+		return riscv.AMOVH
+	case 4:
+		return riscv.AMOVW
+	case 8:
+		return riscv.AMOV
+	}
+
+	panic("bad store type")
+}
+
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
 func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {
 	log.Printf("ssaMarkMoves")
 }
 
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
-	log.Printf("ssaGenValue")
 	s.SetLineno(v.Line)
 
 	switch v.Op {
+	case ssa.OpInitMem:
+		// memory arg needs no code
+	case ssa.OpArg:
+		// input args need no code
+	case ssa.OpLoadReg:
+		if v.Type.IsFlags() {
+			v.Unimplementedf("load flags not implemented: %v", v.LongString())
+			return
+		}
+		p := gc.Prog(loadByType(v.Type))
+		n, off := gc.AutoVar(v.Args[0])
+		p.From.Type = obj.TYPE_MEM
+		p.From.Node = n
+		p.From.Sym = gc.Linksym(n.Sym)
+		p.From.Offset = off
+		if n.Class == gc.PPARAM || n.Class == gc.PPARAMOUT {
+			p.From.Name = obj.NAME_PARAM
+			p.From.Offset += n.Xoffset
+		} else {
+			p.From.Name = obj.NAME_AUTO
+		}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpVarDef:
+		gc.Gvardef(v.Aux.(*gc.Node))
+	case ssa.OpVarKill:
+		gc.Gvarkill(v.Aux.(*gc.Node))
+	case ssa.OpVarLive:
+		gc.Gvarlive(v.Aux.(*gc.Node))
+	case ssa.OpSP, ssa.OpSB:
+		// nothing to do
 	case ssa.OpRISCVADD:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
@@ -101,11 +151,15 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 }
 
 func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
-	log.Printf("ssaGenBlock")
-
 	s.SetLineno(b.Line)
 
 	switch b.Kind {
+	case ssa.BlockPlain, ssa.BlockCall, ssa.BlockCheck:
+		if b.Succs[0] != next {
+			p := gc.Prog(obj.AJMP)
+			p.To.Type = obj.TYPE_BRANCH
+			s.Branches = append(s.Branches, gc.Branch{p, b.Succs[0]})
+		}
 	case ssa.BlockExit:
 		gc.Prog(obj.AUNDEF)
 	case ssa.BlockRet:
