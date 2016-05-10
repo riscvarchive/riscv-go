@@ -12,8 +12,8 @@ import (
 	"cmd/internal/obj/riscv"
 )
 
-func proginfo(p *obj.Prog) {
-	log.Printf("proginfo")
+func defframe(ptxt *obj.Prog) {
+	log.Printf("TODO: defframe")
 }
 
 func betypeinit() {
@@ -38,6 +38,7 @@ func Main() {
 	// they have 48-bit vaddrs. why?
 	gc.Thearch.MAXWIDTH = 1 << 50
 
+	gc.Thearch.Defframe = defframe
 	gc.Thearch.Gins = gins
 	gc.Thearch.Proginfo = proginfo
 
