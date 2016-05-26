@@ -317,6 +317,21 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// (It's not a valid RISC-V instruction, after all.)
 	cursym.Text = spadj
 
+	// Delete unneeded instructions.
+	var prev *obj.Prog
+	for p := cursym.Text; p != nil; p = p.Link {
+		switch p.As {
+		case obj.AFUNCDATA:
+			if prev != nil {
+				prev.Link = p.Link
+			} else {
+				cursym.Text = p.Link
+			}
+		default:
+			prev = p
+		}
+	}
+
 	// Replace RET with epilogue.
 	for p := cursym.Text; p != nil; p = p.Link {
 		if p.As == obj.ARET {
