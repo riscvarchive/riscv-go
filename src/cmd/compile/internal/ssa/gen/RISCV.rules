@@ -262,7 +262,7 @@
 //(Const8 [val]) ->
 //(Const16 [val]) ->
 //(Const32 [val]) ->
-//(Const64 [val]) ->
+(Const64 [val]) -> (MOVconst [val])
 //(Const32F [val]) ->
 //(Const64F [val]) ->
 //(ConstNil) ->
