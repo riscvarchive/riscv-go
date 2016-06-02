@@ -143,6 +143,12 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Reg = gc.SSARegNum(v.Args[0])
 		gc.AddAux(&p.To, v)
+	case ssa.OpRISCVMOVconst:
+		p := gc.Prog(v.Op.Asm())
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = v.AuxInt2Int64()
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVLoweredNilCheck:
 		log.Printf("TODO: LoweredNilCheck")
 	default:

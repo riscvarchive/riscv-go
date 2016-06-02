@@ -42,6 +42,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpCom64(v, config)
 	case OpCom8:
 		return rewriteValueRISCV_OpCom8(v, config)
+	case OpConst64:
+		return rewriteValueRISCV_OpConst64(v, config)
 	case OpCvt32Fto32:
 		return rewriteValueRISCV_OpCvt32Fto32(v, config)
 	case OpCvt32Fto64:
@@ -691,6 +693,20 @@ func rewriteValueRISCV_OpCom8(v *Value, config *Config) bool {
 		v.reset(OpRISCVADD)
 		v.AddArg(x)
 		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpConst64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const64 [val])
+	// cond:
+	// result: (MOVconst [val])
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVMOVconst)
+		v.AuxInt = val
 		return true
 	}
 	return false
