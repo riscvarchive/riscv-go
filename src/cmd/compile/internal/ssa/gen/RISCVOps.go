@@ -32,10 +32,17 @@ func init() {
 
 	RISCVops := []opData{
 		{name: "ADD", argLength: 2, reg: gp, asm: "ADD", commutative: true, resultInArg0: true}, // arg0 + arg1
+
+		{name: "MOVBconst", reg: gp, asm: "MOV", typ: "UInt8", aux: "Int8", rematerializeable: true},   // 8 low bits of auxint
+		{name: "MOVWconst", reg: gp, asm: "MOV", typ: "UInt16", aux: "Int16", rematerializeable: true}, // 16 low bits of auxint
+		{name: "MOVLconst", reg: gp, asm: "MOV", typ: "UInt32", aux: "Int32", rematerializeable: true}, // 32 low bits of auxint
+		{name: "MOVQconst", reg: gp, asm: "MOV", typ: "UInt64", aux: "Int64", rematerializeable: true}, // auxint
+
 		{name: "MOVmem", argLength: 1, reg: gp, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
 		{name: "MOVload", argLength: 2, reg: gp, asm: "MOV", aux: "SymOff"},  // load from arg0+auxint+aux. arg1=mem
 		{name: "MOVstore", argLength: 3, reg: gp, asm: "MOV", aux: "SymOff", typ: "Mem"},  // store value in arg1 to arg0+auxint+aux. arg2=mem
+
 		{name: "LoweredNilCheck", argLength: 2, reg: gp},  //arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
 	}
 

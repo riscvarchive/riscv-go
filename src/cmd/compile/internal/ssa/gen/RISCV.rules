@@ -259,14 +259,14 @@
 
 //(OffPtr [off] ptr) ->
 
-//(Const8 [val]) ->
-//(Const16 [val]) ->
-//(Const32 [val]) ->
-//(Const64 [val]) ->
+(Const8 [val]) -> (MOVBconst [val])
+(Const16 [val]) -> (MOVWconst [val])
+(Const32 [val]) -> (MOVLconst [val])
+(Const64 [val]) -> (MOVQconst [val])
 //(Const32F [val]) ->
 //(Const64F [val]) ->
-//(ConstNil) ->
-//(ConstBool [b]) ->
+(ConstNil) -> (MOVQconst [0])
+(ConstBool [b]) -> (MOVBconst [b])
 
 (Addr {sym} base) -> (MOVmem {sym} base)
 

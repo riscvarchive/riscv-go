@@ -602,6 +602,10 @@ const (
 	OpVarLive
 
 	OpRISCVADD
+	OpRISCVMOVBconst
+	OpRISCVMOVWconst
+	OpRISCVMOVLconst
+	OpRISCVMOVQconst
 	OpRISCVMOVmem
 	OpRISCVMOVload
 	OpRISCVMOVstore
@@ -5412,6 +5416,66 @@ var opcodeTable = [...]opInfo{
 		commutative:  true,
 		resultInArg0: true,
 		asm:          riscv.AADD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:              "MOVBconst",
+		auxType:           auxInt8,
+		argLen:            0,
+		rematerializeable: true,
+		asm:               riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:              "MOVWconst",
+		auxType:           auxInt16,
+		argLen:            0,
+		rematerializeable: true,
+		asm:               riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:              "MOVLconst",
+		auxType:           auxInt32,
+		argLen:            0,
+		rematerializeable: true,
+		asm:               riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:              "MOVQconst",
+		auxType:           auxInt64,
+		argLen:            0,
+		rematerializeable: true,
+		asm:               riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
