@@ -406,6 +406,18 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
+func position(p *obj.Prog, a obj.Addr) string {
+	switch {
+	case p.From == a:
+		return "from"
+	case p.To == a:
+		return "to"
+	case p.From3 != nil && *p.From3 == a:
+		return "from3"
+	}
+	return "???"
+}
+
 // regival validates an integer register.
 func regival(r int16) uint32 {
 	if r < REG_X0 || REG_X31 < r {
@@ -415,28 +427,29 @@ func regival(r int16) uint32 {
 }
 
 // regi extracts the integer register from an Addr.
-func regi(a obj.Addr) uint32 {
+func regi(p *obj.Prog, a obj.Addr) uint32 {
 	if a.Type != obj.TYPE_REG {
-		panic(fmt.Sprintf("ill typed: %+v", a))
+		p.Ctxt.Diag("%v\texpected register in %s position but got %s", p, position(p, a), p.Ctxt.Dconv(&a))
+		return 0
 	}
 	return regival(a.Reg)
 }
 
 // immi extracts the integer literal of the specified size from an Addr.
-func immi(a obj.Addr, nbits uint) uint32 {
+func immi(p *obj.Prog, a obj.Addr, nbits uint) uint32 {
 	if a.Type != obj.TYPE_CONST {
-		panic(fmt.Sprintf("ill typed: %+v", a))
+		p.Ctxt.Diag("%v\texpected immediate in %s position but got %s", p, position(p, a), p.Ctxt.Dconv(&a))
 	}
 	if a.Offset < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < a.Offset {
-		panic(fmt.Sprintf("immediate cannot fit in %d bits", nbits))
+		p.Ctxt.Diag("%v\timmediate %d does not fit in %d bits", p, a.Offset, nbits)
 	}
 	return uint32(a.Offset)
 }
 
 func instr_r(p *obj.Prog) uint32 {
-	rs2 := regi(p.From)
-	rs1 := regi(*p.From3)
-	rd := regi(p.To)
+	rs2 := regi(p, p.From)
+	rs1 := regi(p, *p.From3)
+	rd := regi(p, p.To)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_r: could not encode instruction")
@@ -445,9 +458,9 @@ func instr_r(p *obj.Prog) uint32 {
 }
 
 func instr_i(p *obj.Prog) uint32 {
-	imm := immi(p.From, 12)
-	rs1 := regi(*p.From3)
-	rd := regi(p.To)
+	imm := immi(p, p.From, 12)
+	rs1 := regi(p, *p.From3)
+	rd := regi(p, p.To)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_i: could not encode instruction")
@@ -456,9 +469,9 @@ func instr_i(p *obj.Prog) uint32 {
 }
 
 func instr_s(p *obj.Prog) uint32 {
-	imm := immi(p.From, 12)
-	rs2 := regi(*p.From3)
-	rs1 := regi(p.To)
+	imm := immi(p, p.From, 12)
+	rs2 := regi(p, *p.From3)
+	rs1 := regi(p, p.To)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_i: could not encode instruction")
@@ -472,9 +485,9 @@ func instr_s(p *obj.Prog) uint32 {
 }
 
 func instr_sb(p *obj.Prog) uint32 {
-	imm := immi(p.To, 13)
+	imm := immi(p, p.To, 13)
 	rs2 := regival(p.Reg)
-	rs1 := regi(p.From)
+	rs1 := regi(p, p.From)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_sb: could not encode instruction")
@@ -490,8 +503,8 @@ func instr_sb(p *obj.Prog) uint32 {
 }
 
 func instr_u(p *obj.Prog) uint32 {
-	imm := immi(p.To, 21)
-	rd := regi(p.From)
+	imm := immi(p, p.To, 21)
+	rd := regi(p, p.From)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_u: could not encode instruction")
@@ -500,8 +513,8 @@ func instr_u(p *obj.Prog) uint32 {
 }
 
 func instr_uj(p *obj.Prog) uint32 {
-	imm := immi(p.To, 21)
-	rd := regi(p.From)
+	imm := immi(p, p.To, 21)
+	rd := regi(p, p.From)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("instr_uj: could not encode instruction")
