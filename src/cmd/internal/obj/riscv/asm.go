@@ -489,6 +489,20 @@ func instr_sb(p *obj.Prog) uint32 {
 		i.opcode
 }
 
+func instr_u(p *obj.Prog) uint32 {
+	// The immediates for instr_u are the upper 20 bits of a 32 bit value.
+	// Rather than have the user/compiler generate a 32 bit constant,
+	// the bottommost bits of which must all be zero,
+	// instead accept just the top bits.
+	imm := immi(p.From, 20)
+	rd := regi(p.To)
+	i, ok := encode(p.As)
+	if !ok {
+		panic("instr_u: could not encode instruction")
+	}
+	return imm<<12 | rd<<7 | i.opcode
+}
+
 func instr_uj(p *obj.Prog) uint32 {
 	imm := immi(p.To, 21)
 	rd := regi(p.From)
@@ -517,6 +531,8 @@ func asmout(p *obj.Prog) uint32 {
 		return instr_s(p)
 	case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
 		return instr_sb(p)
+	case AAUIPC, ALUI:
+		return instr_u(p)
 	case AJAL:
 		return instr_uj(p)
 	}
