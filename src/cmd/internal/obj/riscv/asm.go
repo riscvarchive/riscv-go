@@ -489,6 +489,16 @@ func instr_sb(p *obj.Prog) uint32 {
 		i.opcode
 }
 
+func instr_u(p *obj.Prog) uint32 {
+	imm := immi(p.To, 21)
+	rd := regi(p.From)
+	i, ok := encode(p.As)
+	if !ok {
+		panic("instr_u: could not encode instruction")
+	}
+	return imm<<12 | rd<<7 | i.opcode
+}
+
 func instr_uj(p *obj.Prog) uint32 {
 	imm := immi(p.To, 21)
 	rd := regi(p.From)
@@ -517,6 +527,8 @@ func asmout(p *obj.Prog) uint32 {
 		return instr_s(p)
 	case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
 		return instr_sb(p)
+	case AAUIPC, ALUI:
+		return instr_u(p)
 	case AJAL:
 		return instr_uj(p)
 	}
