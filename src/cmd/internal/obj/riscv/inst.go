@@ -7,7 +7,7 @@ import "cmd/internal/obj"
 type inst struct {
 	opcode uint32
 	funct3 uint32
-	csr int64
+	csr    int64
 	funct7 uint32
 }
 
