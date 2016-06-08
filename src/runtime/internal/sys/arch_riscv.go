@@ -5,7 +5,7 @@
 package sys
 
 const (
-	TheChar       = 'V'
+	ArchFamily    = RISCV
 	BigEndian     = 0
 	CacheLineSize = 64 // TODO(prattmic)
 	PhysPageSize  = 4096 // TODO(prattmic)

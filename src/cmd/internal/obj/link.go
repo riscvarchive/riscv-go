@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,10 @@
 
 package obj
 
-import "encoding/binary"
+import (
+	"bufio"
+	"cmd/internal/sys"
+)
 
 // An Addr is an argument to an instruction.
 // The general forms and their encodings are:
@@ -259,7 +262,7 @@ type ProgInfo struct {
 // that are common to all architectures.
 // However, the majority of opcodes are arch-specific
 // and are declared in their respective architecture's subpackage.
-type As int16
+type As int32
 
 // These are the portable opcodes.
 const (
@@ -299,6 +302,7 @@ const (
 	ABasePPC64
 	ABaseARM64
 	ABaseMIPS64
+	ABaseS390X
 	ABaseRISCV
 
 	AMask = 1<<12 - 1 // AND with this to use the opcode as an array index.
@@ -309,12 +313,12 @@ type LSym struct {
 	Name      string
 	Type      int16
 	Version   int16
-	Dupok     uint8
-	Cfunc     uint8
-	Nosplit   uint8
-	Leaf      uint8
-	Seenglobl uint8
-	Onlist    uint8
+	Dupok     bool
+	Cfunc     bool
+	Nosplit   bool
+	Leaf      bool
+	Seenglobl bool
+	Onlist    bool
 
 	// ReflectMethod means the function may call reflect.Type.Method or
 	// reflect.Type.MethodByName. Matching is imprecise (as reflect.Type
@@ -342,6 +346,12 @@ type LSym struct {
 	Pcln   *Pcln
 	P      []byte
 	R      []Reloc
+}
+
+// The compiler needs LSym to satisfy fmt.Stringer, because it stores
+// an LSym in ssa.ExternSymbol.
+func (s *LSym) String() string {
+	return s.Name
 }
 
 type Pcln struct {
@@ -391,6 +401,7 @@ const (
 	SFUNCTABRELRO
 
 	STYPELINK
+	SITABLINK
 	SSYMTAB
 	SPCLNTAB
 	SELFROSECT
@@ -416,6 +427,8 @@ const (
 	SCONST
 	SDYNIMPORT
 	SHOSTOBJ
+	SDWARFSECT
+	SDWARFINFO
 	SSUB       = 1 << 8
 	SMASK      = SSUB - 1
 	SHIDDEN    = 1 << 9
@@ -442,9 +455,12 @@ const (
 	// R_ADDRARM64 relocates an adrp, add pair to compute the address of the
 	// referenced symbol.
 	R_ADDRARM64
-	// R_ADDRMIPS (only used on mips64) resolves to a 32-bit external address,
-	// by loading the address into a register with two instructions (lui, ori).
+	// R_ADDRMIPS (only used on mips64) resolves to the low 16 bits of an external
+	// address, by encoding it into the instruction.
 	R_ADDRMIPS
+	// R_ADDROFF resolves to a 32-bit offset from the beginning of the section
+	// holding the data being relocated to the referenced symbol.
+	R_ADDROFF
 	R_SIZE
 	R_CALL
 	R_CALLARM
@@ -477,17 +493,20 @@ const (
 	// should be linked into the final binary, even if there are no other
 	// direct references. (This is used for types reachable by reflection.)
 	R_USETYPE
-	// R_METHOD resolves to an *rtype for a method.
-	// It is used when linking from the uncommonType of another *rtype, and
-	// may be set to zero by the linker if it determines the method text is
-	// unreachable by the linked program.
-	R_METHOD
+	// R_METHODOFF resolves to a 32-bit offset from the beginning of the section
+	// holding the data being relocated to the referenced symbol.
+	// It is a variant of R_ADDROFF used when linking from the uncommonType of a
+	// *rtype, and may be set to zero by the linker if it determines the method
+	// text is unreachable by the linked program.
+	R_METHODOFF
 	R_POWER_TOC
 	R_GOTPCREL
 	// R_JMPMIPS (only used on mips64) resolves to non-PC-relative target address
 	// of a JMP instruction, by encoding the address into the instruction.
 	// The stack nosplit check ignores this since it is not a function call.
 	R_JMPMIPS
+	// R_DWARFREF resolves to the offset of the symbol from its section.
+	R_DWARFREF
 
 	// Platform dependent relocations. Architectures with fixed width instructions
 	// have the inherent issue that a 32-bit (or 64-bit!) displacement cannot be
@@ -559,6 +578,17 @@ const (
 	// R_ADDRPOWER_DS but inserts the offset from the TOC to the address of the the
 	// relocated symbol rather than the symbol's address.
 	R_ADDRPOWER_TOCREL_DS
+
+	// R_PCRELDBL relocates s390x 2-byte aligned PC-relative addresses.
+	// TODO(mundaym): remove once variants can be serialized - see issue 14218.
+	R_PCRELDBL
+
+	// R_ADDRMIPSU (only used on mips64) resolves to the sign-adjusted "upper" 16
+	// bits (bit 16-31) of an external address, by encoding it into the instruction.
+	R_ADDRMIPSU
+	// R_ADDRMIPSTLS (only used on mips64) resolves to the low 16 bits of a TLS
+	// address (offset from thread pointer), by encoding it into the instruction.
+	R_ADDRMIPSTLS
 )
 
 type Auto struct {
@@ -579,19 +609,6 @@ type Pcdata struct {
 	P []byte
 }
 
-// Pcdata iterator.
-//      for(pciterinit(ctxt, &it, &pcd); !it.done; pciternext(&it)) { it.value holds in [it.pc, it.nextpc) }
-type Pciter struct {
-	d       Pcdata
-	p       []byte
-	pc      uint32
-	nextpc  uint32
-	pcscale uint32
-	value   int32
-	start   int
-	done    int
-}
-
 // symbol version, incremented each time a file is loaded.
 // version==1 is reserved for savehist.
 const (
@@ -608,12 +625,11 @@ type Link struct {
 	Debugvlog     int32
 	Debugdivmod   int32
 	Debugpcln     int32
-	Flag_shared   int32
+	Flag_shared   bool
 	Flag_dynlink  bool
 	Flag_optimize bool
-	Bso           *Biobuf
+	Bso           *bufio.Writer
 	Pathname      string
-	Windows       int32
 	Goroot        string
 	Goroot_final  string
 	Hash          map[SymVer]*LSym
@@ -648,7 +664,8 @@ type Link struct {
 	Textp         *LSym
 	Etextp        *LSym
 	Errors        int
-	RefsWritten   int // Number of symbol references already written to object file.
+
+	Framepointer_enabled bool
 
 	// state for writing objects
 	Text []*LSym
@@ -669,15 +686,15 @@ func (ctxt *Link) Diag(format string, args ...interface{}) {
 // on the stack in the function prologue and so always have a pointer between
 // the hardware stack pointer and the local variable area.
 func (ctxt *Link) FixedFrameSize() int64 {
-	switch ctxt.Arch.Thechar {
-	case '6', '8':
+	switch ctxt.Arch.Family {
+	case sys.AMD64, sys.I386:
 		return 0
-	case '9':
+	case sys.PPC64:
 		// PIC code on ppc64le requires 32 bytes of stack, and it's easier to
 		// just use that much stack always on ppc64x.
-		return int64(4 * ctxt.Arch.Ptrsize)
+		return int64(4 * ctxt.Arch.PtrSize)
 	default:
-		return int64(ctxt.Arch.Ptrsize)
+		return int64(ctxt.Arch.PtrSize)
 	}
 }
 
@@ -688,17 +705,12 @@ type SymVer struct {
 
 // LinkArch is the definition of a single architecture.
 type LinkArch struct {
-	ByteOrder  binary.ByteOrder
-	Name       string
-	Thechar    int
+	*sys.Arch
 	Preprocess func(*Link, *LSym)
 	Assemble   func(*Link, *LSym)
 	Follow     func(*Link, *LSym)
 	Progedit   func(*Link, *Prog)
 	UnaryDst   map[As]bool // Instruction takes one operand, a destination.
-	Minlc      int
-	Ptrsize    int
-	Regsize    int
 }
 
 /* executable header types */
@@ -706,7 +718,6 @@ const (
 	Hunknown = 0 + iota
 	Hdarwin
 	Hdragonfly
-	Helf
 	Hfreebsd
 	Hlinux
 	Hnacl
@@ -716,27 +727,6 @@ const (
 	Hsolaris
 	Hwindows
 )
-
-type Plist struct {
-	Name    *LSym
-	Firstpc *Prog
-	Recur   int
-	Link    *Plist
-}
-
-/*
- * start a new Prog list.
- */
-func Linknewplist(ctxt *Link) *Plist {
-	pl := new(Plist)
-	if ctxt.Plist == nil {
-		ctxt.Plist = pl
-	} else {
-		ctxt.Plast.Link = pl
-	}
-	ctxt.Plast = pl
-	return pl
-}
 
 // AsmBuf is a simple buffer to assemble variable-length x86 instructions into.
 type AsmBuf struct {

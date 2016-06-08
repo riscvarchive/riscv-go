@@ -175,10 +175,9 @@ func (enc *Encoder) EncodeElement(v interface{}, start StartElement) error {
 }
 
 var (
-	begComment   = []byte("<!--")
-	endComment   = []byte("-->")
-	endProcInst  = []byte("?>")
-	endDirective = []byte(">")
+	begComment  = []byte("<!--")
+	endComment  = []byte("-->")
+	endProcInst = []byte("?>")
 )
 
 // EncodeToken writes the given XML token to the stream.
@@ -857,7 +856,7 @@ func (p *printer) marshalStruct(tinfo *typeInfo, val reflect.Value) error {
 				}
 			case reflect.Slice:
 				b := vf.Bytes()
-				dashDash = bytes.Index(b, ddBytes) >= 0
+				dashDash = bytes.Contains(b, ddBytes)
 				dashLast = b[len(b)-1] == '-'
 				if !dashDash {
 					p.Write(b)

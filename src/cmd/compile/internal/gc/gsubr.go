@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@ package gc
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/sys"
 	"fmt"
 	"runtime"
 	"strings"
@@ -52,12 +53,13 @@ func Ismem(n *Node) bool {
 		OCAP,
 		OINDREG,
 		ONAME,
-		OPARAM,
 		OCLOSUREVAR:
 		return true
 
 	case OADDR:
-		return Thearch.Thechar == '6' || Thearch.Thechar == '9' // because 6g uses PC-relative addressing; TODO(rsc): not sure why 9g too
+		// amd64 and s390x use PC relative addressing.
+		// TODO(rsc): not sure why ppc64 needs this too.
+		return Thearch.LinkArch.InFamily(sys.AMD64, sys.PPC64, sys.S390X)
 	}
 
 	return false
@@ -83,7 +85,7 @@ func Gbranch(as obj.As, t *Type, likely int) *obj.Prog {
 	p := Prog(as)
 	p.To.Type = obj.TYPE_BRANCH
 	p.To.Val = nil
-	if as != obj.AJMP && likely != 0 && Thearch.Thechar != '9' && Thearch.Thechar != '7' && Thearch.Thechar != '0' {
+	if as != obj.AJMP && likely != 0 && !Thearch.LinkArch.InFamily(sys.PPC64, sys.ARM64, sys.MIPS64, sys.S390X) {
 		p.From.Type = obj.TYPE_CONST
 		if likely > 0 {
 			p.From.Offset = 1
@@ -234,13 +236,17 @@ func ggloblnod(nam *Node) {
 }
 
 func ggloblsym(s *Sym, width int32, flags int16) {
+	ggloblLSym(Linksym(s), width, flags)
+}
+
+func ggloblLSym(s *obj.LSym, width int32, flags int16) {
 	p := Thearch.Gins(obj.AGLOBL, nil, nil)
 	p.From.Type = obj.TYPE_MEM
 	p.From.Name = obj.NAME_EXTERN
-	p.From.Sym = Linksym(s)
+	p.From.Sym = s
 	if flags&obj.LOCAL != 0 {
 		p.From.Sym.Local = true
-		flags &= ^obj.LOCAL
+		flags &^= obj.LOCAL
 	}
 	p.To.Type = obj.TYPE_CONST
 	p.To.Offset = int64(width)
@@ -270,7 +276,7 @@ func gused(n *Node) {
 func Isfat(t *Type) bool {
 	if t != nil {
 		switch t.Etype {
-		case TSTRUCT, TARRAY, TSTRING,
+		case TSTRUCT, TARRAY, TSLICE, TSTRING,
 			TINTER: // maybe remove later
 			return true
 		}
@@ -320,13 +326,13 @@ func Naddr(a *obj.Addr, n *Node) {
 		a := a // copy to let escape into Ctxt.Dconv
 		Debug['h'] = 1
 		Dump("naddr", n)
-		Fatalf("naddr: bad %v %v", Oconv(n.Op, 0), Ctxt.Dconv(a))
+		Fatalf("naddr: bad %v %v", n.Op, Ctxt.Dconv(a))
 
 	case OREGISTER:
 		a.Type = obj.TYPE_REG
 		a.Reg = n.Reg
 		a.Sym = nil
-		if Thearch.Thechar == '8' { // TODO(rsc): Never clear a->width.
+		if Thearch.LinkArch.Family == sys.I386 { // TODO(rsc): Never clear a->width.
 			a.Width = 0
 		}
 
@@ -338,21 +344,9 @@ func Naddr(a *obj.Addr, n *Node) {
 		if a.Offset != int64(int32(a.Offset)) {
 			Yyerror("offset %d too large for OINDREG", a.Offset)
 		}
-		if Thearch.Thechar == '8' { // TODO(rsc): Never clear a->width.
+		if Thearch.LinkArch.Family == sys.I386 { // TODO(rsc): Never clear a->width.
 			a.Width = 0
 		}
-
-		// n->left is PHEAP ONAME for stack parameter.
-	// compute address of actual parameter on stack.
-	case OPARAM:
-		a.Etype = uint8(Simtype[n.Left.Type.Etype])
-
-		a.Width = n.Left.Type.Width
-		a.Offset = n.Xoffset
-		a.Sym = Linksym(n.Left.Sym)
-		a.Type = obj.TYPE_MEM
-		a.Name = obj.NAME_PARAM
-		a.Node = n.Left.Orig
 
 	case OCLOSUREVAR:
 		if !Curfn.Func.Needctxt {
@@ -412,39 +406,39 @@ func Naddr(a *obj.Addr, n *Node) {
 		// A special case to make write barriers more efficient.
 		// Taking the address of the first field of a named struct
 		// is the same as taking the address of the struct.
-		if n.Left.Type.Etype != TSTRUCT || n.Left.Type.Field(0).Sym != n.Right.Sym {
+		if !n.Left.Type.IsStruct() || n.Left.Type.Field(0).Sym != n.Sym {
 			Debug['h'] = 1
 			Dump("naddr", n)
-			Fatalf("naddr: bad %v %v", Oconv(n.Op, 0), Ctxt.Dconv(a))
+			Fatalf("naddr: bad %v %v", n.Op, Ctxt.Dconv(a))
 		}
 		Naddr(a, n.Left)
 
 	case OLITERAL:
-		if Thearch.Thechar == '8' {
+		if Thearch.LinkArch.Family == sys.I386 {
 			a.Width = 0
 		}
-		switch n.Val().Ctype() {
+		switch u := n.Val().U.(type) {
 		default:
 			Fatalf("naddr: const %v", Tconv(n.Type, FmtLong))
 
-		case CTFLT:
+		case *Mpflt:
 			a.Type = obj.TYPE_FCONST
-			a.Val = mpgetflt(n.Val().U.(*Mpflt))
+			a.Val = u.Float64()
 
-		case CTINT, CTRUNE:
+		case *Mpint:
 			a.Sym = nil
 			a.Type = obj.TYPE_CONST
-			a.Offset = Mpgetfix(n.Val().U.(*Mpint))
+			a.Offset = u.Int64()
 
-		case CTSTR:
-			datagostring(n.Val().U.(string), a)
+		case string:
+			datagostring(u, a)
 
-		case CTBOOL:
+		case bool:
 			a.Sym = nil
 			a.Type = obj.TYPE_CONST
-			a.Offset = int64(obj.Bool2int(n.Val().U.(bool)))
+			a.Offset = int64(obj.Bool2int(u))
 
-		case CTNIL:
+		case *NilVal:
 			a.Sym = nil
 			a.Type = obj.TYPE_CONST
 			a.Offset = 0
@@ -453,12 +447,12 @@ func Naddr(a *obj.Addr, n *Node) {
 	case OADDR:
 		Naddr(a, n.Left)
 		a.Etype = uint8(Tptr)
-		if Thearch.Thechar != '0' && Thearch.Thechar != '5' && Thearch.Thechar != '7' && Thearch.Thechar != '9' { // TODO(rsc): Do this even for arm, ppc64.
+		if !Thearch.LinkArch.InFamily(sys.MIPS64, sys.ARM, sys.ARM64, sys.PPC64, sys.S390X) { // TODO(rsc): Do this even for these architectures.
 			a.Width = int64(Widthptr)
 		}
 		if a.Type != obj.TYPE_MEM {
 			a := a // copy to let escape into Ctxt.Dconv
-			Fatalf("naddr: OADDR %v (from %v)", Ctxt.Dconv(a), Oconv(n.Left.Op, 0))
+			Fatalf("naddr: OADDR %v (from %v)", Ctxt.Dconv(a), n.Left.Op)
 		}
 		a.Type = obj.TYPE_ADDR
 
@@ -492,7 +486,7 @@ func Naddr(a *obj.Addr, n *Node) {
 		}
 		a.Etype = uint8(Simtype[TUINT])
 		a.Offset += int64(Array_nel)
-		if Thearch.Thechar != '5' { // TODO(rsc): Do this even on arm.
+		if Thearch.LinkArch.Family != sys.ARM { // TODO(rsc): Do this even on arm.
 			a.Width = int64(Widthint)
 		}
 
@@ -505,7 +499,7 @@ func Naddr(a *obj.Addr, n *Node) {
 		}
 		a.Etype = uint8(Simtype[TUINT])
 		a.Offset += int64(Array_cap)
-		if Thearch.Thechar != '5' { // TODO(rsc): Do this even on arm.
+		if Thearch.LinkArch.Family != sys.ARM { // TODO(rsc): Do this even on arm.
 			a.Width = int64(Widthint)
 		}
 	}
@@ -521,25 +515,36 @@ func newplist() *obj.Plist {
 	return pl
 }
 
-// nodarg does something that depends on the value of
-// fp (this was previously completely undocumented).
+// nodarg returns a Node for the function argument denoted by t,
+// which is either the entire function argument or result struct (t is a  struct *Type)
+// or a specific argument (t is a *Field within a struct *Type).
 //
-// fp=1 corresponds to input args
-// fp=0 corresponds to output args
-// fp=-1 is a special case of output args for a
-// specific call from walk that previously (and
-// incorrectly) passed a 1; the behavior is exactly
-// the same as it is for 1, except that PARAMOUT is
-// generated instead of PARAM.
+// If fp is 0, the node is for use by a caller invoking the given
+// function, preparing the arguments before the call
+// or retrieving the results after the call.
+// In this case, the node will correspond to an outgoing argument
+// slot like 8(SP).
+//
+// If fp is 1, the node is for use by the function itself
+// (the callee), to retrieve its arguments or write its results.
+// In this case the node will be an ONAME with an appropriate
+// type and offset.
 func nodarg(t interface{}, fp int) *Node {
 	var n *Node
 
+	var funarg Funarg
 	switch t := t.(type) {
+	default:
+		Fatalf("bad nodarg %T(%v)", t, t)
+
 	case *Type:
-		// entire argument struct, not just one arg
-		if t.Etype != TSTRUCT || !t.Funarg {
+		// Entire argument struct, not just one arg
+		if !t.IsFuncArgStruct() {
 			Fatalf("nodarg: bad type %v", t)
 		}
+		funarg = t.StructType().Funarg
+
+		// Build fake variable name for whole arg struct.
 		n = Nod(ONAME, nil, nil)
 		n.Sym = Lookup(".args")
 		n.Type = t
@@ -547,31 +552,57 @@ func nodarg(t interface{}, fp int) *Node {
 		if first == nil {
 			Fatalf("nodarg: bad struct")
 		}
-		if first.Width == BADWIDTH {
+		if first.Offset == BADWIDTH {
 			Fatalf("nodarg: offset not computed for %v", t)
 		}
-		n.Xoffset = first.Width
+		n.Xoffset = first.Offset
 		n.Addable = true
+
 	case *Field:
-		if fp == 1 || fp == -1 {
+		funarg = t.Funarg
+		if fp == 1 {
+			// NOTE(rsc): This should be using t.Nname directly,
+			// except in the case where t.Nname.Sym is the blank symbol and
+			// so the assignment would be discarded during code generation.
+			// In that case we need to make a new node, and there is no harm
+			// in optimization passes to doing so. But otherwise we should
+			// definitely be using the actual declaration and not a newly built node.
+			// The extra Fatalf checks here are verifying that this is the case,
+			// without changing the actual logic (at time of writing, it's getting
+			// toward time for the Go 1.7 beta).
+			// At some quieter time (assuming we've never seen these Fatalfs happen)
+			// we could change this code to use "expect" directly.
+			expect := t.Nname
+			if expect.isParamHeapCopy() {
+				expect = expect.Name.Param.Stackcopy
+			}
+
 			for _, n := range Curfn.Func.Dcl {
 				if (n.Class == PPARAM || n.Class == PPARAMOUT) && !isblanksym(t.Sym) && n.Sym == t.Sym {
+					if n != expect {
+						Fatalf("nodarg: unexpected node: %v (%p %v) vs %v (%p %v)", n, n, n.Op, t.Nname, t.Nname, t.Nname.Op)
+					}
 					return n
 				}
 			}
+
+			if !isblanksym(expect.Sym) {
+				Fatalf("nodarg: did not find node in dcl list: %v", expect)
+			}
 		}
 
+		// Build fake name for individual variable.
+		// This is safe because if there was a real declared name
+		// we'd have used it above.
 		n = Nod(ONAME, nil, nil)
 		n.Type = t.Type
 		n.Sym = t.Sym
-		if t.Width == BADWIDTH {
+		if t.Offset == BADWIDTH {
 			Fatalf("nodarg: offset not computed for %v", t)
 		}
-		n.Xoffset = t.Width
+		n.Xoffset = t.Offset
 		n.Addable = true
 		n.Orig = t.Nname
-	default:
-		panic("unreachable")
 	}
 
 	// Rewrite argument named _ to __,
@@ -582,23 +613,23 @@ func nodarg(t interface{}, fp int) *Node {
 	}
 
 	switch fp {
-	case 0: // output arg
-		n.Op = OINDREG
+	default:
+		Fatalf("bad fp")
 
+	case 0: // preparing arguments for call
+		n.Op = OINDREG
 		n.Reg = int16(Thearch.REGSP)
 		n.Xoffset += Ctxt.FixedFrameSize()
 
-	case 1: // input arg
+	case 1: // reading arguments inside call
 		n.Class = PPARAM
-
-	case -1: // output arg from paramstoheap
-		n.Class = PPARAMOUT
-
-	case 2: // offset output arg
-		Fatalf("shouldn't be used")
+		if funarg == FunargResults {
+			n.Class = PPARAMOUT
+		}
 	}
 
 	n.Typecheck = 1
+	n.Addrtaken = true // keep optimizers at bay
 	return n
 }
 
@@ -691,7 +722,7 @@ func Regalloc(n *Node, t *Type, o *Node) {
 		Fatalf("regalloc: t nil")
 	}
 	et := Simtype[t.Etype]
-	if Ctxt.Arch.Regsize == 4 && (et == TINT64 || et == TUINT64) {
+	if Ctxt.Arch.RegSize == 4 && (et == TINT64 || et == TUINT64) {
 		Fatalf("regalloc 64bit")
 	}
 

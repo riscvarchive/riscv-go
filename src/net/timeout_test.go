@@ -5,7 +5,9 @@
 package net
 
 import (
+	"context"
 	"fmt"
+	"internal/testenv"
 	"io"
 	"io/ioutil"
 	"net/internal/socktest"
@@ -39,19 +41,6 @@ func TestDialTimeout(t *testing.T) {
 	origTestHookDialChannel := testHookDialChannel
 	defer func() { testHookDialChannel = origTestHookDialChannel }()
 	defer sw.Set(socktest.FilterConnect, nil)
-
-	// Avoid tracking open-close jitterbugs between netFD and
-	// socket that leads to confusion of information inside
-	// socktest.Switch.
-	// It may happen when the Dial call bumps against TCP
-	// simultaneous open. See selfConnect in tcpsock_posix.go.
-	defer func() {
-		sw.Set(socktest.FilterClose, nil)
-		forceCloseSockets()
-	}()
-	sw.Set(socktest.FilterClose, func(so *socktest.Status) (socktest.AfterFilter, error) {
-		return nil, errTimedout
-	})
 
 	for i, tt := range dialTimeoutTests {
 		switch runtime.GOOS {
@@ -111,7 +100,9 @@ var dialTimeoutMaxDurationTests = []struct {
 }
 
 func TestDialTimeoutMaxDuration(t *testing.T) {
-	t.Parallel()
+	if runtime.GOOS == "openbsd" {
+		testenv.SkipFlaky(t, 15157)
+	}
 
 	ln, err := newLocalListener("tcp")
 	if err != nil {
@@ -121,7 +112,7 @@ func TestDialTimeoutMaxDuration(t *testing.T) {
 
 	for i, tt := range dialTimeoutMaxDurationTests {
 		ch := make(chan error)
-		max := time.NewTimer(100 * time.Millisecond)
+		max := time.NewTimer(250 * time.Millisecond)
 		defer max.Stop()
 		go func() {
 			d := Dialer{Timeout: tt.timeout}
@@ -174,10 +165,13 @@ func TestAcceptTimeout(t *testing.T) {
 	}
 	defer ln.Close()
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	for i, tt := range acceptTimeoutTests {
 		if tt.timeout < 0 {
 			go func() {
-				c, err := Dial(ln.Addr().Network(), ln.Addr().String())
+				var d Dialer
+				c, err := d.DialContext(ctx, ln.Addr().Network(), ln.Addr().String())
 				if err != nil {
 					t.Error(err)
 					return
@@ -311,8 +305,6 @@ var readTimeoutTests = []struct {
 }
 
 func TestReadTimeout(t *testing.T) {
-	t.Parallel()
-
 	switch runtime.GOOS {
 	case "plan9":
 		t.Skipf("not supported on %s", runtime.GOOS)

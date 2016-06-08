@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -101,7 +101,7 @@ func ginscon(as obj.As, c int64, n2 *gc.Node) {
 }
 
 func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
-	if gc.Isint[t.Etype] && n1.Op == gc.OLITERAL && gc.Smallintconst(n1) && n2.Op != gc.OLITERAL {
+	if t.IsInteger() && n1.Op == gc.OLITERAL && gc.Smallintconst(n1) && n2.Op != gc.OLITERAL {
 		// Reverse comparison to place constant last.
 		op = gc.Brrev(op)
 		n1, n2 = n2, n1
@@ -112,11 +112,11 @@ func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
 	// A special case to make write barriers more efficient.
 	// Comparing the first field of a named struct can be done directly.
 	base := n1
-	if n1.Op == gc.ODOT && n1.Left.Type.Etype == gc.TSTRUCT && n1.Left.Type.Field(0).Sym == n1.Right.Sym {
+	if n1.Op == gc.ODOT && n1.Left.Type.IsStruct() && n1.Left.Type.Field(0).Sym == n1.Sym {
 		base = n1.Left
 	}
 
-	if base.Op == gc.ONAME && base.Class&gc.PHEAP == 0 || n1.Op == gc.OINDREG {
+	if base.Op == gc.ONAME && base.Class != gc.PAUTOHEAP || n1.Op == gc.OINDREG {
 		r1 = *n1
 	} else {
 		gc.Regalloc(&r1, t, n1)
@@ -124,7 +124,7 @@ func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
 		gc.Cgen(n1, &g1)
 		gmove(&g1, &r1)
 	}
-	if n2.Op == gc.OLITERAL && gc.Isint[t.Etype] && gc.Smallintconst(n2) {
+	if n2.Op == gc.OLITERAL && t.IsInteger() && gc.Smallintconst(n2) {
 		r2 = *n2
 	} else {
 		gc.Regalloc(&r2, t, n2)
@@ -213,7 +213,7 @@ func gmove(f *gc.Node, t *gc.Node) {
 			// 64-bit immediates are really 32-bit sign-extended
 			// unless moving into a register.
 			if gc.Isint[tt] {
-				if i := con.Int(); int64(int32(i)) != i {
+				if i := con.Int64(); int64(int32(i)) != i {
 					goto hard
 				}
 			}
@@ -229,6 +229,8 @@ func gmove(f *gc.Node, t *gc.Node) {
 
 	switch uint32(ft)<<16 | uint32(tt) {
 	default:
+		gc.Dump("f", f)
+		gc.Dump("t", t)
 		gc.Fatalf("gmove %v -> %v", gc.Tconv(f.Type, gc.FmtLong), gc.Tconv(t.Type, gc.FmtLong))
 
 		/*
@@ -722,7 +724,7 @@ func optoas(op gc.Op, t *gc.Type) obj.As {
 	a := obj.AXXX
 	switch uint32(op)<<16 | uint32(gc.Simtype[t.Etype]) {
 	default:
-		gc.Fatalf("optoas: no entry %v-%v", gc.Oconv(op, 0), t)
+		gc.Fatalf("optoas: no entry %v-%v", op, t)
 
 	case OADDR_ | gc.TPTR32:
 		a = x86.ALEAL
@@ -1310,7 +1312,7 @@ func sudoaddable(as obj.As, n *gc.Node, a *obj.Addr) bool {
 		if !gc.Isconst(n, gc.CTINT) {
 			break
 		}
-		v := n.Int()
+		v := n.Int64()
 		if v >= 32000 || v <= -32000 {
 			break
 		}

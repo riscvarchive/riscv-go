@@ -38,6 +38,9 @@ import (
 
 // Var is an abstract type for all exported variables.
 type Var interface {
+	// String returns a valid JSON value for the variable.
+	// Types with String methods that do not return valid JSON
+	// (such as time.Time) must not be used as a Var.
 	String() string
 }
 
@@ -218,8 +221,10 @@ type String struct {
 
 func (v *String) String() string {
 	v.mu.RLock()
-	defer v.mu.RUnlock()
-	return strconv.Quote(v.s)
+	s := v.s
+	v.mu.RUnlock()
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func (v *String) Set(value string) {

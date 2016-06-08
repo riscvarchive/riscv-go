@@ -155,9 +155,6 @@ var stackLarge struct {
 	free [_MHeapMap_Bits]mSpanList // free lists by log_2(s.npages)
 }
 
-// Cached value of haveexperiment("framepointer")
-var framepointer_enabled bool
-
 func stackinit() {
 	if _StackCacheSize&_PageMask != 0 {
 		throw("cache size must be a multiple of page size")
@@ -191,26 +188,26 @@ func stackpoolalloc(order uint8) gclinkptr {
 		if s == nil {
 			throw("out of memory")
 		}
-		if s.ref != 0 {
-			throw("bad ref")
+		if s.allocCount != 0 {
+			throw("bad allocCount")
 		}
-		if s.freelist.ptr() != nil {
-			throw("bad freelist")
+		if s.stackfreelist.ptr() != nil {
+			throw("bad stackfreelist")
 		}
 		for i := uintptr(0); i < _StackCacheSize; i += _FixedStack << order {
-			x := gclinkptr(uintptr(s.start)<<_PageShift + i)
-			x.ptr().next = s.freelist
-			s.freelist = x
+			x := gclinkptr(s.base() + i)
+			x.ptr().next = s.stackfreelist
+			s.stackfreelist = x
 		}
 		list.insert(s)
 	}
-	x := s.freelist
+	x := s.stackfreelist
 	if x.ptr() == nil {
 		throw("span has no free stacks")
 	}
-	s.freelist = x.ptr().next
-	s.ref++
-	if s.freelist.ptr() == nil {
+	s.stackfreelist = x.ptr().next
+	s.allocCount++
+	if s.stackfreelist.ptr() == nil {
 		// all stacks in s are allocated.
 		list.remove(s)
 	}
@@ -223,14 +220,14 @@ func stackpoolfree(x gclinkptr, order uint8) {
 	if s.state != _MSpanStack {
 		throw("freeing stack not in a stack span")
 	}
-	if s.freelist.ptr() == nil {
+	if s.stackfreelist.ptr() == nil {
 		// s will now have a free stack
 		stackpool[order].insert(s)
 	}
-	x.ptr().next = s.freelist
-	s.freelist = x
-	s.ref--
-	if gcphase == _GCoff && s.ref == 0 {
+	x.ptr().next = s.stackfreelist
+	s.stackfreelist = x
+	s.allocCount--
+	if gcphase == _GCoff && s.allocCount == 0 {
 		// Span is completely free. Return it to the heap
 		// immediately if we're sweeping.
 		//
@@ -247,13 +244,15 @@ func stackpoolfree(x gclinkptr, order uint8) {
 		//
 		// By not freeing, we prevent step #4 until GC is done.
 		stackpool[order].remove(s)
-		s.freelist = 0
+		s.stackfreelist = 0
 		mheap_.freeStack(s)
 	}
 }
 
 // stackcacherefill/stackcacherelease implement a global pool of stack segments.
 // The pool is required to prevent unlimited growth of per-thread caches.
+//
+//go:systemstack
 func stackcacherefill(c *mcache, order uint8) {
 	if stackDebug >= 1 {
 		print("stackcacherefill order=", order, "\n")
@@ -275,6 +274,7 @@ func stackcacherefill(c *mcache, order uint8) {
 	c.stackcache[order].size = size
 }
 
+//go:systemstack
 func stackcacherelease(c *mcache, order uint8) {
 	if stackDebug >= 1 {
 		print("stackcacherelease order=", order, "\n")
@@ -293,6 +293,7 @@ func stackcacherelease(c *mcache, order uint8) {
 	c.stackcache[order].size = size
 }
 
+//go:systemstack
 func stackcache_clear(c *mcache) {
 	if stackDebug >= 1 {
 		print("stackcache clear\n")
@@ -311,6 +312,12 @@ func stackcache_clear(c *mcache) {
 	unlock(&stackpoolmu)
 }
 
+// stackalloc allocates an n byte stack.
+//
+// stackalloc must run on the system stack because it uses per-P
+// resources and must not split the stack.
+//
+//go:systemstack
 func stackalloc(n uint32) (stack, []stkbar) {
 	// Stackalloc must be called on scheduler stack, so that we
 	// never try to grow the stack during the code that stackalloc runs.
@@ -391,7 +398,7 @@ func stackalloc(n uint32) (stack, []stkbar) {
 				throw("out of memory")
 			}
 		}
-		v = unsafe.Pointer(s.start << _PageShift)
+		v = unsafe.Pointer(s.base())
 	}
 
 	if raceenabled {
@@ -408,6 +415,12 @@ func stackalloc(n uint32) (stack, []stkbar) {
 	return stack{uintptr(v), uintptr(v) + top}, *(*[]stkbar)(unsafe.Pointer(&stkbarSlice))
 }
 
+// stackfree frees an n byte stack allocation at stk.
+//
+// stackfree must run on the system stack because it uses per-P
+// resources and must not split the stack.
+//
+//go:systemstack
 func stackfree(stk stack, n uintptr) {
 	gp := getg()
 	v := unsafe.Pointer(stk.lo)
@@ -456,7 +469,7 @@ func stackfree(stk stack, n uintptr) {
 	} else {
 		s := mheap_.lookup(v)
 		if s.state != _MSpanStack {
-			println(hex(s.start<<_PageShift), v)
+			println(hex(s.base()), v)
 			throw("bad span state")
 		}
 		if gcphase == _GCoff {
@@ -634,8 +647,8 @@ func adjustframe(frame *stkframe, arg unsafe.Pointer) bool {
 	// Adjust local variables if stack frame has been allocated.
 	size := frame.varp - frame.sp
 	var minsize uintptr
-	switch sys.TheChar {
-	case '7':
+	switch sys.ArchFamily {
+	case sys.ARM64:
 		minsize = sys.SpAlign
 	default:
 		minsize = sys.MinFrameSize
@@ -662,7 +675,7 @@ func adjustframe(frame *stkframe, arg unsafe.Pointer) bool {
 	}
 
 	// Adjust saved base pointer if there is one.
-	if sys.TheChar == '6' && frame.argp-frame.varp == 2*sys.RegSize {
+	if sys.ArchFamily == sys.AMD64 && frame.argp-frame.varp == 2*sys.RegSize {
 		if !framepointer_enabled {
 			print("runtime: found space for saved base pointer, but no framepointer experiment\n")
 			print("argp=", hex(frame.argp), " varp=", hex(frame.varp), "\n")
@@ -969,7 +982,7 @@ func newstack() {
 		throw("missing stack in newstack")
 	}
 	sp := gp.sched.sp
-	if sys.TheChar == '6' || sys.TheChar == '8' {
+	if sys.ArchFamily == sys.AMD64 || sys.ArchFamily == sys.I386 {
 		// The call to morestack cost a word.
 		sp -= sys.PtrSize
 	}
@@ -1010,12 +1023,19 @@ func newstack() {
 				// return.
 			}
 			if !gp.gcscandone {
-				scanstack(gp)
+				// gcw is safe because we're on the
+				// system stack.
+				gcw := &gp.m.p.ptr().gcw
+				scanstack(gp, gcw)
+				if gcBlackenPromptly {
+					gcw.dispose()
+				}
 				gp.gcscandone = true
 			}
 			gp.preemptscan = false
 			gp.preempt = false
 			casfrom_Gscanstatus(gp, _Gscanwaiting, _Gwaiting)
+			// This clears gcscanvalid.
 			casgstatus(gp, _Gwaiting, _Grunning)
 			gp.stackguard0 = gp.stack.lo + _StackGuard
 			gogo(&gp.sched) // never return
@@ -1135,9 +1155,9 @@ func freeStackSpans() {
 		list := &stackpool[order]
 		for s := list.first; s != nil; {
 			next := s.next
-			if s.ref == 0 {
+			if s.allocCount == 0 {
 				list.remove(s)
-				s.freelist = 0
+				s.stackfreelist = 0
 				mheap_.freeStack(s)
 			}
 			s = next

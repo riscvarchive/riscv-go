@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -234,6 +234,34 @@ func fixjmp(firstp *obj.Prog) {
 // The second argument (newData) to Flowstart specifies a func to create object
 // for every f.Data field, for use by the client.
 // If newData is nil, f.Data will be nil.
+
+type Graph struct {
+	Start *Flow
+	Num   int
+
+	// After calling flowrpo, rpo lists the flow nodes in reverse postorder,
+	// and each non-dead Flow node f has g->rpo[f->rpo] == f.
+	Rpo []*Flow
+}
+
+type Flow struct {
+	Prog   *obj.Prog // actual instruction
+	P1     *Flow     // predecessors of this instruction: p1,
+	P2     *Flow     // and then p2 linked though p2link.
+	P2link *Flow
+	S1     *Flow // successors of this instruction (at most two: s1 and s2).
+	S2     *Flow
+	Link   *Flow // next instruction in function code
+
+	Active int32 // usable by client
+
+	Id     int32  // sequence number in flow graph
+	Rpo    int32  // reverse post ordering
+	Loop   uint16 // x5 for every loop
+	Refset bool   // diagnostic generated
+
+	Data interface{} // for use by client
+}
 
 var flowmark int
 

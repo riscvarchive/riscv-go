@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -91,7 +91,7 @@ func optoas(op gc.Op, t *gc.Type) obj.As {
 	a := obj.AXXX
 	switch uint32(op)<<16 | uint32(gc.Simtype[t.Etype]) {
 	default:
-		gc.Fatalf("optoas: no entry %v-%v", gc.Oconv(op, 0), t)
+		gc.Fatalf("optoas: no entry %v-%v", op, t)
 
 	case OADDR_ | gc.TPTR32:
 		a = x86.ALEAL
@@ -454,7 +454,7 @@ func foptoas(op gc.Op, t *gc.Type, flg int) obj.As {
 	if !gc.Thearch.Use387 {
 		switch uint32(op)<<16 | uint32(et) {
 		default:
-			gc.Fatalf("foptoas-sse: no entry %v-%v", gc.Oconv(op, 0), t)
+			gc.Fatalf("foptoas-sse: no entry %v-%v", op, t)
 
 		case OCMP_ | gc.TFLOAT32:
 			a = x86.AUCOMISS
@@ -587,7 +587,7 @@ func foptoas(op gc.Op, t *gc.Type, flg int) obj.As {
 		return x86.AFCHS
 	}
 
-	gc.Fatalf("foptoas %v %v %#x", gc.Oconv(op, 0), t, flg)
+	gc.Fatalf("foptoas %v %v %#x", op, t, flg)
 	return 0
 }
 
@@ -625,7 +625,7 @@ func ginscon(as obj.As, c int64, n2 *gc.Node) {
 }
 
 func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
-	if gc.Isint[t.Etype] || t.Etype == gc.Tptr {
+	if t.IsInteger() || t.Etype == gc.Tptr {
 		if (n1.Op == gc.OLITERAL || n1.Op == gc.OADDR && n1.Left.Op == gc.ONAME) && n2.Op != gc.OLITERAL {
 			// Reverse comparison to place constant (including address constant) last.
 			op = gc.Brrev(op)
@@ -639,11 +639,11 @@ func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
 	// A special case to make write barriers more efficient.
 	// Comparing the first field of a named struct can be done directly.
 	base := n1
-	if n1.Op == gc.ODOT && n1.Left.Type.Etype == gc.TSTRUCT && n1.Left.Type.Field(0).Sym == n1.Right.Sym {
+	if n1.Op == gc.ODOT && n1.Left.Type.IsStruct() && n1.Left.Type.Field(0).Sym == n1.Sym {
 		base = n1.Left
 	}
 
-	if base.Op == gc.ONAME && base.Class&gc.PHEAP == 0 || n1.Op == gc.OINDREG {
+	if base.Op == gc.ONAME && base.Class != gc.PAUTOHEAP || n1.Op == gc.OINDREG {
 		r1 = *n1
 	} else {
 		gc.Regalloc(&r1, t, n1)
@@ -651,7 +651,7 @@ func ginscmp(op gc.Op, t *gc.Type, n1, n2 *gc.Node, likely int) *obj.Prog {
 		gc.Cgen(n1, &g1)
 		gmove(&g1, &r1)
 	}
-	if n2.Op == gc.OLITERAL && gc.Isint[t.Etype] || n2.Op == gc.OADDR && n2.Left.Op == gc.ONAME && n2.Left.Class == gc.PEXTERN {
+	if n2.Op == gc.OLITERAL && t.IsInteger() || n2.Op == gc.OADDR && n2.Left.Op == gc.ONAME && n2.Left.Class == gc.PEXTERN {
 		r2 = *n2
 	} else {
 		gc.Regalloc(&r2, t, n2)
@@ -724,17 +724,8 @@ func split64(n *gc.Node, lo *gc.Node, hi *gc.Node) {
 
 			n = &n1
 
-		case gc.ONAME:
-			if n.Class == gc.PPARAMREF {
-				var n1 gc.Node
-				gc.Cgen(n.Name.Heapaddr, &n1)
-				sclean[nsclean-1] = n1
-				n = &n1
-			}
-
+		case gc.ONAME, gc.OINDREG:
 			// nothing
-		case gc.OINDREG:
-			break
 		}
 
 		*lo = *n
@@ -750,7 +741,7 @@ func split64(n *gc.Node, lo *gc.Node, hi *gc.Node) {
 	case gc.OLITERAL:
 		var n1 gc.Node
 		n.Convconst(&n1, n.Type)
-		i := n1.Int()
+		i := n1.Int64()
 		gc.Nodconst(lo, gc.Types[gc.TUINT32], int64(uint32(i)))
 		i >>= 32
 		if n.Type.Etype == gc.TINT64 {

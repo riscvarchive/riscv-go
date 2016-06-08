@@ -9,7 +9,7 @@ func unsafenmagic(nn *Node) *Node {
 	fn := nn.Left
 	args := nn.List
 
-	if safemode != 0 || fn == nil || fn.Op != ONAME {
+	if safemode || fn == nil || fn.Op != ONAME {
 		return nil
 	}
 	s := fn.Sym
@@ -30,8 +30,8 @@ func unsafenmagic(nn *Node) *Node {
 	var v int64
 	switch s.Name {
 	case "Alignof", "Sizeof":
-		typecheck(&r, Erv)
-		defaultlit(&r, nil)
+		r = typecheck(r, Erv)
+		r = defaultlit(r, nil)
 		tr := r.Type
 		if tr == nil {
 			goto bad
@@ -52,10 +52,10 @@ func unsafenmagic(nn *Node) *Node {
 		// Remember base of selector to find it back after dot insertion.
 		// Since r->left may be mutated by typechecking, check it explicitly
 		// first to track it correctly.
-		typecheck(&r.Left, Erv)
+		r.Left = typecheck(r.Left, Erv)
 		base := r.Left
 
-		typecheck(&r, Erv)
+		r = typecheck(r, Erv)
 		switch r.Op {
 		case ODOT, ODOTPTR:
 			break
@@ -82,7 +82,7 @@ func unsafenmagic(nn *Node) *Node {
 				v += r1.Xoffset
 			default:
 				Dump("unsafenmagic", r)
-				Fatalf("impossible %v node after dot insertion", Oconv(r1.Op, FmtSharp))
+				Fatalf("impossible %#v node after dot insertion", r1.Op)
 				goto bad
 			}
 		}
@@ -103,7 +103,7 @@ ret:
 	// any side effects disappear; ignore init
 	var val Val
 	val.U = new(Mpint)
-	Mpmovecfix(val.U.(*Mpint), v)
+	val.U.(*Mpint).SetInt64(v)
 	n := Nod(OLITERAL, nil, nil)
 	n.Orig = nn
 	n.SetVal(val)

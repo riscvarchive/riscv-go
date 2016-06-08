@@ -59,10 +59,8 @@ package riscv
 // THE SOFTWARE.
 
 const (
-	thechar   = 'V'
 	MaxAlign  = 32 // max data alignment
 	FuncAlign = 8
-	MINLC     = 4
 )
 
 /* Used by ../internal/ld/dwarf.go */

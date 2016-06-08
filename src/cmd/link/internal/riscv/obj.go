@@ -29,6 +29,7 @@ package riscv
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/sys"
 	"cmd/link/internal/ld"
 	"fmt"
 	"log"
@@ -40,16 +41,10 @@ func Main() {
 }
 
 func linkarchinit() {
-	ld.Thestring = "riscv"
-	ld.Thelinkarch = &ld.Linkriscv
+	ld.SysArch = sys.ArchRISCV
 
-	ld.Thearch.Thechar = thechar
-	ld.Thearch.Ptrsize = ld.Thelinkarch.Ptrsize
-	ld.Thearch.Intsize = ld.Thelinkarch.Ptrsize
-	ld.Thearch.Regsize = ld.Thelinkarch.Regsize
 	ld.Thearch.Funcalign = FuncAlign
 	ld.Thearch.Maxalign = MaxAlign
-	ld.Thearch.Minlc = MINLC
 	ld.Thearch.Dwarfregsp = DWARFREGSP
 	ld.Thearch.Dwarfreglr = DWARFREGLR
 

@@ -4,14 +4,12 @@
 
 package ssa
 
-// TODO: return value from newobject/newarray is non-nil.
-
 // nilcheckelim eliminates unnecessary nil checks.
 func nilcheckelim(f *Func) {
 	// A nil check is redundant if the same nil check was successful in a
 	// dominating block. The efficacy of this pass depends heavily on the
 	// efficacy of the cse pass.
-	idom := dominators(f)
+	idom := f.idom
 	domTree := make([][]*Block, f.NumBlocks())
 
 	// Create a block ID -> [dominees] mapping
@@ -98,10 +96,10 @@ func nilcheckelim(f *Func) {
 					switch node.block.Kind {
 					case BlockIf:
 						node.block.Kind = BlockFirst
-						node.block.Control = nil
+						node.block.SetControl(nil)
 					case BlockCheck:
 						node.block.Kind = BlockPlain
-						node.block.Control = nil
+						node.block.SetControl(nil)
 					default:
 						f.Fatalf("bad block kind in nilcheck %s", node.block.Kind)
 					}
@@ -151,11 +149,11 @@ func checkedptr(b *Block) *Value {
 // predecessor.
 func nonnilptr(b *Block) *Value {
 	if len(b.Preds) == 1 {
-		bp := b.Preds[0]
+		bp := b.Preds[0].b
 		if bp.Kind == BlockCheck {
 			return bp.Control.Args[0]
 		}
-		if bp.Kind == BlockIf && bp.Control.Op == OpIsNonNil && bp.Succs[0] == b {
+		if bp.Kind == BlockIf && bp.Control.Op == OpIsNonNil && bp.Succs[0].b == b {
 			return bp.Control.Args[0]
 		}
 	}

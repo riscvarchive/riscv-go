@@ -184,16 +184,7 @@ func typeinit() {
 	Iscomplex[TCOMPLEX64] = true
 	Iscomplex[TCOMPLEX128] = true
 
-	Isptr[TPTR32] = true
-	Isptr[TPTR64] = true
-
 	isforw[TFORW] = true
-
-	Issigned[TINT] = true
-	Issigned[TINT8] = true
-	Issigned[TINT16] = true
-	Issigned[TINT32] = true
-	Issigned[TINT64] = true
 
 	// initialize okfor
 	for et := EType(0); et < NTYPE; et++ {
@@ -237,6 +228,7 @@ func typeinit() {
 
 	okforcap[TARRAY] = true
 	okforcap[TCHAN] = true
+	okforcap[TSLICE] = true
 
 	okforconst[TBOOL] = true
 	okforconst[TSTRING] = true
@@ -244,6 +236,7 @@ func typeinit() {
 	okforlen[TARRAY] = true
 	okforlen[TCHAN] = true
 	okforlen[TMAP] = true
+	okforlen[TSLICE] = true
 	okforlen[TSTRING] = true
 
 	okforeq[TPTR32] = true
@@ -255,8 +248,9 @@ func typeinit() {
 	okforeq[TBOOL] = true
 	okforeq[TMAP] = true    // nil only; refined in typecheck
 	okforeq[TFUNC] = true   // nil only; refined in typecheck
-	okforeq[TARRAY] = true  // nil slice only; refined in typecheck
-	okforeq[TSTRUCT] = true // it's complicated; refined in typecheck
+	okforeq[TSLICE] = true  // nil only; refined in typecheck
+	okforeq[TARRAY] = true  // only if element type is comparable; refined in typecheck
+	okforeq[TSTRUCT] = true // only if all struct fields are comparable; refined in typecheck
 
 	okforcmp[TSTRING] = true
 
@@ -309,25 +303,25 @@ func typeinit() {
 	iscmp[OEQ] = true
 	iscmp[ONE] = true
 
-	mpatofix(Maxintval[TINT8], "0x7f")
-	mpatofix(Minintval[TINT8], "-0x80")
-	mpatofix(Maxintval[TINT16], "0x7fff")
-	mpatofix(Minintval[TINT16], "-0x8000")
-	mpatofix(Maxintval[TINT32], "0x7fffffff")
-	mpatofix(Minintval[TINT32], "-0x80000000")
-	mpatofix(Maxintval[TINT64], "0x7fffffffffffffff")
-	mpatofix(Minintval[TINT64], "-0x8000000000000000")
+	Maxintval[TINT8].SetString("0x7f")
+	Minintval[TINT8].SetString("-0x80")
+	Maxintval[TINT16].SetString("0x7fff")
+	Minintval[TINT16].SetString("-0x8000")
+	Maxintval[TINT32].SetString("0x7fffffff")
+	Minintval[TINT32].SetString("-0x80000000")
+	Maxintval[TINT64].SetString("0x7fffffffffffffff")
+	Minintval[TINT64].SetString("-0x8000000000000000")
 
-	mpatofix(Maxintval[TUINT8], "0xff")
-	mpatofix(Maxintval[TUINT16], "0xffff")
-	mpatofix(Maxintval[TUINT32], "0xffffffff")
-	mpatofix(Maxintval[TUINT64], "0xffffffffffffffff")
+	Maxintval[TUINT8].SetString("0xff")
+	Maxintval[TUINT16].SetString("0xffff")
+	Maxintval[TUINT32].SetString("0xffffffff")
+	Maxintval[TUINT64].SetString("0xffffffffffffffff")
 
 	// f is valid float if min < f < max.  (min and max are not themselves valid.)
-	mpatoflt(maxfltval[TFLOAT32], "33554431p103") // 2^24-1 p (127-23) + 1/2 ulp
-	mpatoflt(minfltval[TFLOAT32], "-33554431p103")
-	mpatoflt(maxfltval[TFLOAT64], "18014398509481983p970") // 2^53-1 p (1023-52) + 1/2 ulp
-	mpatoflt(minfltval[TFLOAT64], "-18014398509481983p970")
+	maxfltval[TFLOAT32].SetString("33554431p103") // 2^24-1 p (127-23) + 1/2 ulp
+	minfltval[TFLOAT32].SetString("-33554431p103")
+	maxfltval[TFLOAT64].SetString("18014398509481983p970") // 2^53-1 p (1023-52) + 1/2 ulp
+	minfltval[TFLOAT64].SetString("-18014398509481983p970")
 
 	maxfltval[TCOMPLEX64] = maxfltval[TFLOAT32]
 	minfltval[TCOMPLEX64] = minfltval[TFLOAT32]
@@ -361,24 +355,21 @@ func typeinit() {
 	dowidth(Types[TSTRING])
 	dowidth(idealstring)
 
-	itable = typ(Tptr)
-	itable.Type = Types[TUINT8]
+	itable = typPtr(Types[TUINT8])
 }
 
-func lexinit1() {
-	// t = interface { Error() string }
-
+func makeErrorInterface() *Type {
 	rcvr := typ(TSTRUCT)
-	rcvr.Funarg = true
+	rcvr.StructType().Funarg = FunargRcvr
 	field := newField()
 	field.Type = Ptrto(typ(TSTRUCT))
 	rcvr.SetFields([]*Field{field})
 
 	in := typ(TSTRUCT)
-	in.Funarg = true
+	in.StructType().Funarg = FunargParams
 
 	out := typ(TSTRUCT)
-	out.Funarg = true
+	out.StructType().Funarg = FunargResults
 	field = newField()
 	field.Type = Types[TSTRING]
 	out.SetFields([]*Field{field})
@@ -387,10 +378,6 @@ func lexinit1() {
 	*f.RecvsP() = rcvr
 	*f.ResultsP() = out
 	*f.ParamsP() = in
-	f.Thistuple = 1
-	f.Intuple = 0
-	f.Outnamed = false
-	f.Outtuple = 1
 
 	t := typ(TINTER)
 	field = newField()
@@ -398,10 +385,18 @@ func lexinit1() {
 	field.Type = f
 	t.SetFields([]*Field{field})
 
+	return t
+}
+
+func lexinit1() {
 	// error type
 	s := Pkglookup("error", builtinpkg)
-	errortype = t
+	errortype = makeErrorInterface()
 	errortype.Sym = s
+	// TODO: If we can prove that it's safe to set errortype.Orig here
+	// than we don't need the special errortype/errorInterface case in
+	// bexport.go. See also issue #15920.
+	// errortype.Orig = makeErrorInterface()
 	s.Def = typenod(errortype)
 
 	// byte alias

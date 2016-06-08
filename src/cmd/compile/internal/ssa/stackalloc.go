@@ -9,10 +9,59 @@ package ssa
 import "fmt"
 
 type stackAllocState struct {
-	f         *Func
+	f *Func
+
+	// live is the output of stackalloc.
+	// live[b.id] = live values at the end of block b.
+	live [][]ID
+
+	// The following slices are reused across multiple users
+	// of stackAllocState.
 	values    []stackValState
-	live      [][]ID // live[b.id] = live values at the end of block b.
 	interfere [][]ID // interfere[v.id] = values that interfere with v.
+	names     []LocalSlot
+	slots     []int
+	used      []bool
+
+	nArgSlot, // Number of Values sourced to arg slot
+	nNotNeed, // Number of Values not needing a stack slot
+	nNamedSlot, // Number of Values using a named stack slot
+	nReuse, // Number of values reusing a stack slot
+	nAuto, // Number of autos allocated for stack slots.
+	nSelfInterfere int32 // Number of self-interferences
+}
+
+func newStackAllocState(f *Func) *stackAllocState {
+	s := f.Config.stackAllocState
+	if s == nil {
+		return new(stackAllocState)
+	}
+	if s.f != nil {
+		f.Config.Fatalf(0, "newStackAllocState called without previous free")
+	}
+	return s
+}
+
+func putStackAllocState(s *stackAllocState) {
+	for i := range s.values {
+		s.values[i] = stackValState{}
+	}
+	for i := range s.interfere {
+		s.interfere[i] = nil
+	}
+	for i := range s.names {
+		s.names[i] = LocalSlot{}
+	}
+	for i := range s.slots {
+		s.slots[i] = 0
+	}
+	for i := range s.used {
+		s.used[i] = false
+	}
+	s.f.Config.stackAllocState = s
+	s.f = nil
+	s.live = nil
+	s.nArgSlot, s.nNotNeed, s.nNamedSlot, s.nReuse, s.nAuto, s.nSelfInterfere = 0, 0, 0, 0, 0, 0
 }
 
 type stackValState struct {
@@ -29,9 +78,18 @@ func stackalloc(f *Func, spillLive [][]ID) [][]ID {
 		fmt.Println("before stackalloc")
 		fmt.Println(f.String())
 	}
-	var s stackAllocState
+	s := newStackAllocState(f)
 	s.init(f, spillLive)
+	defer putStackAllocState(s)
+
 	s.stackalloc()
+	if f.pass.stats > 0 {
+		f.LogStat("stack_alloc_stats",
+			s.nArgSlot, "arg_slots", s.nNotNeed, "slot_not_needed",
+			s.nNamedSlot, "named_slots", s.nAuto, "auto_slots",
+			s.nReuse, "reused_slots", s.nSelfInterfere, "self_interfering")
+	}
+
 	return s.live
 }
 
@@ -39,7 +97,11 @@ func (s *stackAllocState) init(f *Func, spillLive [][]ID) {
 	s.f = f
 
 	// Initialize value information.
-	s.values = make([]stackValState, f.NumValues())
+	if n := f.NumValues(); cap(s.values) >= n {
+		s.values = s.values[:n]
+	} else {
+		s.values = make([]stackValState, n)
+	}
 	for _, b := range f.Blocks {
 		for _, v := range b.Values {
 			s.values[v.ID].typ = v.Type
@@ -66,7 +128,12 @@ func (s *stackAllocState) stackalloc() {
 	// Build map from values to their names, if any.
 	// A value may be associated with more than one name (e.g. after
 	// the assignment i=j). This step picks one name per value arbitrarily.
-	names := make([]LocalSlot, f.NumValues())
+	if n := f.NumValues(); cap(s.names) >= n {
+		s.names = s.names[:n]
+	} else {
+		s.names = make([]LocalSlot, n)
+	}
+	names := s.names
 	for _, name := range f.Names {
 		// Note: not "range f.NamedValues" above, because
 		// that would be nondeterministic.
@@ -96,19 +163,33 @@ func (s *stackAllocState) stackalloc() {
 
 	// Each time we assign a stack slot to a value v, we remember
 	// the slot we used via an index into locations[v.Type].
-	slots := make([]int, f.NumValues())
-	for i := f.NumValues() - 1; i >= 0; i-- {
+	slots := s.slots
+	if n := f.NumValues(); cap(slots) >= n {
+		slots = slots[:n]
+	} else {
+		slots = make([]int, n)
+		s.slots = slots
+	}
+	for i := range slots {
 		slots[i] = -1
 	}
 
 	// Pick a stack slot for each value needing one.
-	used := make([]bool, f.NumValues())
+	var used []bool
+	if n := f.NumValues(); cap(s.used) >= n {
+		used = s.used[:n]
+	} else {
+		used = make([]bool, n)
+		s.used = used
+	}
 	for _, b := range f.Blocks {
 		for _, v := range b.Values {
 			if !s.values[v.ID].needSlot {
+				s.nNotNeed++
 				continue
 			}
 			if v.Op == OpArg {
+				s.nArgSlot++
 				continue // already picked
 			}
 
@@ -120,18 +201,20 @@ func (s *stackAllocState) stackalloc() {
 			} else {
 				name = names[v.ID]
 			}
-			if name.N != nil && v.Type.Equal(name.Type) {
+			if name.N != nil && v.Type.Compare(name.Type) == CMPeq {
 				for _, id := range s.interfere[v.ID] {
 					h := f.getHome(id)
-					if h != nil && h.(LocalSlot) == name {
+					if h != nil && h.(LocalSlot).N == name.N && h.(LocalSlot).Off == name.Off {
 						// A variable can interfere with itself.
 						// It is rare, but but it can happen.
+						s.nSelfInterfere++
 						goto noname
 					}
 				}
 				if f.pass.debug > stackDebug {
 					fmt.Printf("stackalloc %s to %s\n", v, name.Name())
 				}
+				s.nNamedSlot++
 				f.setHome(v, name)
 				continue
 			}
@@ -153,11 +236,13 @@ func (s *stackAllocState) stackalloc() {
 			var i int
 			for i = 0; i < len(locs); i++ {
 				if !used[i] {
+					s.nReuse++
 					break
 				}
 			}
 			// If there is no unused stack slot, allocate a new one.
 			if i == len(locs) {
+				s.nAuto++
 				locs = append(locs, LocalSlot{N: f.Config.fe.Auto(v.Type), Type: v.Type, Off: 0})
 				locations[v.Type] = locs
 			}
@@ -219,7 +304,8 @@ func (s *stackAllocState) computeLive(spillLive [][]ID) {
 
 			// for each predecessor of b, expand its list of live-at-end values
 			// invariant: s contains the values live at the start of b (excluding phi inputs)
-			for i, p := range b.Preds {
+			for i, e := range b.Preds {
+				p := e.b
 				t.clear()
 				t.addAll(s.live[p.ID])
 				t.addAll(live.contents())
@@ -270,7 +356,11 @@ func (f *Func) setHome(v *Value, loc Location) {
 
 func (s *stackAllocState) buildInterferenceGraph() {
 	f := s.f
-	s.interfere = make([][]ID, f.NumValues())
+	if n := f.NumValues(); cap(s.interfere) >= n {
+		s.interfere = s.interfere[:n]
+	} else {
+		s.interfere = make([][]ID, n)
+	}
 	live := f.newSparseSet(f.NumValues())
 	defer f.retSparseSet(live)
 	for _, b := range f.Blocks {
@@ -283,7 +373,7 @@ func (s *stackAllocState) buildInterferenceGraph() {
 			if s.values[v.ID].needSlot {
 				live.remove(v.ID)
 				for _, id := range live.contents() {
-					if s.values[v.ID].typ.Equal(s.values[id].typ) {
+					if s.values[v.ID].typ.Compare(s.values[id].typ) == CMPeq {
 						s.interfere[v.ID] = append(s.interfere[v.ID], id)
 						s.interfere[id] = append(s.interfere[id], v.ID)
 					}

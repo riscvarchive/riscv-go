@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,7 @@ package mips64
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/sys"
 	"cmd/link/internal/ld"
 	"fmt"
 	"log"
@@ -45,21 +46,15 @@ func Main() {
 }
 
 func linkarchinit() {
-	ld.Thestring = obj.Getgoarch()
-	if ld.Thestring == "mips64le" {
-		ld.Thelinkarch = &ld.Linkmips64le
+	if obj.Getgoarch() == "mips64le" {
+		ld.SysArch = sys.ArchMIPS64LE
 	} else {
-		ld.Thelinkarch = &ld.Linkmips64
+		ld.SysArch = sys.ArchMIPS64
 	}
 
-	ld.Thearch.Thechar = thechar
-	ld.Thearch.Ptrsize = ld.Thelinkarch.Ptrsize
-	ld.Thearch.Intsize = ld.Thelinkarch.Ptrsize
-	ld.Thearch.Regsize = ld.Thelinkarch.Regsize
 	ld.Thearch.Funcalign = FuncAlign
 	ld.Thearch.Maxalign = MaxAlign
 	ld.Thearch.Minalign = MinAlign
-	ld.Thearch.Minlc = MINLC
 	ld.Thearch.Dwarfregsp = DWARFREGSP
 	ld.Thearch.Dwarfreglr = DWARFREGLR
 
@@ -72,7 +67,7 @@ func linkarchinit() {
 	ld.Thearch.Elfsetupplt = elfsetupplt
 	ld.Thearch.Gentext = gentext
 	ld.Thearch.Machoreloc1 = machoreloc1
-	if ld.Thelinkarch == &ld.Linkmips64le {
+	if ld.SysArch == sys.ArchMIPS64LE {
 		ld.Thearch.Lput = ld.Lputl
 		ld.Thearch.Wput = ld.Wputl
 		ld.Thearch.Vput = ld.Vputl
@@ -112,6 +107,9 @@ func archinit() {
 		if ld.Linkmode == ld.LinkExternal && obj.Getgoextlinkenabled() != "1" {
 			log.Fatalf("cannot use -linkmode=external with -H %s", ld.Headstr(int(ld.HEADTYPE)))
 		}
+
+	case obj.Hlinux:
+		break
 	}
 
 	switch ld.HEADTYPE {

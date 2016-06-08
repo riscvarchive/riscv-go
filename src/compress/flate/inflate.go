@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	maxCodeLen = 16    // max length of Huffman code
-	maxHist    = 32768 // max history required
+	maxCodeLen = 16 // max length of Huffman code
 	// The next three numbers come from the RFC section 3.2.7, with the
 	// additional proviso in section 3.2.5 which implies that distance codes
 	// 30 and 31 should never occur in compressed data.
@@ -299,15 +298,6 @@ type decompressor struct {
 }
 
 func (f *decompressor) nextBlock() {
-	if f.final {
-		if f.dict.availRead() > 0 {
-			f.toRead = f.dict.readFlush()
-			f.step = (*decompressor).nextBlock
-			return
-		}
-		f.err = io.EOF
-		return
-	}
 	for f.nb < 1+2 {
 		if f.err = f.moreBits(); f.err != nil {
 			return
@@ -345,6 +335,9 @@ func (f *decompressor) Read(b []byte) (int, error) {
 		if len(f.toRead) > 0 {
 			n := copy(b, f.toRead)
 			f.toRead = f.toRead[n:]
+			if len(f.toRead) == 0 {
+				return n, f.err
+			}
 			return n, nil
 		}
 		if f.err != nil {
@@ -512,8 +505,7 @@ readLiteral:
 			}
 			goto readLiteral
 		case v == 256:
-			// Done with huffman block; read next block.
-			f.step = (*decompressor).nextBlock
+			f.finishBlock()
 			return
 		// otherwise, reference to older data
 		case v < 265:
@@ -648,7 +640,7 @@ func (f *decompressor) dataBlock() {
 
 	if n == 0 {
 		f.toRead = f.dict.readFlush()
-		f.step = (*decompressor).nextBlock
+		f.finishBlock()
 		return
 	}
 
@@ -680,6 +672,16 @@ func (f *decompressor) copyData() {
 		f.toRead = f.dict.readFlush()
 		f.step = (*decompressor).copyData
 		return
+	}
+	f.finishBlock()
+}
+
+func (f *decompressor) finishBlock() {
+	if f.final {
+		if f.dict.availRead() > 0 {
+			f.toRead = f.dict.readFlush()
+		}
+		f.err = io.EOF
 	}
 	f.step = (*decompressor).nextBlock
 }
@@ -764,7 +766,7 @@ func (f *decompressor) Reset(r io.Reader, dict []byte) error {
 		dict:     f.dict,
 		step:     (*decompressor).nextBlock,
 	}
-	f.dict.init(maxHist, nil)
+	f.dict.init(maxMatchOffset, nil)
 	return nil
 }
 
@@ -784,7 +786,7 @@ func NewReader(r io.Reader) io.ReadCloser {
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
 	f.step = (*decompressor).nextBlock
-	f.dict.init(maxHist, nil)
+	f.dict.init(maxMatchOffset, nil)
 	return &f
 }
 
@@ -803,6 +805,6 @@ func NewReaderDict(r io.Reader, dict []byte) io.ReadCloser {
 	f.bits = new([maxNumLit + maxNumDist]int)
 	f.codebits = new([numCodes]int)
 	f.step = (*decompressor).nextBlock
-	f.dict.init(maxHist, dict)
+	f.dict.init(maxMatchOffset, dict)
 	return &f
 }

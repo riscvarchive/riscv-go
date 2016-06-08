@@ -7,7 +7,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2008 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@ package ppc64
 
 import (
 	"cmd/internal/obj"
-	"encoding/binary"
+	"cmd/internal/sys"
 	"fmt"
 	"math"
 )
@@ -301,6 +301,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			}
 
 		case ALWAR,
+			ALBAR,
+			ASTBCCC,
 			ASTWCCC,
 			AECIWX,
 			AECOWX,
@@ -323,6 +325,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			ASYNC,
 			ATLBSYNC,
 			APTESYNC,
+			ALWSYNC,
 			ATW,
 			AWORD,
 			ARFI,
@@ -470,7 +473,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 			q = p
 
-			if ctxt.Flag_shared != 0 && cursym.Name != "runtime.duffzero" && cursym.Name != "runtime.duffcopy" && cursym.Name != "runtime.stackBarrier" {
+			if ctxt.Flag_shared && cursym.Name != "runtime.duffzero" && cursym.Name != "runtime.duffcopy" && cursym.Name != "runtime.stackBarrier" {
 				// When compiling Go into PIC, all functions must start
 				// with instructions to load the TOC pointer into r2:
 				//
@@ -534,7 +537,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			}
 
 			if cursym.Text.Mark&LEAF != 0 {
-				cursym.Leaf = 1
+				cursym.Leaf = true
 				break
 			}
 
@@ -558,7 +561,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				q.Spadj = int32(-aoffset)
 			}
 
-			if ctxt.Flag_shared != 0 {
+			if ctxt.Flag_shared {
 				q = obj.Appendp(ctxt, q)
 				q.As = AMOVD
 				q.Lineno = p.Lineno
@@ -592,7 +595,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				q.As = AMOVD
 				q.From.Type = obj.TYPE_MEM
 				q.From.Reg = REGG
-				q.From.Offset = 4 * int64(ctxt.Arch.Ptrsize) // G.panic
+				q.From.Offset = 4 * int64(ctxt.Arch.PtrSize) // G.panic
 				q.To.Type = obj.TYPE_REG
 				q.To.Reg = REG_R3
 
@@ -827,9 +830,9 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32) *obj.Prog {
 	p.As = AMOVD
 	p.From.Type = obj.TYPE_MEM
 	p.From.Reg = REGG
-	p.From.Offset = 2 * int64(ctxt.Arch.Ptrsize) // G.stackguard0
-	if ctxt.Cursym.Cfunc != 0 {
-		p.From.Offset = 3 * int64(ctxt.Arch.Ptrsize) // G.stackguard1
+	p.From.Offset = 2 * int64(ctxt.Arch.PtrSize) // G.stackguard0
+	if ctxt.Cursym.Cfunc {
+		p.From.Offset = 3 * int64(ctxt.Arch.PtrSize) // G.stackguard1
 	}
 	p.To.Type = obj.TYPE_REG
 	p.To.Reg = REG_R3
@@ -943,7 +946,7 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32) *obj.Prog {
 	}
 
 	var morestacksym *obj.LSym
-	if ctxt.Cursym.Cfunc != 0 {
+	if ctxt.Cursym.Cfunc {
 		morestacksym = obj.Linklookup(ctxt, "runtime.morestackc", 0)
 	} else if ctxt.Cursym.Text.From3.Offset&obj.NEEDCTXT == 0 {
 		morestacksym = obj.Linklookup(ctxt, "runtime.morestack_noctxt", 0)
@@ -1115,7 +1118,7 @@ loop:
 				r = ctxt.NewProg()
 				*r = *p
 				if r.Mark&FOLL == 0 {
-					fmt.Printf("cant happen 1\n")
+					fmt.Printf("can't happen 1\n")
 				}
 				r.Mark |= FOLL
 				if p != q {
@@ -1137,7 +1140,7 @@ loop:
 					xfol(ctxt, r.Link, last)
 				}
 				if r.Pcond.Mark&FOLL == 0 {
-					fmt.Printf("cant happen 2\n")
+					fmt.Printf("can't happen 2\n")
 				}
 				return
 			}
@@ -1181,27 +1184,17 @@ loop:
 }
 
 var Linkppc64 = obj.LinkArch{
-	ByteOrder:  binary.BigEndian,
-	Name:       "ppc64",
-	Thechar:    '9',
+	Arch:       sys.ArchPPC64,
 	Preprocess: preprocess,
 	Assemble:   span9,
 	Follow:     follow,
 	Progedit:   progedit,
-	Minlc:      4,
-	Ptrsize:    8,
-	Regsize:    8,
 }
 
 var Linkppc64le = obj.LinkArch{
-	ByteOrder:  binary.LittleEndian,
-	Name:       "ppc64le",
-	Thechar:    '9',
+	Arch:       sys.ArchPPC64LE,
 	Preprocess: preprocess,
 	Assemble:   span9,
 	Follow:     follow,
 	Progedit:   progedit,
-	Minlc:      4,
-	Ptrsize:    8,
-	Regsize:    8,
 }

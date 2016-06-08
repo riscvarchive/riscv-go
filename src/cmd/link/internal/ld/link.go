@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -31,9 +31,9 @@
 package ld
 
 import (
-	"cmd/internal/obj"
+	"bufio"
+	"cmd/internal/sys"
 	"debug/elf"
-	"encoding/binary"
 	"fmt"
 )
 
@@ -50,8 +50,6 @@ type LSym struct {
 	Align       int32
 	Elfsym      int32
 	LocalElfsym int32
-	Args        int32
-	Locals      int32
 	Value       int64
 	Size        int64
 	// ElfType is set for symbols read from shared libraries by ldshlibsyms. It
@@ -67,8 +65,7 @@ type LSym struct {
 	Dynimplib   string
 	Dynimpvers  string
 	Sect        *Section
-	Autom       []Auto
-	Pcln        *Pcln
+	FuncInfo    *FuncInfo
 	P           []byte
 	R           []Reloc
 }
@@ -129,7 +126,7 @@ func (a *Attribute) Set(flag Attribute, value bool) {
 	if value {
 		*a |= flag
 	} else {
-		*a &= ^flag
+		*a &^= flag
 	}
 }
 
@@ -161,25 +158,18 @@ type Shlib struct {
 }
 
 type Link struct {
-	Thechar   int32
-	Thestring string
 	Goarm     int32
 	Headtype  int
-	Arch      *LinkArch
-	Debugasm  int32
+	Arch      *sys.Arch
 	Debugvlog int32
-	Bso       *obj.Biobuf
+	Bso       *bufio.Writer
 	Windows   int32
 	Goroot    string
 
-	// Map for fast access of symbols based on name.
-	HashName map[string]*LSym
-	// Fallback map based also on version, for symbols
-	// with more than one version (see func _lookup).
-	HashVersion map[symVer]*LSym
+	// Symbol lookup based on name and indexed by version.
+	Hash []map[string]*LSym
 
 	Allsym     []*LSym
-	Nsymbol    int32
 	Tlsg       *LSym
 	Libdir     []string
 	Library    []*Library
@@ -188,13 +178,10 @@ type Link struct {
 	Diag       func(string, ...interface{})
 	Cursym     *LSym
 	Version    int
-	Textp      *LSym
-	Etextp     *LSym
-	Nhistfile  int32
-	Filesyms   *LSym
+	Textp      []*LSym
+	Filesyms   []*LSym
 	Moduledata *LSym
 	LSymBatch  []LSym
-	CurRefs    []*LSym // List of symbol references for the file being read.
 }
 
 // The smallest possible offset from the hardware stack pointer to a local
@@ -202,25 +189,21 @@ type Link struct {
 // on the stack in the function prologue and so always have a pointer between
 // the hardware stack pointer and the local variable area.
 func (ctxt *Link) FixedFrameSize() int64 {
-	switch ctxt.Arch.Thechar {
-	case '6', '8':
+	switch ctxt.Arch.Family {
+	case sys.AMD64, sys.I386:
 		return 0
-	case '9':
+	case sys.PPC64:
 		// PIC code on ppc64le requires 32 bytes of stack, and it's easier to
 		// just use that much stack always on ppc64x.
-		return int64(4 * ctxt.Arch.Ptrsize)
+		return int64(4 * ctxt.Arch.PtrSize)
 	default:
-		return int64(ctxt.Arch.Ptrsize)
+		return int64(ctxt.Arch.PtrSize)
 	}
 }
 
-type LinkArch struct {
-	ByteOrder binary.ByteOrder
-	Name      string
-	Thechar   int
-	Minlc     int
-	Ptrsize   int
-	Regsize   int
+func (l *Link) IncVersion() {
+	l.Version++
+	l.Hash = append(l.Hash, make(map[string]*LSym))
 }
 
 type Library struct {
@@ -232,20 +215,17 @@ type Library struct {
 	hash   []byte
 }
 
-type Pcln struct {
+type FuncInfo struct {
+	Args        int32
+	Locals      int32
+	Autom       []Auto
 	Pcsp        Pcdata
 	Pcfile      Pcdata
 	Pcline      Pcdata
 	Pcdata      []Pcdata
-	Npcdata     int
 	Funcdata    []*LSym
 	Funcdataoff []int64
-	Nfuncdata   int
 	File        []*LSym
-	Nfile       int
-	Mfile       int
-	Lastfile    *LSym
-	Lastindex   int
 }
 
 type Pcdata struct {
@@ -270,6 +250,12 @@ const (
 	RV_POWER_HI
 	RV_POWER_HA
 	RV_POWER_DS
+
+	// RV_390_DBL is a s390x-specific relocation variant that indicates that
+	// the value to be placed into the relocatable field should first be
+	// divided by 2.
+	RV_390_DBL
+
 	RV_CHECK_OVERFLOW = 1 << 8
 	RV_TYPE_MASK      = RV_CHECK_OVERFLOW - 1
 )

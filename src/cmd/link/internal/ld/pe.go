@@ -6,8 +6,10 @@ package ld
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/sys"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -418,9 +420,9 @@ func chksectseg(h *IMAGE_SECTION_HEADER, s *Segment) {
 func Peinit() {
 	var l int
 
-	switch Thearch.Thechar {
+	switch SysArch.Family {
 	// 64-bit architectures
-	case '6':
+	case sys.AMD64:
 		pe64 = 1
 
 		l = binary.Size(&oh64)
@@ -505,7 +507,7 @@ func initdynimport() *Dll {
 			if err != nil {
 				Diag("failed to parse stdcall decoration: %v", err)
 			}
-			m.argsize *= Thearch.Ptrsize
+			m.argsize *= SysArch.PtrSize
 			s.Extname = s.Extname[:i]
 		}
 
@@ -519,10 +521,10 @@ func initdynimport() *Dll {
 		for d := dr; d != nil; d = d.next {
 			for m = d.ms; m != nil; m = m.next {
 				m.s.Type = obj.SDATA
-				Symgrow(Ctxt, m.s, int64(Thearch.Ptrsize))
+				Symgrow(Ctxt, m.s, int64(SysArch.PtrSize))
 				dynName := m.s.Extname
 				// only windows/386 requires stdcall decoration
-				if Thearch.Thechar == '8' && m.argsize >= 0 {
+				if SysArch.Family == sys.I386 && m.argsize >= 0 {
 					dynName += fmt.Sprintf("@%d", m.argsize)
 				}
 				dynSym := Linklookup(Ctxt, dynName, 0)
@@ -531,7 +533,7 @@ func initdynimport() *Dll {
 				r := Addrel(m.s)
 				r.Sym = dynSym
 				r.Off = 0
-				r.Siz = uint8(Thearch.Ptrsize)
+				r.Siz = uint8(SysArch.PtrSize)
 				r.Type = obj.R_ADDR
 			}
 		}
@@ -545,10 +547,10 @@ func initdynimport() *Dll {
 				m.s.Sub = dynamic.Sub
 				dynamic.Sub = m.s
 				m.s.Value = dynamic.Size
-				dynamic.Size += int64(Thearch.Ptrsize)
+				dynamic.Size += int64(SysArch.PtrSize)
 			}
 
-			dynamic.Size += int64(Thearch.Ptrsize)
+			dynamic.Size += int64(SysArch.PtrSize)
 		}
 	}
 
@@ -762,7 +764,7 @@ func addexports() {
 
 // perelocsect relocates symbols from first in section sect, and returns
 // the total number of relocations emitted.
-func perelocsect(sect *Section, first *LSym) int {
+func perelocsect(sect *Section, syms []*LSym) int {
 	// If main section has no bits, nothing to relocate.
 	if sect.Vaddr >= sect.Seg.Vaddr+sect.Seg.Filelen {
 		return 0
@@ -771,20 +773,18 @@ func perelocsect(sect *Section, first *LSym) int {
 	relocs := 0
 
 	sect.Reloff = uint64(Cpos())
-	var sym *LSym
-	for sym = first; sym != nil; sym = sym.Next {
-		if !sym.Attr.Reachable() {
+	for i, s := range syms {
+		if !s.Attr.Reachable() {
 			continue
 		}
-		if uint64(sym.Value) >= sect.Vaddr {
+		if uint64(s.Value) >= sect.Vaddr {
+			syms = syms[i:]
 			break
 		}
 	}
 
 	eaddr := int32(sect.Vaddr + sect.Length)
-	var r *Reloc
-	var ri int
-	for ; sym != nil; sym = sym.Next {
+	for _, sym := range syms {
 		if !sym.Attr.Reachable() {
 			continue
 		}
@@ -793,8 +793,8 @@ func perelocsect(sect *Section, first *LSym) int {
 		}
 		Ctxt.Cursym = sym
 
-		for ri = 0; ri < len(sym.R); ri++ {
-			r = &sym.R[ri]
+		for ri := 0; ri < len(sym.R); ri++ {
+			r := &sym.R[ri]
 			if r.Done != 0 {
 				continue
 			}
@@ -820,7 +820,7 @@ func perelocsect(sect *Section, first *LSym) int {
 }
 
 // peemitreloc emits relocation entries for go.o in external linking.
-func peemitreloc(text, data *IMAGE_SECTION_HEADER) {
+func peemitreloc(text, data, ctors *IMAGE_SECTION_HEADER) {
 	for Cpos()&7 != 0 {
 		Cput(0)
 	}
@@ -870,6 +870,22 @@ func peemitreloc(text, data *IMAGE_SECTION_HEADER) {
 		data.PointerToRelocations += 10 // skip the extend reloc entry
 	}
 	data.NumberOfRelocations = uint16(n - 1)
+
+	dottext := Linklookup(Ctxt, ".text", 0)
+	ctors.NumberOfRelocations = 1
+	ctors.PointerToRelocations = uint32(Cpos())
+	sectoff := ctors.VirtualAddress
+	Lputl(sectoff)
+	Lputl(uint32(dottext.Dynid))
+	switch obj.Getgoarch() {
+	default:
+		fmt.Fprintf(os.Stderr, "link: unknown architecture for PE: %q\n", obj.Getgoarch())
+		os.Exit(2)
+	case "386":
+		Wputl(IMAGE_REL_I386_DIR32)
+	case "amd64":
+		Wputl(IMAGE_REL_AMD64_ADDR64)
+	}
 }
 
 func dope() {
@@ -929,7 +945,11 @@ func writePESymTableRecords() int {
 		}
 
 		// only windows/386 requires underscore prefix on external symbols
-		if Thearch.Thechar == '8' && Linkmode == LinkExternal && (s.Type == obj.SHOSTOBJ || s.Attr.CgoExport()) && s.Name == s.Extname {
+		if SysArch.Family == sys.I386 &&
+			Linkmode == LinkExternal &&
+			(s.Type != obj.SDYNIMPORT || s.Attr.CgoExport()) &&
+			s.Name == s.Extname &&
+			s.Name != "_main" {
 			s.Name = "_" + s.Name
 		}
 
@@ -981,8 +1001,13 @@ func writePESymTableRecords() int {
 		for d := dr; d != nil; d = d.next {
 			for m := d.ms; m != nil; m = m.next {
 				s := m.s.R[0].Xsym
-				put(s, s.Name, 'U', 0, int64(Thearch.Ptrsize), 0, nil)
+				put(s, s.Name, 'U', 0, int64(SysArch.PtrSize), 0, nil)
 			}
+		}
+
+		s := Linklookup(Ctxt, ".text", 0)
+		if s.Type == obj.STEXT {
+			put(s, s.Name, 'T', s.Value, s.Size, int(s.Version), nil)
 		}
 	}
 
@@ -1016,7 +1041,7 @@ func addpesymtable() {
 	// write COFF string table
 	Lputl(uint32(len(strtbl)) + 4)
 	for i := 0; i < len(strtbl); i++ {
-		Cput(uint8(strtbl[i]))
+		Cput(strtbl[i])
 	}
 	if Linkmode != LinkExternal {
 		strnput("", int(h.SizeOfRawData-uint32(size)))
@@ -1066,13 +1091,49 @@ func addpersrc() {
 	dd[IMAGE_DIRECTORY_ENTRY_RESOURCE].Size = h.VirtualSize
 }
 
-func Asmbpe() {
-	switch Thearch.Thechar {
+func addinitarray() (c *IMAGE_SECTION_HEADER) {
+	// The size below was determined by the specification for array relocations,
+	// and by observing what GCC writes here. If the initarray section grows to
+	// contain more than one constructor entry, the size will need to be 8 * constructor_count.
+	// However, the entire Go runtime is initialized from just one function, so it is unlikely
+	// that this will need to grow in the future.
+	var size int
+	switch obj.Getgoarch() {
 	default:
-		Exitf("unknown PE architecture: %v", Thearch.Thechar)
-	case '6':
+		fmt.Fprintf(os.Stderr, "link: unknown architecture for PE: %q\n", obj.Getgoarch())
+		os.Exit(2)
+	case "386":
+		size = 4
+	case "amd64":
+		size = 8
+	}
+
+	c = addpesection(".ctors", size, size)
+	c.Characteristics = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+	c.SizeOfRawData = uint32(size)
+
+	Cseek(int64(c.PointerToRawData))
+	chksectoff(c, Cpos())
+	init_entry := Linklookup(Ctxt, INITENTRY, 0)
+	addr := uint64(init_entry.Value) - init_entry.Sect.Vaddr
+
+	switch obj.Getgoarch() {
+	case "386":
+		Lputl(uint32(addr))
+	case "amd64":
+		Vputl(addr)
+	}
+
+	return c
+}
+
+func Asmbpe() {
+	switch SysArch.Family {
+	default:
+		Exitf("unknown PE architecture: %v", SysArch.Family)
+	case sys.AMD64:
 		fh.Machine = IMAGE_FILE_MACHINE_AMD64
-	case '8':
+	case sys.I386:
 		fh.Machine = IMAGE_FILE_MACHINE_I386
 	}
 
@@ -1087,6 +1148,7 @@ func Asmbpe() {
 	textsect = pensect
 
 	var d *IMAGE_SECTION_HEADER
+	var c *IMAGE_SECTION_HEADER
 	if Linkmode != LinkExternal {
 		d = addpesection(".data", int(Segdata.Length), int(Segdata.Filelen))
 		d.Characteristics = IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE
@@ -1102,6 +1164,8 @@ func Asmbpe() {
 		b.Characteristics = IMAGE_SCN_CNT_UNINITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_ALIGN_32BYTES
 		b.PointerToRawData = 0
 		bsssect = pensect
+
+		c = addinitarray()
 	}
 
 	if Debug['s'] == 0 {
@@ -1116,7 +1180,7 @@ func Asmbpe() {
 	addpesymtable()
 	addpersrc()
 	if Linkmode == LinkExternal {
-		peemitreloc(t, d)
+		peemitreloc(t, d, c)
 	}
 
 	fh.NumberOfSections = uint16(pensect)

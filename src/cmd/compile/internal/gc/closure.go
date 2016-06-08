@@ -66,8 +66,39 @@ func closurebody(body []*Node) *Node {
 	// unhook them.
 	// make the list of pointers for the closure call.
 	for _, v := range func_.Func.Cvars.Slice() {
-		v.Name.Param.Closure.Name.Param.Closure = v.Name.Param.Outer
-		v.Name.Param.Outerexpr = oldname(v.Sym)
+		// Unlink from v1; see comment in syntax.go type Param for these fields.
+		v1 := v.Name.Defn
+		v1.Name.Param.Innermost = v.Name.Param.Outer
+
+		// If the closure usage of v is not dense,
+		// we need to make it dense; now that we're out
+		// of the function in which v appeared,
+		// look up v.Sym in the enclosing function
+		// and keep it around for use in the compiled code.
+		//
+		// That is, suppose we just finished parsing the innermost
+		// closure f4 in this code:
+		//
+		//	func f() {
+		//		v := 1
+		//		func() { // f2
+		//			use(v)
+		//			func() { // f3
+		//				func() { // f4
+		//					use(v)
+		//				}()
+		//			}()
+		//		}()
+		//	}
+		//
+		// At this point v.Outer is f2's v; there is no f3's v.
+		// To construct the closure f4 from within f3,
+		// we need to use f3's v and in this case we need to create f3's v.
+		// We are now in the context of f3, so calling oldname(v.Sym)
+		// obtains f3's v, creating it if necessary (as it is in the example).
+		//
+		// capturevars will decide whether to use v directly or &v.
+		v.Name.Param.Outer = oldname(v.Sym)
 	}
 
 	return func_
@@ -75,7 +106,7 @@ func closurebody(body []*Node) *Node {
 
 func typecheckclosure(func_ *Node, top int) {
 	for _, ln := range func_.Func.Cvars.Slice() {
-		n := ln.Name.Param.Closure
+		n := ln.Name.Defn
 		if !n.Name.Captured {
 			n.Name.Captured = true
 			if n.Name.Decldepth == 0 {
@@ -97,7 +128,7 @@ func typecheckclosure(func_ *Node, top int) {
 	}
 
 	oldfn := Curfn
-	typecheck(&func_.Func.Ntype, Etype)
+	func_.Func.Ntype = typecheck(func_.Func.Ntype, Etype)
 	func_.Type = func_.Func.Ntype.Type
 	func_.Func.Top = top
 
@@ -109,7 +140,7 @@ func typecheckclosure(func_ *Node, top int) {
 		Curfn = func_
 		olddd := decldepth
 		decldepth = 1
-		typechecklist(func_.Nbody.Slice(), Etop)
+		typecheckslice(func_.Nbody.Slice(), Etop)
 		decldepth = olddd
 		Curfn = oldfn
 	}
@@ -194,10 +225,10 @@ func makeclosure(func_ *Node) *Node {
 	xfunc.Nbody.Set(func_.Nbody.Slice())
 	xfunc.Func.Dcl = append(func_.Func.Dcl, xfunc.Func.Dcl...)
 	func_.Func.Dcl = nil
-	if len(xfunc.Nbody.Slice()) == 0 {
+	if xfunc.Nbody.Len() == 0 {
 		Fatalf("empty body - won't generate any code")
 	}
-	typecheck(&xfunc, Etop)
+	xfunc = typecheck(xfunc, Etop)
 
 	xfunc.Func.Closure = func_
 	func_.Func.Closure = xfunc
@@ -215,8 +246,6 @@ func makeclosure(func_ *Node) *Node {
 // We use value capturing for values <= 128 bytes that are never reassigned
 // after capturing (effectively constant).
 func capturevars(xfunc *Node) {
-	var outer *Node
-
 	lno := lineno
 	lineno = xfunc.Lineno
 
@@ -239,14 +268,14 @@ func capturevars(xfunc *Node) {
 		// so that the outer frame also grabs them and knows they escape.
 		dowidth(v.Type)
 
-		outer = v.Name.Param.Outerexpr
-		v.Name.Param.Outerexpr = nil
+		outer := v.Name.Param.Outer
+		outermost := v.Name.Defn
 
 		// out parameters will be assigned to implicitly upon return.
-		if outer.Class != PPARAMOUT && !v.Name.Param.Closure.Addrtaken && !v.Name.Param.Closure.Assigned && v.Type.Width <= 128 {
+		if outer.Class != PPARAMOUT && !outermost.Addrtaken && !outermost.Assigned && v.Type.Width <= 128 {
 			v.Name.Byval = true
 		} else {
-			v.Name.Param.Closure.Addrtaken = true
+			outermost.Addrtaken = true
 			outer = Nod(OADDR, outer, nil)
 		}
 
@@ -259,10 +288,10 @@ func capturevars(xfunc *Node) {
 			if v.Name.Byval {
 				how = "value"
 			}
-			Warnl(v.Lineno, "%v capturing by %s: %v (addr=%v assign=%v width=%d)", name, how, v.Sym, v.Name.Param.Closure.Addrtaken, v.Name.Param.Closure.Assigned, int32(v.Type.Width))
+			Warnl(v.Lineno, "%v capturing by %s: %v (addr=%v assign=%v width=%d)", name, how, v.Sym, outermost.Addrtaken, outermost.Assigned, int32(v.Type.Width))
 		}
 
-		typecheck(&outer, Erv)
+		outer = typecheck(outer, Erv)
 		func_.Func.Enter.Append(outer)
 	}
 
@@ -303,7 +332,7 @@ func transformclosure(xfunc *Node) {
 				continue
 			}
 			fld := newField()
-			fld.Funarg = true
+			fld.Funarg = FunargParams
 			if v.Name.Byval {
 				// If v is captured by value, we merely downgrade it to PPARAM.
 				v.Class = PPARAM
@@ -313,7 +342,7 @@ func transformclosure(xfunc *Node) {
 			} else {
 				// If v of type T is captured by reference,
 				// we introduce function param &v *T
-				// and v remains PPARAMREF with &v heapaddr
+				// and v remains PAUTOHEAP with &v heapaddr
 				// (accesses will implicitly deref &v).
 				addr := newname(Lookupf("&%s", v.Sym.Name))
 				addr.Type = Ptrto(v.Type)
@@ -397,10 +426,42 @@ func transformclosure(xfunc *Node) {
 	lineno = lno
 }
 
+// hasemptycvars returns true iff closure func_ has an
+// empty list of captured vars. OXXX nodes don't count.
+func hasemptycvars(func_ *Node) bool {
+	for _, v := range func_.Func.Cvars.Slice() {
+		if v.Op == OXXX {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// closuredebugruntimecheck applies boilerplate checks for debug flags
+// and compiling runtime
+func closuredebugruntimecheck(r *Node) {
+	if Debug_closure > 0 {
+		if r.Esc == EscHeap {
+			Warnl(r.Lineno, "heap closure, captured vars = %v", r.Func.Cvars)
+		} else {
+			Warnl(r.Lineno, "stack closure, captured vars = %v", r.Func.Cvars)
+		}
+	}
+	if compiling_runtime && r.Esc == EscHeap {
+		yyerrorl(r.Lineno, "heap-allocated closure, not allowed in runtime.")
+	}
+}
+
 func walkclosure(func_ *Node, init *Nodes) *Node {
 	// If no closure vars, don't bother wrapping.
-	if len(func_.Func.Cvars.Slice()) == 0 {
+	if hasemptycvars(func_) {
+		if Debug_closure > 0 {
+			Warnl(func_.Lineno, "closure converted to global")
+		}
 		return func_.Func.Closure.Func.Nname
+	} else {
+		closuredebugruntimecheck(func_)
 	}
 
 	// Create closure in the form of a composite literal.
@@ -442,7 +503,7 @@ func walkclosure(func_ *Node, init *Nodes) *Node {
 
 	clos.Type = func_.Type
 
-	typecheck(&clos, Erv)
+	clos = typecheck(clos, Erv)
 
 	// typecheck will insert a PTRLIT node under CONVNOP,
 	// tag it with escape analysis result.
@@ -457,12 +518,10 @@ func walkclosure(func_ *Node, init *Nodes) *Node {
 		delete(prealloc, func_)
 	}
 
-	walkexpr(&clos, init)
-
-	return clos
+	return walkexpr(clos, init)
 }
 
-func typecheckpartialcall(fn *Node, sym *Node) {
+func typecheckpartialcall(fn *Node, sym *Sym) {
 	switch fn.Op {
 	case ODOTINTER, ODOTMETH:
 		break
@@ -474,27 +533,27 @@ func typecheckpartialcall(fn *Node, sym *Node) {
 	// Create top-level function.
 	xfunc := makepartialcall(fn, fn.Type, sym)
 	fn.Func = xfunc.Func
-	fn.Right = sym
+	fn.Right = newname(sym)
 	fn.Op = OCALLPART
 	fn.Type = xfunc.Type
 }
 
 var makepartialcall_gopkg *Pkg
 
-func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
+func makepartialcall(fn *Node, t0 *Type, meth *Sym) *Node {
 	var p string
 
 	rcvrtype := fn.Left.Type
-	if exportname(meth.Sym.Name) {
-		p = fmt.Sprintf("(%v).%s-fm", Tconv(rcvrtype, FmtLeft|FmtShort), meth.Sym.Name)
+	if exportname(meth.Name) {
+		p = fmt.Sprintf("(%v).%s-fm", Tconv(rcvrtype, FmtLeft|FmtShort), meth.Name)
 	} else {
-		p = fmt.Sprintf("(%v).(%v)-fm", Tconv(rcvrtype, FmtLeft|FmtShort), Sconv(meth.Sym, FmtLeft))
+		p = fmt.Sprintf("(%v).(%v)-fm", Tconv(rcvrtype, FmtLeft|FmtShort), sconv(meth, FmtLeft))
 	}
 	basetype := rcvrtype
-	if Isptr[rcvrtype.Etype] {
-		basetype = basetype.Type
+	if rcvrtype.IsPtr() {
+		basetype = basetype.Elem()
 	}
-	if basetype.Etype != TINTER && basetype.Sym == nil {
+	if !basetype.IsInterface() && basetype.Sym == nil {
 		Fatalf("missing base type for %v", rcvrtype)
 	}
 
@@ -528,8 +587,8 @@ func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
 	Curfn = xfunc
 	var fld *Node
 	var n *Node
-	for t, it := IterFields(t0.Params()); t != nil; t = it.Next() {
-		n = newname(Lookupf("a%d", i))
+	for _, t := range t0.Params().Fields().Slice() {
+		n = newname(LookupN("a", i))
 		i++
 		n.Class = PPARAM
 		xfunc.Func.Dcl = append(xfunc.Func.Dcl, n)
@@ -547,8 +606,8 @@ func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
 	i = 0
 	l = nil
 	var retargs []*Node
-	for t, it := IterFields(t0.Results()); t != nil; t = it.Next() {
-		n = newname(Lookupf("r%d", i))
+	for _, t := range t0.Results().Fields().Slice() {
+		n = newname(LookupN("r", i))
 		i++
 		n.Class = PPARAMOUT
 		xfunc.Func.Dcl = append(xfunc.Func.Dcl, n)
@@ -584,7 +643,7 @@ func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
 	ptr.Xoffset = 0
 	xfunc.Func.Dcl = append(xfunc.Func.Dcl, ptr)
 	var body []*Node
-	if Isptr[rcvrtype.Etype] || Isinter(rcvrtype) {
+	if rcvrtype.IsPtr() || rcvrtype.IsInterface() {
 		ptr.Name.Param.Ntype = typenod(rcvrtype)
 		body = append(body, Nod(OAS, ptr, cv))
 	} else {
@@ -592,10 +651,10 @@ func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
 		body = append(body, Nod(OAS, ptr, Nod(OADDR, cv, nil)))
 	}
 
-	call := Nod(OCALL, Nod(OXDOT, ptr, meth), nil)
+	call := Nod(OCALL, NodSym(OXDOT, ptr, meth), nil)
 	call.List.Set(callargs)
 	call.Isddd = ddd
-	if t0.Outtuple == 0 {
+	if t0.Results().NumFields() == 0 {
 		body = append(body, call)
 	} else {
 		n := Nod(OAS2, nil, nil)
@@ -608,7 +667,7 @@ func makepartialcall(fn *Node, t0 *Type, meth *Node) *Node {
 
 	xfunc.Nbody.Set(body)
 
-	typecheck(&xfunc, Etop)
+	xfunc = typecheck(xfunc, Etop)
 	sym.Def = xfunc
 	xtop = append(xtop, xfunc)
 	Curfn = savecurfn
@@ -624,7 +683,7 @@ func walkpartialcall(n *Node, init *Nodes) *Node {
 	//
 	// Like walkclosure above.
 
-	if Isinter(n.Left.Type) {
+	if n.Left.Type.IsInterface() {
 		// Trigger panic for method on nil interface now.
 		// Otherwise it happens in the wrapper and is confusing.
 		n.Left = cheapexpr(n.Left, init)
@@ -647,7 +706,7 @@ func walkpartialcall(n *Node, init *Nodes) *Node {
 
 	clos.Type = n.Type
 
-	typecheck(&clos, Erv)
+	clos = typecheck(clos, Erv)
 
 	// typecheck will insert a PTRLIT node under CONVNOP,
 	// tag it with escape analysis result.
@@ -662,7 +721,5 @@ func walkpartialcall(n *Node, init *Nodes) *Node {
 		delete(prealloc, n)
 	}
 
-	walkexpr(&clos, init)
-
-	return clos
+	return walkexpr(clos, init)
 }

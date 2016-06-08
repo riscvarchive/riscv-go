@@ -6,19 +6,15 @@ package arm
 
 import (
 	"cmd/compile/internal/gc"
+	"cmd/compile/internal/ssa"
 	"cmd/internal/obj/arm"
 )
 
 func betypeinit() {
-	gc.Widthptr = 4
-	gc.Widthint = 4
-	gc.Widthreg = 4
 }
 
 func Main() {
-	gc.Thearch.Thechar = '5'
-	gc.Thearch.Thestring = "arm"
-	gc.Thearch.Thelinkarch = &arm.Linkarm
+	gc.Thearch.LinkArch = &arm.Linkarm
 	gc.Thearch.REGSP = arm.REGSP
 	gc.Thearch.REGCTXT = arm.REGCTXT
 	gc.Thearch.REGCALLX = arm.REG_R1
@@ -64,6 +60,11 @@ func Main() {
 	gc.Thearch.Optoas = optoas
 	gc.Thearch.Doregbits = doregbits
 	gc.Thearch.Regnames = regnames
+
+	gc.Thearch.SSARegToReg = ssaRegToReg
+	gc.Thearch.SSAMarkMoves = func(s *gc.SSAGenState, b *ssa.Block) {}
+	gc.Thearch.SSAGenValue = ssaGenValue
+	gc.Thearch.SSAGenBlock = ssaGenBlock
 
 	gc.Main()
 	gc.Exit(0)

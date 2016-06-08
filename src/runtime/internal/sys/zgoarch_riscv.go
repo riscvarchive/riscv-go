@@ -2,7 +2,7 @@
 
 package sys
 
-const TheGoarch = `riscv`
+const GOARCH = `riscv`
 
 const Goarch386 = 0
 const GoarchAmd64 = 0

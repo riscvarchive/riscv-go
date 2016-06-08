@@ -69,7 +69,7 @@ func runTestProg(t *testing.T, binary, name string) string {
 	return string(got)
 }
 
-func buildTestProg(t *testing.T, binary string) (string, error) {
+func buildTestProg(t *testing.T, binary string, flags ...string) (string, error) {
 	checkStaleRuntime(t)
 
 	testprog.Lock()
@@ -86,23 +86,27 @@ func buildTestProg(t *testing.T, binary string) (string, error) {
 	if testprog.target == nil {
 		testprog.target = make(map[string]buildexe)
 	}
-	target, ok := testprog.target[binary]
+	name := binary
+	if len(flags) > 0 {
+		name += "_" + strings.Join(flags, "_")
+	}
+	target, ok := testprog.target[name]
 	if ok {
 		return target.exe, target.err
 	}
 
-	exe := filepath.Join(testprog.dir, binary+".exe")
-	cmd := exec.Command("go", "build", "-o", exe)
+	exe := filepath.Join(testprog.dir, name+".exe")
+	cmd := exec.Command("go", append([]string{"build", "-o", exe}, flags...)...)
 	cmd.Dir = "testdata/" + binary
 	out, err := testEnv(cmd).CombinedOutput()
 	if err != nil {
 		exe = ""
-		target.err = fmt.Errorf("building %s: %v\n%s", binary, err, out)
-		testprog.target[binary] = target
+		target.err = fmt.Errorf("building %s %v: %v\n%s", binary, flags, err, out)
+		testprog.target[name] = target
 		return "", target.err
 	}
 	target.exe = exe
-	testprog.target[binary] = target
+	testprog.target[name] = target
 	return exe, nil
 }
 
@@ -271,6 +275,52 @@ func TestGoexitInPanic(t *testing.T) {
 	if !strings.HasPrefix(output, want) {
 		t.Fatalf("output does not start with %q:\n%s", want, output)
 	}
+}
+
+// Issue 14965: Runtime panics should be of type runtime.Error
+func TestRuntimePanicWithRuntimeError(t *testing.T) {
+	testCases := [...]func(){
+		0: func() {
+			var m map[uint64]bool
+			m[1234] = true
+		},
+		1: func() {
+			ch := make(chan struct{})
+			close(ch)
+			close(ch)
+		},
+		2: func() {
+			var ch = make(chan struct{})
+			close(ch)
+			ch <- struct{}{}
+		},
+		3: func() {
+			var s = make([]int, 2)
+			_ = s[2]
+		},
+		4: func() {
+			n := -1
+			_ = make(chan bool, n)
+		},
+		5: func() {
+			close((chan bool)(nil))
+		},
+	}
+
+	for i, fn := range testCases {
+		got := panicValue(fn)
+		if _, ok := got.(runtime.Error); !ok {
+			t.Errorf("test #%d: recovered value %v(type %T) does not implement runtime.Error", i, got, got)
+		}
+	}
+}
+
+func panicValue(fn func()) (recovered interface{}) {
+	defer func() {
+		recovered = recover()
+	}()
+	fn()
+	return
 }
 
 func TestPanicAfterGoexit(t *testing.T) {

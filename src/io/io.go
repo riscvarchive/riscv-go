@@ -16,6 +16,13 @@ import (
 	"errors"
 )
 
+// Seek whence values.
+const (
+	SeekStart   = 0 // seek relative to the origin of the file
+	SeekCurrent = 1 // seek relative to the current offset
+	SeekEnd     = 2 // seek relative to the end
+)
+
 // ErrShortWrite means that a write accepted fewer bytes than requested
 // but failed to return an explicit error.
 var ErrShortWrite = errors.New("short write")
@@ -95,10 +102,12 @@ type Closer interface {
 // Seeker is the interface that wraps the basic Seek method.
 //
 // Seek sets the offset for the next Read or Write to offset,
-// interpreted according to whence: 0 means relative to the start of
-// the file, 1 means relative to the current offset, and 2 means
-// relative to the end. Seek returns the new offset relative to the
-// start of the file and an error, if any.
+// interpreted according to whence:
+// SeekStart means relative to the start of the file,
+// SeekCurrent means relative to the current offset, and
+// SeekEnd means relative to the end.
+// Seek returns the new offset relative to the start of the
+// file and an error, if any.
 //
 // Seeking to an offset before the start of the file is an error.
 // Seeking to any positive offset is legal, but the behavior of subsequent
@@ -274,6 +283,7 @@ type stringWriter interface {
 
 // WriteString writes the contents of the string s to w, which accepts a slice of bytes.
 // If w implements a WriteString method, it is invoked directly.
+// Otherwise, w.Write is called exactly once.
 func WriteString(w Writer, s string) (n int, err error) {
 	if sw, ok := w.(stringWriter); ok {
 		return sw.WriteString(s)
@@ -462,11 +472,11 @@ func (s *SectionReader) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	default:
 		return 0, errWhence
-	case 0:
+	case SeekStart:
 		offset += s.base
-	case 1:
+	case SeekCurrent:
 		offset += s.off
-	case 2:
+	case SeekEnd:
 		offset += s.limit
 	}
 	if offset < s.base {

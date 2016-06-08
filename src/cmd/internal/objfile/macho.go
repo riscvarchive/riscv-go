@@ -7,6 +7,7 @@
 package objfile
 
 import (
+	"debug/dwarf"
 	"debug/macho"
 	"fmt"
 	"os"
@@ -123,3 +124,11 @@ type uint64s []uint64
 func (x uint64s) Len() int           { return len(x) }
 func (x uint64s) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 func (x uint64s) Less(i, j int) bool { return x[i] < x[j] }
+
+func (f *machoFile) loadAddress() (uint64, error) {
+	return 0, fmt.Errorf("unknown load address")
+}
+
+func (f *machoFile) dwarf() (*dwarf.Data, error) {
+	return f.macho.DWARF()
+}

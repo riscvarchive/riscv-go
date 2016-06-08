@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build ignore
+
 package main
 
 import "cmd/internal/obj/riscv"
@@ -29,9 +31,12 @@ func init() {
 
 
 	gp := regInfo{inputs: []regMask{gpMask}, outputs: []regMask{gpMask}}
+	// FIXME(prattmic): This is a hack to get things to build, but it probably
+	// not correct.
+	gp2 := regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{gpMask}}
 
 	RISCVops := []opData{
-		{name: "ADD", argLength: 2, reg: gp, asm: "ADD", commutative: true, resultInArg0: true}, // arg0 + arg1
+		{name: "ADD", argLength: 2, reg: gp2, asm: "ADD", commutative: true, resultInArg0: true}, // arg0 + arg1
 		{name: "MOVmem", argLength: 1, reg: gp, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
 		{name: "MOVload", argLength: 2, reg: gp, asm: "MOV", aux: "SymOff"},  // load from arg0+auxint+aux. arg1=mem

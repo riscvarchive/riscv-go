@@ -5,6 +5,7 @@
 package gc
 
 import (
+	"cmd/internal/bio"
 	"cmd/internal/obj"
 	"crypto/sha256"
 	"fmt"
@@ -21,9 +22,36 @@ func formathdr(arhdr []byte, name string, size int64) {
 	copy(arhdr[:], fmt.Sprintf("%-16s%-12d%-6d%-6d%-8o%-10d`\n", name, 0, 0, 0, 0644, size))
 }
 
+// These modes say which kind of object file to generate.
+// The default use of the toolchain is to set both bits,
+// generating a combined compiler+linker object, one that
+// serves to describe the package to both the compiler and the linker.
+// In fact the compiler and linker read nearly disjoint sections of
+// that file, though, so in a distributed build setting it can be more
+// efficient to split the output into two files, supplying the compiler
+// object only to future compilations and the linker object only to
+// future links.
+//
+// By default a combined object is written, but if -linkobj is specified
+// on the command line then the default -o output is a compiler object
+// and the -linkobj output is a linker object.
+const (
+	modeCompilerObj = 1 << iota
+	modeLinkerObj
+)
+
 func dumpobj() {
+	if linkobj == "" {
+		dumpobj1(outfile, modeCompilerObj|modeLinkerObj)
+	} else {
+		dumpobj1(outfile, modeCompilerObj)
+		dumpobj1(linkobj, modeLinkerObj)
+	}
+}
+
+func dumpobj1(outfile string, mode int) {
 	var err error
-	bout, err = obj.Bopenw(outfile)
+	bout, err = bio.Create(outfile)
 	if err != nil {
 		Flusherrors()
 		fmt.Printf("can't create %s: %v\n", outfile, err)
@@ -32,36 +60,63 @@ func dumpobj() {
 
 	startobj := int64(0)
 	var arhdr [ArhdrSize]byte
-	if writearchive != 0 {
-		obj.Bwritestring(bout, "!<arch>\n")
+	if writearchive {
+		bout.WriteString("!<arch>\n")
 		arhdr = [ArhdrSize]byte{}
 		bout.Write(arhdr[:])
-		startobj = obj.Boffset(bout)
+		startobj = bout.Offset()
 	}
 
-	fmt.Fprintf(bout, "go object %s %s %s %s\n", obj.Getgoos(), obj.Getgoarch(), obj.Getgoversion(), obj.Expstring())
-	dumpexport()
-
-	if writearchive != 0 {
-		bout.Flush()
-		size := obj.Boffset(bout) - startobj
-		if size&1 != 0 {
-			obj.Bputc(bout, 0)
+	printheader := func() {
+		fmt.Fprintf(bout, "go object %s %s %s %s\n", obj.Getgoos(), obj.Getgoarch(), obj.Getgoversion(), obj.Expstring())
+		if buildid != "" {
+			fmt.Fprintf(bout, "build id %q\n", buildid)
 		}
-		obj.Bseek(bout, startobj-ArhdrSize, 0)
+		if localpkg.Name == "main" {
+			fmt.Fprintf(bout, "main\n")
+		}
+		if safemode {
+			fmt.Fprintf(bout, "safe\n")
+		} else {
+			fmt.Fprintf(bout, "----\n") // room for some other tool to write "safe"
+		}
+		fmt.Fprintf(bout, "\n") // header ends with blank line
+	}
+
+	printheader()
+
+	if mode&modeCompilerObj != 0 {
+		dumpexport()
+	}
+
+	if writearchive {
+		bout.Flush()
+		size := bout.Offset() - startobj
+		if size&1 != 0 {
+			bout.WriteByte(0)
+		}
+		bout.Seek(startobj-ArhdrSize, 0)
 		formathdr(arhdr[:], "__.PKGDEF", size)
 		bout.Write(arhdr[:])
 		bout.Flush()
+		bout.Seek(startobj+size+(size&1), 0)
+	}
 
-		obj.Bseek(bout, startobj+size+(size&1), 0)
+	if mode&modeLinkerObj == 0 {
+		bout.Close()
+		return
+	}
+
+	if writearchive {
+		// start object file
 		arhdr = [ArhdrSize]byte{}
 		bout.Write(arhdr[:])
-		startobj = obj.Boffset(bout)
-		fmt.Fprintf(bout, "go object %s %s %s %s\n", obj.Getgoos(), obj.Getgoarch(), obj.Getgoversion(), obj.Expstring())
+		startobj = bout.Offset()
+		printheader()
 	}
 
 	if pragcgobuf != "" {
-		if writearchive != 0 {
+		if writearchive {
 			// write empty export section; must be before cgo section
 			fmt.Fprintf(bout, "\n$$\n\n$$\n\n")
 		}
@@ -86,21 +141,26 @@ func dumpobj() {
 	dumpglobls()
 	externdcl = tmp
 
-	dumpdata()
-	obj.Writeobjdirect(Ctxt, bout)
+	if zerosize > 0 {
+		zero := Pkglookup("zero", mappkg)
+		ggloblsym(zero, int32(zerosize), obj.DUPOK|obj.RODATA)
+	}
 
-	if writearchive != 0 {
+	dumpdata()
+	obj.Writeobjdirect(Ctxt, bout.Writer)
+
+	if writearchive {
 		bout.Flush()
-		size := obj.Boffset(bout) - startobj
+		size := bout.Offset() - startobj
 		if size&1 != 0 {
-			obj.Bputc(bout, 0)
+			bout.WriteByte(0)
 		}
-		obj.Bseek(bout, startobj-ArhdrSize, 0)
+		bout.Seek(startobj-ArhdrSize, 0)
 		formathdr(arhdr[:], "_go_.o", size)
 		bout.Write(arhdr[:])
 	}
 
-	obj.Bterm(bout)
+	bout.Close()
 }
 
 func dumpglobls() {
@@ -132,11 +192,6 @@ func dumpglobls() {
 	funcsyms = nil
 }
 
-func Bputname(b *obj.Biobuf, s *obj.LSym) {
-	obj.Bwritestring(b, s.Name)
-	obj.Bputc(b, 0)
-}
-
 func Linksym(s *Sym) *obj.LSym {
 	if s == nil {
 		return nil
@@ -159,12 +214,16 @@ func Linksym(s *Sym) *obj.LSym {
 }
 
 func duintxx(s *Sym, off int, v uint64, wid int) int {
+	return duintxxLSym(Linksym(s), off, v, wid)
+}
+
+func duintxxLSym(s *obj.LSym, off int, v uint64, wid int) int {
 	// Update symbol data directly instead of generating a
 	// DATA instruction that liblink will have to interpret later.
 	// This reduces compilation time and memory usage.
 	off = int(Rnd(int64(off), int64(wid)))
 
-	return int(obj.Setuintxx(Ctxt, Linksym(s), int64(off), v, int64(wid)))
+	return int(obj.Setuintxx(Ctxt, s, int64(off), v, int64(wid)))
 }
 
 func duint8(s *Sym, off int, v uint8) int {
@@ -183,7 +242,18 @@ func duintptr(s *Sym, off int, v uint64) int {
 	return duintxx(s, off, v, Widthptr)
 }
 
-func stringsym(s string) (hdr, data *Sym) {
+// stringConstantSyms holds the pair of symbols we create for a
+// constant string.
+type stringConstantSyms struct {
+	hdr  *obj.LSym // string header
+	data *obj.LSym // actual string data
+}
+
+// stringConstants maps from the symbol name we use for the string
+// contents to the pair of linker symbols for that string.
+var stringConstants = make(map[string]stringConstantSyms, 100)
+
+func stringsym(s string) (hdr, data *obj.LSym) {
 	var symname string
 	if len(s) > 100 {
 		// Huge strings are hashed to avoid long names in object files.
@@ -197,31 +267,34 @@ func stringsym(s string) (hdr, data *Sym) {
 		symname = strconv.Quote(s)
 	}
 
-	symhdr := Pkglookup("hdr."+symname, gostringpkg)
-	symdata := Pkglookup(symname, gostringpkg)
+	const prefix = "go.string."
+	symdataname := prefix + symname
 
-	// SymUniq flag indicates that data is generated already
-	if symhdr.Flags&SymUniq != 0 {
-		return symhdr, symdata
+	// All the strings have the same prefix, so ignore it for map
+	// purposes, but use a slice of the symbol name string to
+	// reduce long-term memory overhead.
+	key := symdataname[len(prefix):]
+
+	if syms, ok := stringConstants[key]; ok {
+		return syms.hdr, syms.data
 	}
-	symhdr.Flags |= SymUniq
-	symhdr.Def = newname(symhdr)
+
+	symhdrname := "go.string.hdr." + symname
+
+	symhdr := obj.Linklookup(Ctxt, symhdrname, 0)
+	symdata := obj.Linklookup(Ctxt, symdataname, 0)
+
+	stringConstants[key] = stringConstantSyms{symhdr, symdata}
 
 	// string header
 	off := 0
-	off = dsymptr(symhdr, off, symdata, 0)
-	off = duintxx(symhdr, off, uint64(len(s)), Widthint)
-	ggloblsym(symhdr, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
+	off = dsymptrLSym(symhdr, off, symdata, 0)
+	off = duintxxLSym(symhdr, off, uint64(len(s)), Widthint)
+	ggloblLSym(symhdr, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
 
 	// string data
-	if symdata.Flags&SymUniq != 0 {
-		return symhdr, symdata
-	}
-	symdata.Flags |= SymUniq
-	symdata.Def = newname(symdata)
-
-	off = dsname(symdata, 0, s)
-	ggloblsym(symdata, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
+	off = dsnameLSym(symdata, 0, s)
+	ggloblLSym(symdata, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
 
 	return symhdr, symdata
 }
@@ -250,8 +323,7 @@ func Datastring(s string, a *obj.Addr) {
 	_, symdata := stringsym(s)
 	a.Type = obj.TYPE_MEM
 	a.Name = obj.NAME_EXTERN
-	a.Sym = Linksym(symdata)
-	a.Node = symdata.Def
+	a.Sym = symdata
 	a.Offset = 0
 	a.Etype = uint8(Simtype[TINT])
 }
@@ -260,8 +332,7 @@ func datagostring(sval string, a *obj.Addr) {
 	symhdr, _ := stringsym(sval)
 	a.Type = obj.TYPE_MEM
 	a.Name = obj.NAME_EXTERN
-	a.Sym = Linksym(symhdr)
-	a.Node = symhdr.Def
+	a.Sym = symhdr
 	a.Offset = 0
 	a.Etype = uint8(TSTRING)
 }
@@ -279,26 +350,40 @@ func dgostrlitptr(s *Sym, off int, lit *string) int {
 	}
 	off = int(Rnd(int64(off), int64(Widthptr)))
 	symhdr, _ := stringsym(*lit)
-	Linksym(s).WriteAddr(Ctxt, int64(off), Widthptr, Linksym(symhdr), 0)
+	Linksym(s).WriteAddr(Ctxt, int64(off), Widthptr, symhdr, 0)
 	off += Widthptr
 	return off
 }
 
 func dsname(s *Sym, off int, t string) int {
-	Linksym(s).WriteString(Ctxt, int64(off), len(t), t)
+	return dsnameLSym(Linksym(s), off, t)
+}
+
+func dsnameLSym(s *obj.LSym, off int, t string) int {
+	s.WriteString(Ctxt, int64(off), len(t), t)
 	return off + len(t)
 }
 
 func dsymptr(s *Sym, off int, x *Sym, xoff int) int {
+	return dsymptrLSym(Linksym(s), off, Linksym(x), xoff)
+}
+
+func dsymptrLSym(s *obj.LSym, off int, x *obj.LSym, xoff int) int {
 	off = int(Rnd(int64(off), int64(Widthptr)))
-	Linksym(s).WriteAddr(Ctxt, int64(off), Widthptr, Linksym(x), int64(xoff))
+	s.WriteAddr(Ctxt, int64(off), Widthptr, x, int64(xoff))
 	off += Widthptr
+	return off
+}
+
+func dsymptrOffLSym(s *obj.LSym, off int, x *obj.LSym, xoff int) int {
+	s.WriteOff(Ctxt, int64(off), x, int64(xoff))
+	off += 4
 	return off
 }
 
 func gdata(nam *Node, nr *Node, wid int) {
 	if nam.Op != ONAME {
-		Fatalf("gdata nam op %v", opnames[nam.Op])
+		Fatalf("gdata nam op %v", nam.Op)
 	}
 	if nam.Sym == nil {
 		Fatalf("gdata nil nam sym")
@@ -306,20 +391,23 @@ func gdata(nam *Node, nr *Node, wid int) {
 
 	switch nr.Op {
 	case OLITERAL:
-		switch nr.Val().Ctype() {
-		case CTCPLX:
-			gdatacomplex(nam, nr.Val().U.(*Mpcplx))
+		switch u := nr.Val().U.(type) {
+		case *Mpcplx:
+			gdatacomplex(nam, u)
 
-		case CTSTR:
-			gdatastring(nam, nr.Val().U.(string))
+		case string:
+			gdatastring(nam, u)
 
-		case CTINT, CTRUNE, CTBOOL:
-			i, _ := nr.IntLiteral()
+		case bool:
+			i := int64(obj.Bool2int(u))
 			Linksym(nam.Sym).WriteInt(Ctxt, nam.Xoffset, wid, i)
 
-		case CTFLT:
+		case *Mpint:
+			Linksym(nam.Sym).WriteInt(Ctxt, nam.Xoffset, wid, u.Int64())
+
+		case *Mpflt:
 			s := Linksym(nam.Sym)
-			f := mpgetflt(nr.Val().U.(*Mpflt))
+			f := u.Float64()
 			switch nam.Type.Etype {
 			case TFLOAT32:
 				s.WriteFloat32(Ctxt, nam.Xoffset, float32(f))
@@ -333,7 +421,7 @@ func gdata(nam *Node, nr *Node, wid int) {
 
 	case OADDR:
 		if nr.Left.Op != ONAME {
-			Fatalf("gdata ADDR left op %s", opnames[nr.Left.Op])
+			Fatalf("gdata ADDR left op %s", nr.Left.Op)
 		}
 		to := nr.Left
 		Linksym(nam.Sym).WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(to.Sym), to.Xoffset)
@@ -345,14 +433,14 @@ func gdata(nam *Node, nr *Node, wid int) {
 		Linksym(nam.Sym).WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(funcsym(nr.Sym)), nr.Xoffset)
 
 	default:
-		Fatalf("gdata unhandled op %v %v\n", nr, opnames[nr.Op])
+		Fatalf("gdata unhandled op %v %v\n", nr, nr.Op)
 	}
 }
 
 func gdatacomplex(nam *Node, cval *Mpcplx) {
 	t := Types[cplxsubtype(nam.Type.Etype)]
-	r := mpgetflt(&cval.Real)
-	i := mpgetflt(&cval.Imag)
+	r := cval.Real.Float64()
+	i := cval.Imag.Float64()
 	s := Linksym(nam.Sym)
 
 	switch t.Etype {
@@ -368,6 +456,6 @@ func gdatacomplex(nam *Node, cval *Mpcplx) {
 func gdatastring(nam *Node, sval string) {
 	s := Linksym(nam.Sym)
 	_, symdata := stringsym(sval)
-	s.WriteAddr(Ctxt, nam.Xoffset, Widthptr, Linksym(symdata), 0)
+	s.WriteAddr(Ctxt, nam.Xoffset, Widthptr, symdata, 0)
 	s.WriteInt(Ctxt, nam.Xoffset+int64(Widthptr), Widthint, int64(len(sval)))
 }

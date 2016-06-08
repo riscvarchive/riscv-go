@@ -194,14 +194,6 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpLess8U(v, config)
 	case OpLoad:
 		return rewriteValueRISCV_OpLoad(v, config)
-	case OpLrot16:
-		return rewriteValueRISCV_OpLrot16(v, config)
-	case OpLrot32:
-		return rewriteValueRISCV_OpLrot32(v, config)
-	case OpLrot64:
-		return rewriteValueRISCV_OpLrot64(v, config)
-	case OpLrot8:
-		return rewriteValueRISCV_OpLrot8(v, config)
 	case OpLsh16x16:
 		return rewriteValueRISCV_OpLsh16x16(v, config)
 	case OpLsh16x32:
@@ -441,7 +433,6 @@ func rewriteValueRISCV_OpAdd16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAdd32(v *Value, config *Config) bool {
 	b := v.Block
@@ -457,7 +448,6 @@ func rewriteValueRISCV_OpAdd32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAdd32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -473,7 +463,6 @@ func rewriteValueRISCV_OpAdd32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAdd64(v *Value, config *Config) bool {
 	b := v.Block
@@ -489,7 +478,6 @@ func rewriteValueRISCV_OpAdd64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAdd64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -505,7 +493,6 @@ func rewriteValueRISCV_OpAdd64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAdd8(v *Value, config *Config) bool {
 	b := v.Block
@@ -521,7 +508,6 @@ func rewriteValueRISCV_OpAdd8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAddPtr(v *Value, config *Config) bool {
 	b := v.Block
@@ -537,7 +523,6 @@ func rewriteValueRISCV_OpAddPtr(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAddr(v *Value, config *Config) bool {
 	b := v.Block
@@ -553,7 +538,6 @@ func rewriteValueRISCV_OpAddr(v *Value, config *Config) bool {
 		v.AddArg(base)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAnd16(v *Value, config *Config) bool {
 	b := v.Block
@@ -569,7 +553,6 @@ func rewriteValueRISCV_OpAnd16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAnd32(v *Value, config *Config) bool {
 	b := v.Block
@@ -585,7 +568,6 @@ func rewriteValueRISCV_OpAnd32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAnd64(v *Value, config *Config) bool {
 	b := v.Block
@@ -601,7 +583,6 @@ func rewriteValueRISCV_OpAnd64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAnd8(v *Value, config *Config) bool {
 	b := v.Block
@@ -617,7 +598,6 @@ func rewriteValueRISCV_OpAnd8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpAvg64u(v *Value, config *Config) bool {
 	b := v.Block
@@ -633,7 +613,6 @@ func rewriteValueRISCV_OpAvg64u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCom16(v *Value, config *Config) bool {
 	b := v.Block
@@ -648,7 +627,6 @@ func rewriteValueRISCV_OpCom16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCom32(v *Value, config *Config) bool {
 	b := v.Block
@@ -663,7 +641,6 @@ func rewriteValueRISCV_OpCom32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCom64(v *Value, config *Config) bool {
 	b := v.Block
@@ -678,7 +655,6 @@ func rewriteValueRISCV_OpCom64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCom8(v *Value, config *Config) bool {
 	b := v.Block
@@ -693,7 +669,6 @@ func rewriteValueRISCV_OpCom8(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt32Fto32(v *Value, config *Config) bool {
 	b := v.Block
@@ -708,7 +683,6 @@ func rewriteValueRISCV_OpCvt32Fto32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt32Fto64(v *Value, config *Config) bool {
 	b := v.Block
@@ -723,7 +697,6 @@ func rewriteValueRISCV_OpCvt32Fto64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt32Fto64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -738,7 +711,6 @@ func rewriteValueRISCV_OpCvt32Fto64F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt32to32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -753,7 +725,6 @@ func rewriteValueRISCV_OpCvt32to32F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt32to64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -768,7 +739,6 @@ func rewriteValueRISCV_OpCvt32to64F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt64Fto32(v *Value, config *Config) bool {
 	b := v.Block
@@ -783,7 +753,6 @@ func rewriteValueRISCV_OpCvt64Fto32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt64Fto32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -798,7 +767,6 @@ func rewriteValueRISCV_OpCvt64Fto32F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt64Fto64(v *Value, config *Config) bool {
 	b := v.Block
@@ -813,7 +781,6 @@ func rewriteValueRISCV_OpCvt64Fto64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt64to32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -828,7 +795,6 @@ func rewriteValueRISCV_OpCvt64to32F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpCvt64to64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -843,7 +809,6 @@ func rewriteValueRISCV_OpCvt64to64F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv16(v *Value, config *Config) bool {
 	b := v.Block
@@ -859,7 +824,6 @@ func rewriteValueRISCV_OpDiv16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv16u(v *Value, config *Config) bool {
 	b := v.Block
@@ -875,7 +839,6 @@ func rewriteValueRISCV_OpDiv16u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv32(v *Value, config *Config) bool {
 	b := v.Block
@@ -891,7 +854,6 @@ func rewriteValueRISCV_OpDiv32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -907,7 +869,6 @@ func rewriteValueRISCV_OpDiv32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv32u(v *Value, config *Config) bool {
 	b := v.Block
@@ -923,7 +884,6 @@ func rewriteValueRISCV_OpDiv32u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv64(v *Value, config *Config) bool {
 	b := v.Block
@@ -939,7 +899,6 @@ func rewriteValueRISCV_OpDiv64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -955,7 +914,6 @@ func rewriteValueRISCV_OpDiv64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv64u(v *Value, config *Config) bool {
 	b := v.Block
@@ -971,7 +929,6 @@ func rewriteValueRISCV_OpDiv64u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv8(v *Value, config *Config) bool {
 	b := v.Block
@@ -987,7 +944,6 @@ func rewriteValueRISCV_OpDiv8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpDiv8u(v *Value, config *Config) bool {
 	b := v.Block
@@ -1003,7 +959,6 @@ func rewriteValueRISCV_OpDiv8u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1019,7 +974,6 @@ func rewriteValueRISCV_OpEq16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1035,7 +989,6 @@ func rewriteValueRISCV_OpEq32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1051,7 +1004,6 @@ func rewriteValueRISCV_OpEq32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1067,7 +1019,6 @@ func rewriteValueRISCV_OpEq64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1083,7 +1034,6 @@ func rewriteValueRISCV_OpEq64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEq8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1099,7 +1049,6 @@ func rewriteValueRISCV_OpEq8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
 	b := v.Block
@@ -1115,7 +1064,6 @@ func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1131,7 +1079,6 @@ func rewriteValueRISCV_OpGeq16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq16U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1147,7 +1094,6 @@ func rewriteValueRISCV_OpGeq16U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1163,7 +1109,6 @@ func rewriteValueRISCV_OpGeq32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1179,7 +1124,6 @@ func rewriteValueRISCV_OpGeq32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq32U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1195,7 +1139,6 @@ func rewriteValueRISCV_OpGeq32U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1211,7 +1154,6 @@ func rewriteValueRISCV_OpGeq64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1227,7 +1169,6 @@ func rewriteValueRISCV_OpGeq64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq64U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1243,7 +1184,6 @@ func rewriteValueRISCV_OpGeq64U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1259,7 +1199,6 @@ func rewriteValueRISCV_OpGeq8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGeq8U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1275,7 +1214,6 @@ func rewriteValueRISCV_OpGeq8U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1291,7 +1229,6 @@ func rewriteValueRISCV_OpGreater16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater16U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1307,7 +1244,6 @@ func rewriteValueRISCV_OpGreater16U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1323,7 +1259,6 @@ func rewriteValueRISCV_OpGreater32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1339,7 +1274,6 @@ func rewriteValueRISCV_OpGreater32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater32U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1355,7 +1289,6 @@ func rewriteValueRISCV_OpGreater32U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1371,7 +1304,6 @@ func rewriteValueRISCV_OpGreater64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1387,7 +1319,6 @@ func rewriteValueRISCV_OpGreater64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater64U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1403,7 +1334,6 @@ func rewriteValueRISCV_OpGreater64U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1419,7 +1349,6 @@ func rewriteValueRISCV_OpGreater8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpGreater8U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1435,7 +1364,6 @@ func rewriteValueRISCV_OpGreater8U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1451,7 +1379,6 @@ func rewriteValueRISCV_OpHmul16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul16u(v *Value, config *Config) bool {
 	b := v.Block
@@ -1467,7 +1394,6 @@ func rewriteValueRISCV_OpHmul16u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1483,7 +1409,6 @@ func rewriteValueRISCV_OpHmul32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul32u(v *Value, config *Config) bool {
 	b := v.Block
@@ -1499,7 +1424,6 @@ func rewriteValueRISCV_OpHmul32u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1515,7 +1439,6 @@ func rewriteValueRISCV_OpHmul64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul64u(v *Value, config *Config) bool {
 	b := v.Block
@@ -1531,7 +1454,6 @@ func rewriteValueRISCV_OpHmul64u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1547,7 +1469,6 @@ func rewriteValueRISCV_OpHmul8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpHmul8u(v *Value, config *Config) bool {
 	b := v.Block
@@ -1563,7 +1484,6 @@ func rewriteValueRISCV_OpHmul8u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1579,7 +1499,6 @@ func rewriteValueRISCV_OpLeq16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq16U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1595,7 +1514,6 @@ func rewriteValueRISCV_OpLeq16U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1611,7 +1529,6 @@ func rewriteValueRISCV_OpLeq32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1627,7 +1544,6 @@ func rewriteValueRISCV_OpLeq32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq32U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1643,7 +1559,6 @@ func rewriteValueRISCV_OpLeq32U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1659,7 +1574,6 @@ func rewriteValueRISCV_OpLeq64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1675,7 +1589,6 @@ func rewriteValueRISCV_OpLeq64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq64U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1691,7 +1604,6 @@ func rewriteValueRISCV_OpLeq64U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1707,7 +1619,6 @@ func rewriteValueRISCV_OpLeq8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLeq8U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1723,7 +1634,6 @@ func rewriteValueRISCV_OpLeq8U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1739,7 +1649,6 @@ func rewriteValueRISCV_OpLess16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess16U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1755,7 +1664,6 @@ func rewriteValueRISCV_OpLess16U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1771,7 +1679,6 @@ func rewriteValueRISCV_OpLess32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1787,7 +1694,6 @@ func rewriteValueRISCV_OpLess32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess32U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1803,7 +1709,6 @@ func rewriteValueRISCV_OpLess32U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess64(v *Value, config *Config) bool {
 	b := v.Block
@@ -1819,7 +1724,6 @@ func rewriteValueRISCV_OpLess64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -1835,7 +1739,6 @@ func rewriteValueRISCV_OpLess64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess64U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1851,7 +1754,6 @@ func rewriteValueRISCV_OpLess64U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess8(v *Value, config *Config) bool {
 	b := v.Block
@@ -1867,7 +1769,6 @@ func rewriteValueRISCV_OpLess8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLess8U(v *Value, config *Config) bool {
 	b := v.Block
@@ -1883,7 +1784,6 @@ func rewriteValueRISCV_OpLess8U(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 	b := v.Block
@@ -1899,71 +1799,6 @@ func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
-	return false
-}
-func rewriteValueRISCV_OpLrot16(v *Value, config *Config) bool {
-	b := v.Block
-	_ = b
-	// match: (Lrot16 x [c])
-	// cond:
-	// result: (ADD x [c])
-	for {
-		x := v.Args[0]
-		c := v.AuxInt
-		v.reset(OpRISCVADD)
-		v.AddArg(x)
-		v.AuxInt = c
-		return true
-	}
-	return false
-}
-func rewriteValueRISCV_OpLrot32(v *Value, config *Config) bool {
-	b := v.Block
-	_ = b
-	// match: (Lrot32 x [c])
-	// cond:
-	// result: (ADD x [c])
-	for {
-		x := v.Args[0]
-		c := v.AuxInt
-		v.reset(OpRISCVADD)
-		v.AddArg(x)
-		v.AuxInt = c
-		return true
-	}
-	return false
-}
-func rewriteValueRISCV_OpLrot64(v *Value, config *Config) bool {
-	b := v.Block
-	_ = b
-	// match: (Lrot64 x [c])
-	// cond:
-	// result: (ADD x [c])
-	for {
-		x := v.Args[0]
-		c := v.AuxInt
-		v.reset(OpRISCVADD)
-		v.AddArg(x)
-		v.AuxInt = c
-		return true
-	}
-	return false
-}
-func rewriteValueRISCV_OpLrot8(v *Value, config *Config) bool {
-	b := v.Block
-	_ = b
-	// match: (Lrot8 x [c])
-	// cond:
-	// result: (ADD x [c])
-	for {
-		x := v.Args[0]
-		c := v.AuxInt
-		v.reset(OpRISCVADD)
-		v.AddArg(x)
-		v.AuxInt = c
-		return true
-	}
-	return false
 }
 func rewriteValueRISCV_OpLsh16x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1979,7 +1814,6 @@ func rewriteValueRISCV_OpLsh16x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh16x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -1995,7 +1829,6 @@ func rewriteValueRISCV_OpLsh16x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh16x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2011,7 +1844,6 @@ func rewriteValueRISCV_OpLsh16x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh16x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2027,7 +1859,6 @@ func rewriteValueRISCV_OpLsh16x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh32x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2043,7 +1874,6 @@ func rewriteValueRISCV_OpLsh32x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh32x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2059,7 +1889,6 @@ func rewriteValueRISCV_OpLsh32x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh32x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2075,7 +1904,6 @@ func rewriteValueRISCV_OpLsh32x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh32x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2091,7 +1919,6 @@ func rewriteValueRISCV_OpLsh32x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh64x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2107,7 +1934,6 @@ func rewriteValueRISCV_OpLsh64x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh64x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2123,7 +1949,6 @@ func rewriteValueRISCV_OpLsh64x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh64x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2139,7 +1964,6 @@ func rewriteValueRISCV_OpLsh64x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh64x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2155,7 +1979,6 @@ func rewriteValueRISCV_OpLsh64x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh8x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2171,7 +1994,6 @@ func rewriteValueRISCV_OpLsh8x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh8x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2187,7 +2009,6 @@ func rewriteValueRISCV_OpLsh8x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh8x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2203,7 +2024,6 @@ func rewriteValueRISCV_OpLsh8x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpLsh8x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2219,7 +2039,6 @@ func rewriteValueRISCV_OpLsh8x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2235,7 +2054,6 @@ func rewriteValueRISCV_OpMod16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod16u(v *Value, config *Config) bool {
 	b := v.Block
@@ -2251,7 +2069,6 @@ func rewriteValueRISCV_OpMod16u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2267,7 +2084,6 @@ func rewriteValueRISCV_OpMod32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod32u(v *Value, config *Config) bool {
 	b := v.Block
@@ -2283,7 +2099,6 @@ func rewriteValueRISCV_OpMod32u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2299,7 +2114,6 @@ func rewriteValueRISCV_OpMod64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod64u(v *Value, config *Config) bool {
 	b := v.Block
@@ -2315,7 +2129,6 @@ func rewriteValueRISCV_OpMod64u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2331,7 +2144,6 @@ func rewriteValueRISCV_OpMod8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMod8u(v *Value, config *Config) bool {
 	b := v.Block
@@ -2347,7 +2159,6 @@ func rewriteValueRISCV_OpMod8u(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2363,7 +2174,6 @@ func rewriteValueRISCV_OpMul16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2379,7 +2189,6 @@ func rewriteValueRISCV_OpMul32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2395,7 +2204,6 @@ func rewriteValueRISCV_OpMul32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2411,7 +2219,6 @@ func rewriteValueRISCV_OpMul64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2427,7 +2234,6 @@ func rewriteValueRISCV_OpMul64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpMul8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2443,7 +2249,6 @@ func rewriteValueRISCV_OpMul8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2458,7 +2263,6 @@ func rewriteValueRISCV_OpNeg16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2473,7 +2277,6 @@ func rewriteValueRISCV_OpNeg32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2488,7 +2291,6 @@ func rewriteValueRISCV_OpNeg32F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2503,7 +2305,6 @@ func rewriteValueRISCV_OpNeg64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2518,7 +2319,6 @@ func rewriteValueRISCV_OpNeg64F(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeg8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2533,7 +2333,6 @@ func rewriteValueRISCV_OpNeg8(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2549,7 +2348,6 @@ func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2565,7 +2363,6 @@ func rewriteValueRISCV_OpNeq32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2581,7 +2378,6 @@ func rewriteValueRISCV_OpNeq32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2597,7 +2393,6 @@ func rewriteValueRISCV_OpNeq64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -2613,7 +2408,6 @@ func rewriteValueRISCV_OpNeq64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeq8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2629,7 +2423,6 @@ func rewriteValueRISCV_OpNeq8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNeqPtr(v *Value, config *Config) bool {
 	b := v.Block
@@ -2645,7 +2438,6 @@ func rewriteValueRISCV_OpNeqPtr(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpNilCheck(v *Value, config *Config) bool {
 	b := v.Block
@@ -2661,7 +2453,6 @@ func rewriteValueRISCV_OpNilCheck(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpOr16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2677,7 +2468,6 @@ func rewriteValueRISCV_OpOr16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpOr32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2693,7 +2483,6 @@ func rewriteValueRISCV_OpOr32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpOr64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2709,7 +2498,6 @@ func rewriteValueRISCV_OpOr64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpOr8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2725,7 +2513,6 @@ func rewriteValueRISCV_OpOr8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16Ux16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2741,7 +2528,6 @@ func rewriteValueRISCV_OpRsh16Ux16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16Ux32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2757,7 +2543,6 @@ func rewriteValueRISCV_OpRsh16Ux32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16Ux64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2773,7 +2558,6 @@ func rewriteValueRISCV_OpRsh16Ux64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16Ux8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2789,7 +2573,6 @@ func rewriteValueRISCV_OpRsh16Ux8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2805,7 +2588,6 @@ func rewriteValueRISCV_OpRsh16x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2821,7 +2603,6 @@ func rewriteValueRISCV_OpRsh16x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2837,7 +2618,6 @@ func rewriteValueRISCV_OpRsh16x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh16x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2853,7 +2633,6 @@ func rewriteValueRISCV_OpRsh16x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32Ux16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2869,7 +2648,6 @@ func rewriteValueRISCV_OpRsh32Ux16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32Ux32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2885,7 +2663,6 @@ func rewriteValueRISCV_OpRsh32Ux32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32Ux64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2901,7 +2678,6 @@ func rewriteValueRISCV_OpRsh32Ux64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32Ux8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2917,7 +2693,6 @@ func rewriteValueRISCV_OpRsh32Ux8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2933,7 +2708,6 @@ func rewriteValueRISCV_OpRsh32x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -2949,7 +2723,6 @@ func rewriteValueRISCV_OpRsh32x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -2965,7 +2738,6 @@ func rewriteValueRISCV_OpRsh32x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh32x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -2981,7 +2753,6 @@ func rewriteValueRISCV_OpRsh32x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64Ux16(v *Value, config *Config) bool {
 	b := v.Block
@@ -2997,7 +2768,6 @@ func rewriteValueRISCV_OpRsh64Ux16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64Ux32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3013,7 +2783,6 @@ func rewriteValueRISCV_OpRsh64Ux32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64Ux64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3029,7 +2798,6 @@ func rewriteValueRISCV_OpRsh64Ux64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64Ux8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3045,7 +2813,6 @@ func rewriteValueRISCV_OpRsh64Ux8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3061,7 +2828,6 @@ func rewriteValueRISCV_OpRsh64x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3077,7 +2843,6 @@ func rewriteValueRISCV_OpRsh64x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3093,7 +2858,6 @@ func rewriteValueRISCV_OpRsh64x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh64x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3109,7 +2873,6 @@ func rewriteValueRISCV_OpRsh64x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8Ux16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3125,7 +2888,6 @@ func rewriteValueRISCV_OpRsh8Ux16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8Ux32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3141,7 +2903,6 @@ func rewriteValueRISCV_OpRsh8Ux32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8Ux64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3157,7 +2918,6 @@ func rewriteValueRISCV_OpRsh8Ux64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8Ux8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3173,7 +2933,6 @@ func rewriteValueRISCV_OpRsh8Ux8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8x16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3189,7 +2948,6 @@ func rewriteValueRISCV_OpRsh8x16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8x32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3205,7 +2963,6 @@ func rewriteValueRISCV_OpRsh8x32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8x64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3221,7 +2978,6 @@ func rewriteValueRISCV_OpRsh8x64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpRsh8x8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3237,7 +2993,6 @@ func rewriteValueRISCV_OpRsh8x8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt16to32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3252,7 +3007,6 @@ func rewriteValueRISCV_OpSignExt16to32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt16to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3267,7 +3021,6 @@ func rewriteValueRISCV_OpSignExt16to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt32to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3282,7 +3035,6 @@ func rewriteValueRISCV_OpSignExt32to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt8to16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3297,7 +3049,6 @@ func rewriteValueRISCV_OpSignExt8to16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt8to32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3312,7 +3063,6 @@ func rewriteValueRISCV_OpSignExt8to32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3327,7 +3077,6 @@ func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSqrt(v *Value, config *Config) bool {
 	b := v.Block
@@ -3342,7 +3091,6 @@ func rewriteValueRISCV_OpSqrt(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	b := v.Block
@@ -3360,7 +3108,6 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3376,7 +3123,6 @@ func rewriteValueRISCV_OpSub16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3392,7 +3138,6 @@ func rewriteValueRISCV_OpSub32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub32F(v *Value, config *Config) bool {
 	b := v.Block
@@ -3408,7 +3153,6 @@ func rewriteValueRISCV_OpSub32F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3424,7 +3168,6 @@ func rewriteValueRISCV_OpSub64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub64F(v *Value, config *Config) bool {
 	b := v.Block
@@ -3440,7 +3183,6 @@ func rewriteValueRISCV_OpSub64F(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSub8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3456,7 +3198,6 @@ func rewriteValueRISCV_OpSub8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpSubPtr(v *Value, config *Config) bool {
 	b := v.Block
@@ -3472,7 +3213,6 @@ func rewriteValueRISCV_OpSubPtr(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc16to8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3487,7 +3227,6 @@ func rewriteValueRISCV_OpTrunc16to8(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc32to16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3502,7 +3241,6 @@ func rewriteValueRISCV_OpTrunc32to16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc32to8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3517,7 +3255,6 @@ func rewriteValueRISCV_OpTrunc32to8(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc64to16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3532,7 +3269,6 @@ func rewriteValueRISCV_OpTrunc64to16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc64to32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3547,7 +3283,6 @@ func rewriteValueRISCV_OpTrunc64to32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpTrunc64to8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3562,7 +3297,6 @@ func rewriteValueRISCV_OpTrunc64to8(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpXor16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3578,7 +3312,6 @@ func rewriteValueRISCV_OpXor16(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpXor32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3594,7 +3327,6 @@ func rewriteValueRISCV_OpXor32(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpXor64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3610,7 +3342,6 @@ func rewriteValueRISCV_OpXor64(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpXor8(v *Value, config *Config) bool {
 	b := v.Block
@@ -3626,7 +3357,6 @@ func rewriteValueRISCV_OpXor8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3641,7 +3371,6 @@ func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt16to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3656,7 +3385,6 @@ func rewriteValueRISCV_OpZeroExt16to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt32to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3671,7 +3399,6 @@ func rewriteValueRISCV_OpZeroExt32to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt8to16(v *Value, config *Config) bool {
 	b := v.Block
@@ -3686,7 +3413,6 @@ func rewriteValueRISCV_OpZeroExt8to16(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt8to32(v *Value, config *Config) bool {
 	b := v.Block
@@ -3701,7 +3427,6 @@ func rewriteValueRISCV_OpZeroExt8to32(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteValueRISCV_OpZeroExt8to64(v *Value, config *Config) bool {
 	b := v.Block
@@ -3716,7 +3441,6 @@ func rewriteValueRISCV_OpZeroExt8to64(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
-	return false
 }
 func rewriteBlockRISCV(b *Block) bool {
 	switch b.Kind {

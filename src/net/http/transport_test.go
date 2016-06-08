@@ -13,16 +13,20 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"internal/nettrace"
+	"internal/testenv"
 	"io"
 	"io/ioutil"
 	"log"
 	"net"
 	. "net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"net/http/httputil"
 	"net/http/internal"
 	"net/url"
@@ -379,8 +383,8 @@ func TestTransportMaxPerHostIdleConns(t *testing.T) {
 		}
 	}))
 	defer ts.Close()
-	maxIdleConns := 2
-	tr := &Transport{DisableKeepAlives: false, MaxIdleConnsPerHost: maxIdleConns}
+	maxIdleConnsPerHost := 2
+	tr := &Transport{DisableKeepAlives: false, MaxIdleConnsPerHost: maxIdleConnsPerHost}
 	c := &Client{Transport: tr}
 
 	// Start 3 outstanding requests and wait for the server to get them.
@@ -425,14 +429,65 @@ func TestTransportMaxPerHostIdleConns(t *testing.T) {
 
 	resch <- "res2"
 	<-donech
-	if e, g := 2, tr.IdleConnCountForTesting(cacheKey); e != g {
-		t.Errorf("after second response, expected %d idle conns; got %d", e, g)
+	if g, w := tr.IdleConnCountForTesting(cacheKey), 2; g != w {
+		t.Errorf("after second response, idle conns = %d; want %d", g, w)
 	}
 
 	resch <- "res3"
 	<-donech
-	if e, g := maxIdleConns, tr.IdleConnCountForTesting(cacheKey); e != g {
-		t.Errorf("after third response, still expected %d idle conns; got %d", e, g)
+	if g, w := tr.IdleConnCountForTesting(cacheKey), maxIdleConnsPerHost; g != w {
+		t.Errorf("after third response, idle conns = %d; want %d", g, w)
+	}
+}
+
+func TestTransportRemovesDeadIdleConnections(t *testing.T) {
+	if runtime.GOOS == "plan9" {
+		t.Skip("skipping test; see https://golang.org/issue/15464")
+	}
+	defer afterTest(t)
+	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		io.WriteString(w, r.RemoteAddr)
+	}))
+	defer ts.Close()
+
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+
+	doReq := func(name string) string {
+		// Do a POST instead of a GET to prevent the Transport's
+		// idempotent request retry logic from kicking in...
+		res, err := c.Post(ts.URL, "", nil)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if res.StatusCode != 200 {
+			t.Fatalf("%s: %v", name, res.Status)
+		}
+		defer res.Body.Close()
+		slurp, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return string(slurp)
+	}
+
+	first := doReq("first")
+	keys1 := tr.IdleConnKeysForTesting()
+
+	ts.CloseClientConnections()
+
+	var keys2 []string
+	if !waitCondition(3*time.Second, 50*time.Millisecond, func() bool {
+		keys2 = tr.IdleConnKeysForTesting()
+		return len(keys2) == 0
+	}) {
+		t.Fatalf("Transport didn't notice idle connection's death.\nbefore: %q\n after: %q\n", keys1, keys2)
+	}
+
+	second := doReq("second")
+	if first == second {
+		t.Errorf("expected a different connection between requests. got %q both times", first)
 	}
 }
 
@@ -923,7 +978,9 @@ func TestTransportGzipRecursive(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := &Client{Transport: &Transport{}}
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
 	res, err := c.Get(ts.URL)
 	if err != nil {
 		t.Fatal(err)
@@ -966,6 +1023,17 @@ func TestTransportGzipShort(t *testing.T) {
 	if err != io.ErrUnexpectedEOF {
 		t.Errorf("ReadAll error = %v; want io.ErrUnexpectedEOF", err)
 	}
+}
+
+// Wait until number of goroutines is no greater than nmax, or time out.
+func waitNumGoroutine(nmax int) int {
+	nfinal := runtime.NumGoroutine()
+	for ntries := 10; ntries > 0 && nfinal > nmax; ntries-- {
+		time.Sleep(50 * time.Millisecond)
+		runtime.GC()
+		nfinal = runtime.NumGoroutine()
+	}
+	return nfinal
 }
 
 // tests that persistent goroutine connections shut down when no longer desired.
@@ -1019,10 +1087,7 @@ func TestTransportPersistConnLeak(t *testing.T) {
 	}
 
 	tr.CloseIdleConnections()
-	time.Sleep(100 * time.Millisecond)
-	runtime.GC()
-	runtime.GC() // even more.
-	nfinal := runtime.NumGoroutine()
+	nfinal := waitNumGoroutine(n0 + 5)
 
 	growth := nfinal - n0
 
@@ -1061,9 +1126,7 @@ func TestTransportPersistConnLeakShortBody(t *testing.T) {
 	}
 	nhigh := runtime.NumGoroutine()
 	tr.CloseIdleConnections()
-	time.Sleep(400 * time.Millisecond)
-	runtime.GC()
-	nfinal := runtime.NumGoroutine()
+	nfinal := waitNumGoroutine(n0 + 5)
 
 	growth := nfinal - n0
 
@@ -1617,7 +1680,13 @@ func TestCancelRequestWithChannel(t *testing.T) {
 	}
 }
 
-func TestCancelRequestWithChannelBeforeDo(t *testing.T) {
+func TestCancelRequestWithChannelBeforeDo_Cancel(t *testing.T) {
+	testCancelRequestWithChannelBeforeDo(t, false)
+}
+func TestCancelRequestWithChannelBeforeDo_Context(t *testing.T) {
+	testCancelRequestWithChannelBeforeDo(t, true)
+}
+func testCancelRequestWithChannelBeforeDo(t *testing.T, withCtx bool) {
 	setParallel(t)
 	defer afterTest(t)
 	unblockc := make(chan bool)
@@ -1638,9 +1707,15 @@ func TestCancelRequestWithChannelBeforeDo(t *testing.T) {
 	c := &Client{Transport: tr}
 
 	req, _ := NewRequest("GET", ts.URL, nil)
-	ch := make(chan struct{})
-	req.Cancel = ch
-	close(ch)
+	if withCtx {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req = req.WithContext(ctx)
+	} else {
+		ch := make(chan struct{})
+		req.Cancel = ch
+		close(ch)
+	}
 
 	_, err := c.Do(req)
 	if err == nil || !strings.Contains(err.Error(), "canceled") {
@@ -2208,7 +2283,7 @@ func TestTransportTLSHandshakeTimeout(t *testing.T) {
 // Trying to repro golang.org/issue/3514
 func TestTLSServerClosesConnection(t *testing.T) {
 	defer afterTest(t)
-	setFlaky(t, 7634)
+	testenv.SkipFlaky(t, 7634)
 
 	closedc := make(chan bool, 1)
 	ts := httptest.NewTLSServer(HandlerFunc(func(w ResponseWriter, r *Request) {
@@ -2908,6 +2983,21 @@ func TestTransportAutomaticHTTP2_TLSConfig(t *testing.T) {
 func TestTransportAutomaticHTTP2_ExpectContinueTimeout(t *testing.T) {
 	testTransportAutoHTTP(t, &Transport{
 		ExpectContinueTimeout: 1 * time.Second,
+	}, true)
+}
+
+func TestTransportAutomaticHTTP2_Dial(t *testing.T) {
+	var d net.Dialer
+	testTransportAutoHTTP(t, &Transport{
+		Dial: d.Dial,
+	}, false)
+}
+
+func TestTransportAutomaticHTTP2_DialTLS(t *testing.T) {
+	testTransportAutoHTTP(t, &Transport{
+		DialTLS: func(network, addr string) (net.Conn, error) {
+			panic("unused")
+		},
 	}, false)
 }
 
@@ -3036,6 +3126,377 @@ func TestNoCrashReturningTransportAltConn(t *testing.T) {
 	doReturned <- true
 	<-madeRoundTripper
 	<-handledPendingDial
+}
+
+func TestTransportReuseConnection_Gzip_Chunked(t *testing.T) {
+	testTransportReuseConnection_Gzip(t, true)
+}
+
+func TestTransportReuseConnection_Gzip_ContentLength(t *testing.T) {
+	testTransportReuseConnection_Gzip(t, false)
+}
+
+// Make sure we re-use underlying TCP connection for gzipped responses too.
+func testTransportReuseConnection_Gzip(t *testing.T, chunked bool) {
+	defer afterTest(t)
+	addr := make(chan string, 2)
+	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		addr <- r.RemoteAddr
+		w.Header().Set("Content-Encoding", "gzip")
+		if chunked {
+			w.(Flusher).Flush()
+		}
+		w.Write(rgz) // arbitrary gzip response
+	}))
+	defer ts.Close()
+
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+	for i := 0; i < 2; i++ {
+		res, err := c.Get(ts.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, len(rgz))
+		if n, err := io.ReadFull(res.Body, buf); err != nil {
+			t.Errorf("%d. ReadFull = %v, %v", i, n, err)
+		}
+		// Note: no res.Body.Close call. It should work without it,
+		// since the flate.Reader's internal buffering will hit EOF
+		// and that should be sufficient.
+	}
+	a1, a2 := <-addr, <-addr
+	if a1 != a2 {
+		t.Fatalf("didn't reuse connection")
+	}
+}
+
+func TestTransportResponseHeaderLength(t *testing.T) {
+	defer afterTest(t)
+	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		if r.URL.Path == "/long" {
+			w.Header().Set("Long", strings.Repeat("a", 1<<20))
+		}
+	}))
+	defer ts.Close()
+
+	tr := &Transport{
+		MaxResponseHeaderBytes: 512 << 10,
+	}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+	if res, err := c.Get(ts.URL); err != nil {
+		t.Fatal(err)
+	} else {
+		res.Body.Close()
+	}
+
+	res, err := c.Get(ts.URL + "/long")
+	if err == nil {
+		defer res.Body.Close()
+		var n int64
+		for k, vv := range res.Header {
+			for _, v := range vv {
+				n += int64(len(k)) + int64(len(v))
+			}
+		}
+		t.Fatalf("Unexpected success. Got %v and %d bytes of response headers", res.Status, n)
+	}
+	if want := "server response headers exceeded 524288 bytes"; !strings.Contains(err.Error(), want) {
+		t.Errorf("got error: %v; want %q", err, want)
+	}
+}
+
+func TestTransportEventTrace(t *testing.T)    { testTransportEventTrace(t, h1Mode, false) }
+func TestTransportEventTrace_h2(t *testing.T) { testTransportEventTrace(t, h2Mode, false) }
+
+// test a non-nil httptrace.ClientTrace but with all hooks set to zero.
+func TestTransportEventTrace_NoHooks(t *testing.T)    { testTransportEventTrace(t, h1Mode, true) }
+func TestTransportEventTrace_NoHooks_h2(t *testing.T) { testTransportEventTrace(t, h2Mode, true) }
+
+func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
+	defer afterTest(t)
+	const resBody = "some body"
+	gotWroteReqEvent := make(chan struct{})
+	cst := newClientServerTest(t, h2, HandlerFunc(func(w ResponseWriter, r *Request) {
+		if _, err := ioutil.ReadAll(r.Body); err != nil {
+			t.Error(err)
+		}
+		if !noHooks {
+			select {
+			case <-gotWroteReqEvent:
+			case <-time.After(5 * time.Second):
+				t.Error("timeout waiting for WroteRequest event")
+			}
+		}
+		io.WriteString(w, resBody)
+	}))
+	defer cst.close()
+
+	cst.tr.ExpectContinueTimeout = 1 * time.Second
+
+	var mu sync.Mutex
+	var buf bytes.Buffer
+	logf := func(format string, args ...interface{}) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(&buf, format, args...)
+		buf.WriteByte('\n')
+	}
+
+	addrStr := cst.ts.Listener.Addr().String()
+	ip, port, err := net.SplitHostPort(addrStr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Install a fake DNS server.
+	ctx := context.WithValue(context.Background(), nettrace.LookupIPAltResolverKey{}, func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		if host != "dns-is-faked.golang" {
+			t.Errorf("unexpected DNS host lookup for %q", host)
+			return nil, nil
+		}
+		return []net.IPAddr{{IP: net.ParseIP(ip)}}, nil
+	})
+
+	req, _ := NewRequest("POST", cst.scheme()+"://dns-is-faked.golang:"+port, strings.NewReader("some body"))
+	trace := &httptrace.ClientTrace{
+		GetConn:              func(hostPort string) { logf("Getting conn for %v ...", hostPort) },
+		GotConn:              func(ci httptrace.GotConnInfo) { logf("got conn: %+v", ci) },
+		GotFirstResponseByte: func() { logf("first response byte") },
+		PutIdleConn:          func(err error) { logf("PutIdleConn = %v", err) },
+		DNSStart:             func(e httptrace.DNSStartInfo) { logf("DNS start: %+v", e) },
+		DNSDone:              func(e httptrace.DNSDoneInfo) { logf("DNS done: %+v", e) },
+		ConnectStart:         func(network, addr string) { logf("ConnectStart: Connecting to %s %s ...", network, addr) },
+		ConnectDone: func(network, addr string, err error) {
+			if err != nil {
+				t.Errorf("ConnectDone: %v", err)
+			}
+			logf("ConnectDone: connected to %s %s = %v", network, addr, err)
+		},
+		Wait100Continue: func() { logf("Wait100Continue") },
+		Got100Continue:  func() { logf("Got100Continue") },
+		WroteRequest: func(e httptrace.WroteRequestInfo) {
+			close(gotWroteReqEvent)
+			logf("WroteRequest: %+v", e)
+		},
+	}
+	if noHooks {
+		// zero out all func pointers, trying to get some path to crash
+		*trace = httptrace.ClientTrace{}
+	}
+	req = req.WithContext(httptrace.WithClientTrace(ctx, trace))
+
+	req.Header.Set("Expect", "100-continue")
+	res, err := cst.c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logf("got roundtrip.response")
+	slurp, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logf("consumed body")
+	if string(slurp) != resBody || res.StatusCode != 200 {
+		t.Fatalf("Got %q, %v; want %q, 200 OK", slurp, res.Status, resBody)
+	}
+	res.Body.Close()
+
+	if noHooks {
+		// Done at this point. Just testing a full HTTP
+		// requests can happen with a trace pointing to a zero
+		// ClientTrace, full of nil func pointers.
+		return
+	}
+
+	got := buf.String()
+	wantOnce := func(sub string) {
+		if strings.Count(got, sub) != 1 {
+			t.Errorf("expected substring %q exactly once in output.", sub)
+		}
+	}
+	wantOnceOrMore := func(sub string) {
+		if strings.Count(got, sub) == 0 {
+			t.Errorf("expected substring %q at least once in output.", sub)
+		}
+	}
+	wantOnce("Getting conn for dns-is-faked.golang:" + port)
+	wantOnce("DNS start: {Host:dns-is-faked.golang}")
+	wantOnce("DNS done: {Addrs:[{IP:" + ip + " Zone:}] Err:<nil> Coalesced:false}")
+	wantOnce("got conn: {")
+	wantOnceOrMore("Connecting to tcp " + addrStr)
+	wantOnceOrMore("connected to tcp " + addrStr + " = <nil>")
+	wantOnce("Reused:false WasIdle:false IdleTime:0s")
+	wantOnce("first response byte")
+	if !h2 {
+		wantOnce("PutIdleConn = <nil>")
+	}
+	wantOnce("Wait100Continue")
+	wantOnce("Got100Continue")
+	wantOnce("WroteRequest: {Err:<nil>}")
+	if strings.Contains(got, " to udp ") {
+		t.Errorf("should not see UDP (DNS) connections")
+	}
+	if t.Failed() {
+		t.Errorf("Output:\n%s", got)
+	}
+}
+
+func TestTransportEventTraceRealDNS(t *testing.T) {
+	defer afterTest(t)
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+
+	var mu sync.Mutex
+	var buf bytes.Buffer
+	logf := func(format string, args ...interface{}) {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(&buf, format, args...)
+		buf.WriteByte('\n')
+	}
+
+	req, _ := NewRequest("GET", "http://dns-should-not-resolve.golang:80", nil)
+	trace := &httptrace.ClientTrace{
+		DNSStart:     func(e httptrace.DNSStartInfo) { logf("DNSStart: %+v", e) },
+		DNSDone:      func(e httptrace.DNSDoneInfo) { logf("DNSDone: %+v", e) },
+		ConnectStart: func(network, addr string) { logf("ConnectStart: %s %s", network, addr) },
+		ConnectDone:  func(network, addr string, err error) { logf("ConnectDone: %s %s %v", network, addr, err) },
+	}
+	req = req.WithContext(httptrace.WithClientTrace(context.Background(), trace))
+
+	resp, err := c.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("expected error during DNS lookup")
+	}
+
+	got := buf.String()
+	wantSub := func(sub string) {
+		if !strings.Contains(got, sub) {
+			t.Errorf("expected substring %q in output.", sub)
+		}
+	}
+	wantSub("DNSStart: {Host:dns-should-not-resolve.golang}")
+	wantSub("DNSDone: {Addrs:[] Err:")
+	if strings.Contains(got, "ConnectStart") || strings.Contains(got, "ConnectDone") {
+		t.Errorf("should not see Connect events")
+	}
+	if t.Failed() {
+		t.Errorf("Output:\n%s", got)
+	}
+}
+
+func TestTransportMaxIdleConns(t *testing.T) {
+	defer afterTest(t)
+	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		// No body for convenience.
+	}))
+	defer ts.Close()
+	tr := &Transport{
+		MaxIdleConns: 4,
+	}
+	defer tr.CloseIdleConnections()
+
+	ip, port, err := net.SplitHostPort(ts.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &Client{Transport: tr}
+	ctx := context.WithValue(context.Background(), nettrace.LookupIPAltResolverKey{}, func(ctx context.Context, host string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP(ip)}}, nil
+	})
+
+	hitHost := func(n int) {
+		req, _ := NewRequest("GET", fmt.Sprintf("http://host-%d.dns-is-faked.golang:"+port, n), nil)
+		req = req.WithContext(ctx)
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+	}
+	for i := 0; i < 4; i++ {
+		hitHost(i)
+	}
+	want := []string{
+		"|http|host-0.dns-is-faked.golang:" + port,
+		"|http|host-1.dns-is-faked.golang:" + port,
+		"|http|host-2.dns-is-faked.golang:" + port,
+		"|http|host-3.dns-is-faked.golang:" + port,
+	}
+	if got := tr.IdleConnKeysForTesting(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("idle conn keys mismatch.\n got: %q\nwant: %q\n", got, want)
+	}
+
+	// Now hitting the 5th host should kick out the first host:
+	hitHost(4)
+	want = []string{
+		"|http|host-1.dns-is-faked.golang:" + port,
+		"|http|host-2.dns-is-faked.golang:" + port,
+		"|http|host-3.dns-is-faked.golang:" + port,
+		"|http|host-4.dns-is-faked.golang:" + port,
+	}
+	if got := tr.IdleConnKeysForTesting(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("idle conn keys mismatch after 5th host.\n got: %q\nwant: %q\n", got, want)
+	}
+}
+
+func TestTransportIdleConnTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	defer afterTest(t)
+
+	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		// No body for convenience.
+	}))
+	defer ts.Close()
+
+	const timeout = 1 * time.Second
+	tr := &Transport{
+		IdleConnTimeout: timeout,
+	}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+
+	var conn string
+	doReq := func(n int) {
+		req, _ := NewRequest("GET", ts.URL, nil)
+		req = req.WithContext(httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+			PutIdleConn: func(err error) {
+				if err != nil {
+					t.Errorf("failed to keep idle conn: %v", err)
+				}
+			},
+		}))
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		conns := tr.IdleConnStrsForTesting()
+		if len(conns) != 1 {
+			t.Fatalf("req %v: unexpected number of idle conns: %q", n, conns)
+		}
+		if conn == "" {
+			conn = conns[0]
+		}
+		if conn != conns[0] {
+			t.Fatalf("req %v: cached connection changed; expected the same one throughout the test", n)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		doReq(i)
+		time.Sleep(timeout / 2)
+	}
+	time.Sleep(timeout * 3 / 2)
+	if got := tr.IdleConnStrsForTesting(); len(got) != 0 {
+		t.Errorf("idle conns = %q; want none", got)
+	}
 }
 
 var errFakeRoundTrip = errors.New("fake roundtrip")

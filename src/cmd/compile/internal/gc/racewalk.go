@@ -54,23 +54,21 @@ func instrument(fn *Node) {
 		return
 	}
 
-	if flag_race == 0 || !ispkgin(norace_inst_pkgs) {
+	if !flag_race || !ispkgin(norace_inst_pkgs) {
 		instrumentlist(fn.Nbody, nil)
 
 		// nothing interesting for race detector in fn->enter
 		instrumentlist(fn.Func.Exit, nil)
 	}
 
-	if flag_race != 0 {
+	if flag_race {
 		// nodpc is the PC of the caller as extracted by
 		// getcallerpc. We use -widthptr(FP) for x86.
 		// BUG: this will not work on arm.
-		nodpc := Nod(OXXX, nil, nil)
-
-		*nodpc = *nodfp
+		nodpc := *nodfp
 		nodpc.Type = Types[TUINTPTR]
 		nodpc.Xoffset = int64(-Widthptr)
-		nd := mkcall("racefuncenter", nil, nil, nodpc)
+		nd := mkcall("racefuncenter", nil, nil, &nodpc)
 		fn.Func.Enter.Set(append([]*Node{nd}, fn.Func.Enter.Slice()...))
 		nd = mkcall("racefuncexit", nil, nil)
 		fn.Func.Exit.Append(nd)
@@ -134,7 +132,7 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 
 	switch n.Op {
 	default:
-		Fatalf("instrument: unknown node type %v", Oconv(n.Op, 0))
+		Fatalf("instrument: unknown node type %v", n.Op)
 
 	case OAS, OASWB, OAS2FUNC:
 		instrumentnode(&n.Left, init, 1, 0)
@@ -166,7 +164,13 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 				var outn Nodes
 				outn.Set(out)
 				instrumentnode(&ls[i], &outn, 0, 0)
-				out = append(outn.Slice(), ls[i])
+				if ls[i].Op != OAS || ls[i].Ninit.Len() == 0 {
+					out = append(outn.Slice(), ls[i])
+				} else {
+					// Splice outn onto end of ls[i].Ninit
+					ls[i].Ninit.AppendNodes(&outn)
+					out = append(out, ls[i])
+				}
 			}
 		}
 		n.List.Set(out)
@@ -224,11 +228,11 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 
 	case OSPTR, OLEN, OCAP:
 		instrumentnode(&n.Left, init, 0, 0)
-		if Istype(n.Left.Type, TMAP) {
+		if n.Left.Type.IsMap() {
 			n1 := Nod(OCONVNOP, n.Left, nil)
 			n1.Type = Ptrto(Types[TUINT8])
 			n1 = Nod(OIND, n1, nil)
-			typecheck(&n1, Erv)
+			n1 = typecheck(n1, Erv)
 			callinstr(&n1, init, 0, skip)
 		}
 
@@ -285,7 +289,7 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		goto ret
 
 	case OINDEX:
-		if !Isfixedarray(n.Left.Type) {
+		if !n.Left.Type.IsArray() {
 			instrumentnode(&n.Left, init, 0, 0)
 		} else if !islvalue(n.Left) {
 			// index of unaddressable array, like Map[k][i].
@@ -296,14 +300,18 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		}
 
 		instrumentnode(&n.Right, init, 0, 0)
-		if n.Left.Type.Etype != TSTRING {
+		if !n.Left.Type.IsString() {
 			callinstr(&n, init, wr, skip)
 		}
 		goto ret
 
 	case OSLICE, OSLICEARR, OSLICE3, OSLICE3ARR, OSLICESTR:
 		instrumentnode(&n.Left, init, 0, 0)
-		instrumentnode(&n.Right, init, 0, 0)
+		low, high, max := n.SliceBounds()
+		instrumentnode(&low, init, 0, 0)
+		instrumentnode(&high, init, 0, 0)
+		instrumentnode(&max, init, 0, 0)
+		n.SetSliceBounds(low, high, max)
 		goto ret
 
 	case OKEY:
@@ -366,13 +374,13 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		OAS2RECV,
 		OAS2MAPR,
 		OASOP:
-		Yyerror("instrument: %v must be lowered by now", Oconv(n.Op, 0))
+		Yyerror("instrument: %v must be lowered by now", n.Op)
 
 		goto ret
 
 		// impossible nodes: only appear in backend.
 	case ORROTC, OEXTEND:
-		Yyerror("instrument: %v cannot exist now", Oconv(n.Op, 0))
+		Yyerror("instrument: %v cannot exist now", n.Op)
 		goto ret
 
 	case OGETG:
@@ -411,7 +419,6 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 	case OPRINT, // don't bother instrumenting it
 		OPRINTN,     // don't bother instrumenting it
 		OCHECKNIL,   // always followed by a read.
-		OPARAM,      // it appears only in fn->exit to copy heap params back
 		OCLOSUREVAR, // immutable pointer to captured variable
 		ODOTMETH,    // either part of CALLMETH or CALLPART (lowered to PTRLIT)
 		OINDREG,     // at this stage, only n(SP) nodes from nodarg
@@ -488,7 +495,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 	// e.g. if we've got a local variable/method receiver
 	// that has got a pointer inside. Whether it points to
 	// the heap or not is impossible to know at compile time
-	if (class&PHEAP != 0) || class == PPARAMREF || class == PEXTERN || b.Op == OINDEX || b.Op == ODOTPTR || b.Op == OIND {
+	if class == PAUTOHEAP || class == PEXTERN || b.Op == OINDEX || b.Op == ODOTPTR || b.Op == OIND {
 		hascalls := 0
 		foreach(n, hascallspred, &hascalls)
 		if hascalls != 0 {
@@ -499,7 +506,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 		n = treecopy(n, 0)
 		makeaddable(n)
 		var f *Node
-		if flag_msan != 0 {
+		if flag_msan {
 			name := "msanread"
 			if wr != 0 {
 				name = "msanwrite"
@@ -511,7 +518,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 				Fatalf("instrument: %v badwidth", t)
 			}
 			f = mkcall(name, nil, init, uintptraddr(n), Nodintconst(w))
-		} else if flag_race != 0 && (t.Etype == TSTRUCT || Isfixedarray(t)) {
+		} else if flag_race && (t.IsStruct() || t.IsArray()) {
 			name := "racereadrange"
 			if wr != 0 {
 				name = "racewriterange"
@@ -523,7 +530,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 				Fatalf("instrument: %v badwidth", t)
 			}
 			f = mkcall(name, nil, init, uintptraddr(n), Nodintconst(w))
-		} else if flag_race != 0 {
+		} else if flag_race {
 			name := "raceread"
 			if wr != 0 {
 				name = "racewrite"
@@ -550,7 +557,7 @@ func makeaddable(n *Node) {
 	// an addressable value.
 	switch n.Op {
 	case OINDEX:
-		if Isfixedarray(n.Left.Type) {
+		if n.Left.Type.IsArray() {
 			makeaddable(n.Left)
 		}
 
@@ -581,12 +588,12 @@ func detachexpr(n *Node, init *Nodes) *Node {
 	addr := Nod(OADDR, n, nil)
 	l := temp(Ptrto(n.Type))
 	as := Nod(OAS, l, addr)
-	typecheck(&as, Etop)
-	walkexpr(&as, init)
+	as = typecheck(as, Etop)
+	as = walkexpr(as, init)
 	init.Append(as)
 	ind := Nod(OIND, l, nil)
-	typecheck(&ind, Erv)
-	walkexpr(&ind, init)
+	ind = typecheck(ind, Erv)
+	ind = walkexpr(ind, init)
 	return ind
 }
 

@@ -104,7 +104,7 @@ func Equiv(f, g *Func) bool {
 				return false
 			}
 			for i := range fb.Succs {
-				if !checkBlk(fb.Succs[i], gb.Succs[i]) {
+				if !checkBlk(fb.Succs[i].b, gb.Succs[i].b) {
 					return false
 				}
 			}
@@ -112,7 +112,7 @@ func Equiv(f, g *Func) bool {
 				return false
 			}
 			for i := range fb.Preds {
-				if !checkBlk(fb.Preds[i], gb.Preds[i]) {
+				if !checkBlk(fb.Preds[i].b, gb.Preds[i].b) {
 					return false
 				}
 			}
@@ -168,7 +168,7 @@ func Fun(c *Config, entry string, blocs ...bloc) fun {
 			if !ok {
 				f.Fatalf("control value for block %s missing", bloc.name)
 			}
-			b.Control = cval
+			b.SetControl(cval)
 		}
 		// Fill in args.
 		for _, valu := range bloc.valus {

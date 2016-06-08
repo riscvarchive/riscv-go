@@ -12,13 +12,13 @@ func typecheckselect(sel *Node) {
 	var def *Node
 	lno := setlineno(sel)
 	count := 0
-	typechecklist(sel.Ninit.Slice(), Etop)
+	typecheckslice(sel.Ninit.Slice(), Etop)
 	for _, n1 := range sel.List.Slice() {
 		count++
 		ncase = n1
 		setlineno(ncase)
 		if ncase.Op != OXCASE {
-			Fatalf("typecheckselect %v", Oconv(ncase.Op, 0))
+			Fatalf("typecheckselect %v", ncase.Op)
 		}
 
 		if ncase.List.Len() == 0 {
@@ -31,7 +31,8 @@ func typecheckselect(sel *Node) {
 		} else if ncase.List.Len() > 1 {
 			Yyerror("select cases cannot be lists")
 		} else {
-			n = typecheck(ncase.List.Addr(0), Etop)
+			ncase.List.SetIndex(0, typecheck(ncase.List.Index(0), Etop))
+			n = ncase.List.Index(0)
 			ncase.Left = n
 			ncase.List.Set(nil)
 			setlineno(n)
@@ -79,7 +80,7 @@ func typecheckselect(sel *Node) {
 			}
 		}
 
-		typechecklist(ncase.Nbody.Slice(), Etop)
+		typecheckslice(ncase.Nbody.Slice(), Etop)
 	}
 
 	sel.Xoffset = int64(count)
@@ -119,7 +120,7 @@ func walkselect(sel *Node) {
 			var ch *Node
 			switch n.Op {
 			default:
-				Fatalf("select %v", Oconv(n.Op, 0))
+				Fatalf("select %v", n.Op)
 
 				// ok already
 			case OSEND:
@@ -137,7 +138,7 @@ func walkselect(sel *Node) {
 				}
 
 				if n.Left == nil {
-					typecheck(&nblank, Erv|Easgn)
+					nblank = typecheck(nblank, Erv|Easgn)
 					n.Left = nblank
 				}
 
@@ -147,7 +148,7 @@ func walkselect(sel *Node) {
 				n.Right = nil
 				n.Left = nil
 				n.Typecheck = 0
-				typecheck(&n, Etop)
+				n = typecheck(n, Etop)
 			}
 
 			// if ch == nil { block() }; n;
@@ -158,7 +159,7 @@ func walkselect(sel *Node) {
 			ln.Set(l)
 			a.Nbody.Set1(mkcall("block", nil, &ln))
 			l = ln.Slice()
-			typecheck(&a, Etop)
+			a = typecheck(a, Etop)
 			l = append(l, a)
 			l = append(l, n)
 		}
@@ -179,7 +180,7 @@ func walkselect(sel *Node) {
 		switch n.Op {
 		case OSEND:
 			n.Right = Nod(OADDR, n.Right, nil)
-			typecheck(&n.Right, Erv)
+			n.Right = typecheck(n.Right, Erv)
 
 		case OSELRECV, OSELRECV2:
 			if n.Op == OSELRECV2 && n.List.Len() == 0 {
@@ -187,14 +188,14 @@ func walkselect(sel *Node) {
 			}
 			if n.Op == OSELRECV2 {
 				n.List.SetIndex(0, Nod(OADDR, n.List.First(), nil))
-				typecheck(n.List.Addr(0), Erv)
+				n.List.SetIndex(0, typecheck(n.List.Index(0), Erv))
 			}
 
 			if n.Left == nil {
 				n.Left = nodnil()
 			} else {
 				n.Left = Nod(OADDR, n.Left, nil)
-				typecheck(&n.Left, Erv)
+				n.Left = typecheck(n.Left, Erv)
 			}
 		}
 	}
@@ -217,7 +218,7 @@ func walkselect(sel *Node) {
 		r.Ninit.Set(cas.Ninit.Slice())
 		switch n.Op {
 		default:
-			Fatalf("select %v", Oconv(n.Op, 0))
+			Fatalf("select %v", n.Op)
 
 			// if selectnbsend(c, v) { body } else { default body }
 		case OSEND:
@@ -242,7 +243,7 @@ func walkselect(sel *Node) {
 			r.Left = mkcall1(chanfn("selectnbrecv2", 2, ch.Type), Types[TBOOL], &r.Ninit, typename(ch.Type), n.Left, n.List.First(), ch)
 		}
 
-		typecheck(&r.Left, Erv)
+		r.Left = typecheck(r.Left, Erv)
 		r.Nbody.Set(cas.Nbody.Slice())
 		r.Rlist.Set(append(dflt.Ninit.Slice(), dflt.Nbody.Slice()...))
 		sel.Nbody.Set1(r)
@@ -257,11 +258,11 @@ func walkselect(sel *Node) {
 
 	selv = temp(selecttype(int32(sel.Xoffset)))
 	r = Nod(OAS, selv, nil)
-	typecheck(&r, Etop)
+	r = typecheck(r, Etop)
 	init = append(init, r)
 	var_ = conv(conv(Nod(OADDR, selv, nil), Types[TUNSAFEPTR]), Ptrto(Types[TUINT8]))
 	r = mkcall("newselect", nil, nil, var_, Nodintconst(selv.Type.Width), Nodintconst(sel.Xoffset))
-	typecheck(&r, Etop)
+	r = typecheck(r, Etop)
 	init = append(init, r)
 	// register cases
 	for _, cas := range sel.List.Slice() {
@@ -281,7 +282,7 @@ func walkselect(sel *Node) {
 		} else {
 			switch n.Op {
 			default:
-				Fatalf("select %v", Oconv(n.Op, 0))
+				Fatalf("select %v", n.Op)
 
 				// selectsend(sel *byte, hchan *chan any, elem *any) (selected bool);
 			case OSEND:
@@ -317,24 +318,10 @@ out:
 	lineno = lno
 }
 
-// Keep in sync with src/runtime/runtime2.go and src/runtime/select.go.
+// Keep in sync with src/runtime/select.go.
 func selecttype(size int32) *Type {
-	// TODO(dvyukov): it's possible to generate SudoG and Scase only once
+	// TODO(dvyukov): it's possible to generate Scase only once
 	// and then cache; and also cache Select per size.
-	sudog := Nod(OTSTRUCT, nil, nil)
-
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("g")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("selectdone")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("next")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("prev")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("elem")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("releasetime")), typenod(Types[TUINT64])))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("ticket")), typenod(Types[TUINT32])))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("waitlink")), typenod(Ptrto(Types[TUINT8]))))
-	sudog.List.Append(Nod(ODCLFIELD, newname(Lookup("c")), typenod(Ptrto(Types[TUINT8]))))
-	typecheck(&sudog, Etype)
-	sudog.Type.Noalg = true
-	sudog.Type.Local = true
 
 	scase := Nod(OTSTRUCT, nil, nil)
 	scase.List.Append(Nod(ODCLFIELD, newname(Lookup("elem")), typenod(Ptrto(Types[TUINT8]))))
@@ -344,7 +331,7 @@ func selecttype(size int32) *Type {
 	scase.List.Append(Nod(ODCLFIELD, newname(Lookup("so")), typenod(Types[TUINT16])))
 	scase.List.Append(Nod(ODCLFIELD, newname(Lookup("receivedp")), typenod(Ptrto(Types[TUINT8]))))
 	scase.List.Append(Nod(ODCLFIELD, newname(Lookup("releasetime")), typenod(Types[TUINT64])))
-	typecheck(&scase, Etype)
+	scase = typecheck(scase, Etype)
 	scase.Type.Noalg = true
 	scase.Type.Local = true
 
@@ -359,7 +346,7 @@ func selecttype(size int32) *Type {
 	sel.List.Append(Nod(ODCLFIELD, newname(Lookup("lockorderarr")), arr))
 	arr = Nod(OTARRAY, Nodintconst(int64(size)), typenod(Types[TUINT16]))
 	sel.List.Append(Nod(ODCLFIELD, newname(Lookup("pollorderarr")), arr))
-	typecheck(&sel, Etype)
+	sel = typecheck(sel, Etype)
 	sel.Type.Noalg = true
 	sel.Type.Local = true
 

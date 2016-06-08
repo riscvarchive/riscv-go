@@ -24,7 +24,7 @@ func typecheckrange(n *Node) {
 	// 3. typecheck body.
 	// 4. decldepth--.
 
-	typecheck(&n.Right, Erv)
+	n.Right = typecheck(n.Right, Erv)
 
 	t := n.Right.Type
 	if t == nil {
@@ -34,12 +34,12 @@ func typecheckrange(n *Node) {
 	ls = n.List.Slice()
 	for i1, n1 := range ls {
 		if n1.Name == nil || n1.Name.Defn != n {
-			typecheck(&ls[i1], Erv|Easgn)
+			ls[i1] = typecheck(ls[i1], Erv|Easgn)
 		}
 	}
 
-	if Isptr[t.Etype] && Isfixedarray(t.Type) {
-		t = t.Type
+	if t.IsPtr() && t.Elem().IsArray() {
+		t = t.Elem()
 	}
 	n.Type = t
 
@@ -49,21 +49,21 @@ func typecheckrange(n *Node) {
 		Yyerror("cannot range over %v", Nconv(n.Right, FmtLong))
 		goto out
 
-	case TARRAY:
+	case TARRAY, TSLICE:
 		t1 = Types[TINT]
-		t2 = t.Type
+		t2 = t.Elem()
 
 	case TMAP:
 		t1 = t.Key()
-		t2 = t.Type
+		t2 = t.Val()
 
 	case TCHAN:
-		if t.Chan&Crecv == 0 {
+		if !t.ChanDir().CanRecv() {
 			Yyerror("invalid operation: range %v (receive from send-only type %v)", n.Right, n.Right.Type)
 			goto out
 		}
 
-		t1 = t.Type
+		t1 = t.Elem()
 		t2 = nil
 		if n.List.Len() == 2 {
 			toomany = 1
@@ -122,12 +122,12 @@ out:
 	ls = n.List.Slice()
 	for i1, n1 := range ls {
 		if n1.Typecheck == 0 {
-			typecheck(&ls[i1], Erv|Easgn)
+			ls[i1] = typecheck(ls[i1], Erv|Easgn)
 		}
 	}
 
 	decldepth++
-	typechecklist(n.Nbody.Slice(), Etop)
+	typecheckslice(n.Nbody.Slice(), Etop)
 	decldepth--
 }
 
@@ -154,7 +154,7 @@ func walkrange(n *Node) {
 		v2 = n.List.Second()
 	}
 
-	// n->list has no meaning anymore, clear it
+	// n.List has no meaning anymore, clear it
 	// to avoid erroneous processing by racewalk.
 	n.List.Set(nil)
 
@@ -164,7 +164,7 @@ func walkrange(n *Node) {
 	default:
 		Fatalf("walkrange")
 
-	case TARRAY:
+	case TARRAY, TSLICE:
 		if memclrrange(n, v1, v2, a) {
 			lineno = lno
 			return
@@ -180,7 +180,7 @@ func walkrange(n *Node) {
 		init = append(init, Nod(OAS, hv1, nil))
 		init = append(init, Nod(OAS, hn, Nod(OLEN, ha, nil)))
 		if v2 != nil {
-			hp = temp(Ptrto(n.Type.Type))
+			hp = temp(Ptrto(n.Type.Elem()))
 			tmp := Nod(OINDEX, ha, Nodintconst(0))
 			tmp.Bounded = true
 			init = append(init, Nod(OAS, hp, Nod(OADDR, tmp, nil)))
@@ -206,47 +206,47 @@ func walkrange(n *Node) {
 			// Advancing during the increment ensures that the pointer p only points
 			// pass the end of the array during the final "p++; i++; if(i >= len(x)) break;",
 			// after which p is dead, so it cannot confuse the collector.
-			tmp := Nod(OADD, hp, Nodintconst(t.Type.Width))
+			tmp := Nod(OADD, hp, Nodintconst(t.Elem().Width))
 
 			tmp.Type = hp.Type
 			tmp.Typecheck = 1
 			tmp.Right.Type = Types[Tptr]
 			tmp.Right.Typecheck = 1
 			a = Nod(OAS, hp, tmp)
-			typecheck(&a, Etop)
+			a = typecheck(a, Etop)
 			n.Right.Ninit.Set1(a)
 		}
 
-		// orderstmt allocated the iterator for us.
-	// we only use a once, so no copy needed.
 	case TMAP:
+		// orderstmt allocated the iterator for us.
+		// we only use a once, so no copy needed.
 		ha := a
 
 		th := hiter(t)
 		hit := prealloc[n]
 		hit.Type = th
 		n.Left = nil
-		keyname := newname(th.Field(0).Sym) // depends on layout of iterator struct.  See reflect.go:hiter
-		valname := newname(th.Field(1).Sym) // ditto
+		keysym := th.Field(0).Sym // depends on layout of iterator struct.  See reflect.go:hiter
+		valsym := th.Field(1).Sym // ditto
 
 		fn := syslook("mapiterinit")
 
-		substArgTypes(&fn, t.Key(), t.Type, th)
+		fn = substArgTypes(fn, t.Key(), t.Val(), th)
 		init = append(init, mkcall1(fn, nil, nil, typename(t), ha, Nod(OADDR, hit, nil)))
-		n.Left = Nod(ONE, Nod(ODOT, hit, keyname), nodnil())
+		n.Left = Nod(ONE, NodSym(ODOT, hit, keysym), nodnil())
 
 		fn = syslook("mapiternext")
-		substArgTypes(&fn, th)
+		fn = substArgTypes(fn, th)
 		n.Right = mkcall1(fn, nil, nil, Nod(OADDR, hit, nil))
 
-		key := Nod(ODOT, hit, keyname)
+		key := NodSym(ODOT, hit, keysym)
 		key = Nod(OIND, key, nil)
 		if v1 == nil {
 			body = nil
 		} else if v2 == nil {
 			body = []*Node{Nod(OAS, v1, key)}
 		} else {
-			val := Nod(ODOT, hit, valname)
+			val := NodSym(ODOT, hit, valsym)
 			val = Nod(OIND, val, nil)
 			a := Nod(OAS2, nil, nil)
 			a.List.Set([]*Node{v1, v2})
@@ -254,15 +254,15 @@ func walkrange(n *Node) {
 			body = []*Node{a}
 		}
 
-		// orderstmt arranged for a copy of the channel variable.
 	case TCHAN:
+		// orderstmt arranged for a copy of the channel variable.
 		ha := a
 
 		n.Left = nil
 
-		hv1 := temp(t.Type)
+		hv1 := temp(t.Elem())
 		hv1.Typecheck = 1
-		if haspointers(t.Type) {
+		if haspointers(t.Elem()) {
 			init = append(init, Nod(OAS, hv1, nil))
 		}
 		hb := temp(Types[TBOOL])
@@ -278,9 +278,13 @@ func walkrange(n *Node) {
 		} else {
 			body = []*Node{Nod(OAS, v1, hv1)}
 		}
+		// Zero hv1. This prevents hv1 from being the sole, inaccessible
+		// reference to an otherwise GC-able value during the next channel receive.
+		// See issue 15281.
+		body = append(body, Nod(OAS, hv1, nil))
 
-		// orderstmt arranged for a copy of the string variable.
 	case TSTRING:
+		// orderstmt arranged for a copy of the string variable.
 		ha := a
 
 		ohv1 := temp(Types[TINT])
@@ -313,14 +317,14 @@ func walkrange(n *Node) {
 	}
 
 	n.Op = OFOR
-	typechecklist(init, Etop)
+	typecheckslice(init, Etop)
 	n.Ninit.Append(init...)
-	typechecklist(n.Left.Ninit.Slice(), Etop)
-	typecheck(&n.Left, Erv)
-	typecheck(&n.Right, Etop)
+	typecheckslice(n.Left.Ninit.Slice(), Etop)
+	n.Left = typecheck(n.Left, Erv)
+	n.Right = typecheck(n.Right, Etop)
 	typecheckslice(body, Etop)
 	n.Nbody.Set(append(body, n.Nbody.Slice()...))
-	walkstmt(&n)
+	n = walkstmt(n)
 
 	lineno = lno
 }
@@ -353,7 +357,7 @@ func memclrrange(n, v1, v2, a *Node) bool {
 	if !samesafeexpr(stmt.Left.Left, a) || !samesafeexpr(stmt.Left.Right, v1) {
 		return false
 	}
-	elemsize := n.Type.Type.Width
+	elemsize := n.Type.Elem().Width
 	if elemsize <= 0 || !iszero(stmt.Right) {
 		return false
 	}
@@ -398,8 +402,8 @@ func memclrrange(n, v1, v2, a *Node) bool {
 
 	n.Nbody.Append(v1)
 
-	typecheck(&n.Left, Erv)
-	typechecklist(n.Nbody.Slice(), Etop)
-	walkstmt(&n)
+	n.Left = typecheck(n.Left, Erv)
+	typecheckslice(n.Nbody.Slice(), Etop)
+	n = walkstmt(n)
 	return true
 }

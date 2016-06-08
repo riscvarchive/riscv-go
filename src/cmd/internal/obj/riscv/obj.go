@@ -22,19 +22,14 @@ package riscv
 
 import (
 	"cmd/internal/obj"
-	"encoding/binary"
+	"cmd/internal/sys"
 )
 
 var LinkRISCV = obj.LinkArch{
-	ByteOrder:  binary.LittleEndian,
-	Name:       "riscv",
-	Thechar:    'V',
+	Arch:       sys.ArchRISCV,
 	Preprocess: preprocess,
 	Assemble:   assemble,
 	Follow:     follow,
 	Progedit:   progedit,
 	UnaryDst:   unaryDst,
-	Minlc:      4, // This is the instruction width.
-	Ptrsize:    8,
-	Regsize:    8,
 }

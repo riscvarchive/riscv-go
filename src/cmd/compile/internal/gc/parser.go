@@ -102,6 +102,9 @@ func (p *parser) syntax_error(msg string) {
 			tok = "name"
 		}
 	case LLITERAL:
+		if litbuf == "" {
+			litbuf = "literal " + lexbuf.String()
+		}
 		tok = litbuf
 	case LOPER:
 		tok = goopnames[p.op]
@@ -395,11 +398,8 @@ func (p *parser) import_package() {
 		p.import_error()
 	}
 
-	importsafe := false
+	// read but skip "safe" bit (see issue #15772)
 	if p.tok == LNAME {
-		if p.sym_.Name == "safe" {
-			importsafe = true
-		}
 		p.next()
 	}
 	p.want(';')
@@ -410,7 +410,6 @@ func (p *parser) import_package() {
 	} else if importpkg.Name != name {
 		Yyerror("conflicting names %s and %s for package %q", importpkg.Name, name, importpkg.Path)
 	}
-	importpkg.Safe = importsafe
 
 	typecheckok = true
 	defercheckwidth()
@@ -636,7 +635,7 @@ func (p *parser) simple_stmt(labelOk, rangeOk bool) *Node {
 			r := Nod(ORANGE, nil, p.expr())
 			r.List.Set(lhs)
 			r.Colas = true
-			colasdefn(r.List, r)
+			colasdefn(lhs, r)
 			return r
 		}
 
@@ -1187,17 +1186,17 @@ func (p *parser) uexpr() *Node {
 
 		if x.Op == OTCHAN {
 			// x is a channel type => re-associate <-
-			dir := EType(Csend)
+			dir := Csend
 			t := x
 			for ; t.Op == OTCHAN && dir == Csend; t = t.Left {
-				dir = t.Etype
+				dir = ChanDir(t.Etype)
 				if dir == Crecv {
 					// t is type <-chan E but <-<-chan E is not permitted
 					// (report same error as for "type _ <-<-chan E")
 					p.syntax_error("unexpected <-, expecting chan")
 					// already progressed, no need to advance
 				}
-				t.Etype = Crecv
+				t.Etype = EType(Crecv)
 			}
 			if dir == Csend {
 				// channel dir is <- but channel element E is not a channel
@@ -1408,20 +1407,17 @@ loop:
 				}
 				x = Nod(OINDEX, x, i)
 			case 1:
-				i := index[0]
-				j := index[1]
-				x = Nod(OSLICE, x, Nod(OKEY, i, j))
+				x = Nod(OSLICE, x, nil)
+				x.SetSliceBounds(index[0], index[1], nil)
 			case 2:
-				i := index[0]
-				j := index[1]
-				k := index[2]
-				if j == nil {
+				if index[1] == nil {
 					Yyerror("middle index required in 3-index slice")
 				}
-				if k == nil {
+				if index[2] == nil {
 					Yyerror("final index required in 3-index slice")
 				}
-				x = Nod(OSLICE3, x, Nod(OKEY, i, Nod(OKEY, j, k)))
+				x = Nod(OSLICE3, x, nil)
+				x.SetSliceBounds(index[0], index[1], index[2])
 
 			default:
 				panic("unreachable")
@@ -1588,7 +1584,7 @@ func (p *parser) onew_name() *Node {
 func (p *parser) sym() *Sym {
 	switch p.tok {
 	case LNAME:
-		s := p.sym_
+		s := p.sym_ // from localpkg
 		p.next()
 		// during imports, unqualified non-exported identifiers are from builtinpkg
 		if importpkg != nil && !exportname(s.Name) {
@@ -1697,7 +1693,7 @@ func (p *parser) try_ntype() *Node {
 		p.next()
 		p.want(LCHAN)
 		t := Nod(OTCHAN, p.chan_elem(), nil)
-		t.Etype = Crecv
+		t.Etype = EType(Crecv)
 		return t
 
 	case LFUNC:
@@ -1726,9 +1722,9 @@ func (p *parser) try_ntype() *Node {
 		// LCHAN non_recvchantype
 		// LCHAN LCOMM ntype
 		p.next()
-		var dir EType = Cboth
+		var dir = EType(Cboth)
 		if p.got(LCOMM) {
-			dir = Csend
+			dir = EType(Csend)
 		}
 		t := Nod(OTCHAN, p.chan_elem(), nil)
 		t.Etype = dir
@@ -1793,7 +1789,7 @@ func (p *parser) new_dotname(obj *Node) *Node {
 		obj.Used = true
 		return oldname(s)
 	}
-	return Nod(OXDOT, obj, newname(sel))
+	return NodSym(OXDOT, obj, sel)
 }
 
 func (p *parser) dotname() *Node {
@@ -1861,7 +1857,7 @@ func (p *parser) xfndcl() *Node {
 	}
 
 	p.want(LFUNC)
-	f := p.fndcl(p.pragma&Nointerface != 0)
+	f := p.fndcl()
 	body := p.fnbody()
 
 	if f == nil {
@@ -1886,7 +1882,7 @@ func (p *parser) xfndcl() *Node {
 // Function     = Signature FunctionBody .
 // MethodDecl   = "func" Receiver MethodName ( Function | Signature ) .
 // Receiver     = Parameters .
-func (p *parser) fndcl(nointerface bool) *Node {
+func (p *parser) fndcl() *Node {
 	if trace && Debug['x'] != 0 {
 		defer p.trace("fndcl")()
 	}
@@ -1950,7 +1946,6 @@ func (p *parser) fndcl(nointerface bool) *Node {
 		f.Func.Nname = methodname1(f.Func.Shortname, recv.Right)
 		f.Func.Nname.Name.Defn = f
 		f.Func.Nname.Name.Param.Ntype = t
-		f.Func.Nname.Nointerface = nointerface
 		declare(f.Func.Nname, PFUNC)
 
 		funchdr(f)
@@ -2018,7 +2013,7 @@ func (p *parser) hidden_fndcl() *Node {
 		// (dotmeth's type).Nname.Inl, and dotmeth's type has been pulled
 		// out by typecheck's lookdot as this $$.ttype. So by providing
 		// this back link here we avoid special casing there.
-		ss.Type.Nname = ss
+		ss.Type.SetNname(ss)
 		return ss
 	}
 }
@@ -2907,7 +2902,7 @@ func (p *parser) hidden_import() {
 
 		if Debug['E'] > 0 {
 			fmt.Printf("import [%q] func %v \n", importpkg.Path, s2)
-			if Debug['m'] > 2 && len(s2.Func.Inl.Slice()) != 0 {
+			if Debug['m'] > 2 && s2.Func.Inl.Len() != 0 {
 				fmt.Printf("inl body:%v\n", s2.Func.Inl)
 			}
 		}
@@ -2932,12 +2927,7 @@ func (p *parser) hidden_pkgtype() *Type {
 		defer p.trace("hidden_pkgtype")()
 	}
 
-	s1 := p.hidden_pkg_importsym()
-
-	ss := pkgtype(s1)
-	importsym(s1, OTYPE)
-
-	return ss
+	return pkgtype(p.hidden_pkg_importsym())
 }
 
 // ----------------------------------------------------------------------------
@@ -3018,7 +3008,7 @@ func (p *parser) hidden_type_misc() *Type {
 		p.want(']')
 		s5 := p.hidden_type()
 
-		return maptype(s3, s5)
+		return typMap(s3, s5)
 
 	case LSTRUCT:
 		// LSTRUCT '{' ohidden_structdcl_list '}'
@@ -3050,9 +3040,7 @@ func (p *parser) hidden_type_misc() *Type {
 		default:
 			// LCHAN hidden_type_non_recv_chan
 			s2 := p.hidden_type_non_recv_chan()
-			ss := typ(TCHAN)
-			ss.Type = s2
-			ss.Chan = Cboth
+			ss := typChan(s2, Cboth)
 			return ss
 
 		case '(':
@@ -3060,18 +3048,14 @@ func (p *parser) hidden_type_misc() *Type {
 			p.next()
 			s3 := p.hidden_type_recv_chan()
 			p.want(')')
-			ss := typ(TCHAN)
-			ss.Type = s3
-			ss.Chan = Cboth
+			ss := typChan(s3, Cboth)
 			return ss
 
 		case LCOMM:
 			// LCHAN hidden_type
 			p.next()
 			s3 := p.hidden_type()
-			ss := typ(TCHAN)
-			ss.Type = s3
-			ss.Chan = Csend
+			ss := typChan(s3, Csend)
 			return ss
 		}
 
@@ -3090,9 +3074,7 @@ func (p *parser) hidden_type_recv_chan() *Type {
 	p.want(LCHAN)
 	s3 := p.hidden_type()
 
-	ss := typ(TCHAN)
-	ss.Type = s3
-	ss.Chan = Crecv
+	ss := typChan(s3, Crecv)
 	return ss
 }
 
@@ -3133,11 +3115,7 @@ func (p *parser) hidden_funarg() *Node {
 		s3 := p.hidden_type()
 		s4 := p.oliteral()
 
-		var t *Type
-
-		t = typ(TARRAY)
-		t.Bound = -1
-		t.Type = s3
+		t := typSlice(s3)
 
 		ss := Nod(ODCLFIELD, nil, typenod(t))
 		if s1 != nil {
@@ -3159,19 +3137,16 @@ func (p *parser) hidden_structdcl() *Node {
 	s2 := p.hidden_type()
 	s3 := p.oliteral()
 
-	var s *Sym
-	var pkg *Pkg
-
 	var ss *Node
 	if s1 != nil && s1.Name != "?" {
 		ss = Nod(ODCLFIELD, newname(s1), typenod(s2))
 		ss.SetVal(s3)
 	} else {
-		s = s2.Sym
-		if s == nil && Isptr[s2.Etype] {
-			s = s2.Type.Sym
+		s := s2.Sym
+		if s == nil && s2.IsPtr() {
+			s = s2.Elem().Sym
 		}
-		pkg = importpkg
+		pkg := importpkg
 		if s1 != nil {
 			pkg = s1.Pkg
 		}
@@ -3267,17 +3242,14 @@ func (p *parser) hidden_literal() *Node {
 		if p.tok == LLITERAL {
 			ss := nodlit(p.val)
 			p.next()
-			switch ss.Val().Ctype() {
-			case CTINT, CTRUNE:
-				mpnegfix(ss.Val().U.(*Mpint))
-				break
-			case CTFLT:
-				mpnegflt(ss.Val().U.(*Mpflt))
-				break
-			case CTCPLX:
-				mpnegflt(&ss.Val().U.(*Mpcplx).Real)
-				mpnegflt(&ss.Val().U.(*Mpcplx).Imag)
-				break
+			switch u := ss.Val().U.(type) {
+			case *Mpint:
+				u.Neg()
+			case *Mpflt:
+				u.Neg()
+			case *Mpcplx:
+				u.Real.Neg()
+				u.Imag.Neg()
 			default:
 				Yyerror("bad negated constant")
 			}
@@ -3318,11 +3290,11 @@ func (p *parser) hidden_constant() *Node {
 
 		if s2.Val().Ctype() == CTRUNE && s4.Val().Ctype() == CTINT {
 			ss := s2
-			mpaddfixfix(s2.Val().U.(*Mpint), s4.Val().U.(*Mpint), 0)
+			s2.Val().U.(*Mpint).Add(s4.Val().U.(*Mpint))
 			return ss
 		}
 		s4.Val().U.(*Mpcplx).Real = s4.Val().U.(*Mpcplx).Imag
-		Mpmovecflt(&s4.Val().U.(*Mpcplx).Imag, 0.0)
+		s4.Val().U.(*Mpcplx).Imag.SetFloat64(0.0)
 		return nodcplxlit(s2.Val(), s4.Val())
 	}
 }

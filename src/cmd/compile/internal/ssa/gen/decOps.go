@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// +build ignore
+
 package main
 
 var decOps = []opData{}
@@ -10,8 +12,9 @@ var decBlocks = []blockData{}
 
 func init() {
 	archs = append(archs, arch{
-		name:   "dec",
-		ops:    decOps,
-		blocks: decBlocks,
+		name:    "dec",
+		ops:     decOps,
+		blocks:  decBlocks,
+		generic: true,
 	})
 }

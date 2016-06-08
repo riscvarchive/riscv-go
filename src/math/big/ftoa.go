@@ -41,8 +41,11 @@ import (
 // x.Prec() mantissa bits.
 // The prec value is ignored for the 'b' or 'p' format.
 func (x *Float) Text(format byte, prec int) string {
-	const extra = 10 // TODO(gri) determine a good/better value here
-	return string(x.Append(make([]byte, 0, prec+extra), format, prec))
+	cap := 10 // TODO(gri) determine a good/better value here
+	if prec > 0 {
+		cap += prec
+	}
+	return string(x.Append(make([]byte, 0, cap), format, prec))
 }
 
 // String formats x like x.Text('g', 10).
@@ -374,12 +377,11 @@ func min(x, y int) int {
 }
 
 // Format implements fmt.Formatter. It accepts all the regular
-// formats for floating-point numbers ('e', 'E', 'f', 'F', 'g',
-// 'G') as well as 'b', 'p', and 'v'. See (*Float).Text for the
-// interpretation of 'b' and 'p'. The 'v' format is handled like
-// 'g'.
+// formats for floating-point numbers ('b', 'e', 'E', 'f', 'F',
+// 'g', 'G') as well as 'p' and 'v'. See (*Float).Text for the
+// interpretation of 'p'. The 'v' format is handled like 'g'.
 // Format also supports specification of the minimum precision
-// in digits, the output field width, as well as the format verbs
+// in digits, the output field width, as well as the format flags
 // '+' and ' ' for sign control, '0' for space or zero padding,
 // and '-' for left or right justification. See the fmt package
 // for details.

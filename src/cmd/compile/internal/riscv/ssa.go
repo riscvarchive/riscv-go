@@ -155,10 +155,10 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 
 	switch b.Kind {
 	case ssa.BlockPlain, ssa.BlockCall, ssa.BlockCheck:
-		if b.Succs[0] != next {
+		if b.Succs[0].Block() != next {
 			p := gc.Prog(obj.AJMP)
 			p.To.Type = obj.TYPE_BRANCH
-			s.Branches = append(s.Branches, gc.Branch{p, b.Succs[0]})
+			s.Branches = append(s.Branches, gc.Branch{p, b.Succs[0].Block()})
 		}
 	case ssa.BlockExit:
 		gc.Prog(obj.AUNDEF)

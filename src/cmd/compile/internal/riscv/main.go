@@ -23,9 +23,7 @@ func betypeinit() {
 }
 
 func Main() {
-	gc.Thearch.Thechar = 'V'
-	gc.Thearch.Thestring = "riscv"
-	gc.Thearch.Thelinkarch = &riscv.LinkRISCV
+	gc.Thearch.LinkArch = &riscv.LinkRISCV
 	gc.Thearch.Betypeinit = betypeinit
 
 	gc.Thearch.REGSP = riscv.REG_SP

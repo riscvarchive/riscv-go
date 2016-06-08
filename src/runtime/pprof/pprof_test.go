@@ -86,10 +86,14 @@ func TestCPUProfileMultithreaded(t *testing.T) {
 	})
 }
 
-func parseProfile(t *testing.T, bytes []byte, f func(uintptr, []uintptr)) {
+func parseProfile(t *testing.T, valBytes []byte, f func(uintptr, []uintptr)) {
 	// Convert []byte to []uintptr.
-	l := len(bytes) / int(unsafe.Sizeof(uintptr(0)))
-	val := *(*[]uintptr)(unsafe.Pointer(&bytes))
+	l := len(valBytes)
+	if i := bytes.Index(valBytes, []byte("\nMAPPED_LIBRARIES:\n")); i >= 0 {
+		l = i
+	}
+	l /= int(unsafe.Sizeof(uintptr(0)))
+	val := *(*[]uintptr)(unsafe.Pointer(&valBytes))
 	val = val[:l]
 
 	// 5 for the header, 3 for the trailer.
@@ -388,7 +392,7 @@ func TestStackBarrierProfiling(t *testing.T) {
 			args = append(args, "-test.short")
 		}
 		cmd := exec.Command(os.Args[0], args...)
-		cmd.Env = append([]string{"GODEBUG=gcstackbarrierall=1", "GOGC=1"}, os.Environ()...)
+		cmd.Env = append([]string{"GODEBUG=gcstackbarrierall=1", "GOGC=1", "GOTRACEBACK=system"}, os.Environ()...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("subprocess failed with %v:\n%s", err, out)
 		}
@@ -530,15 +534,20 @@ func blockChanClose() {
 }
 
 func blockSelectRecvAsync() {
+	const numTries = 3
 	c := make(chan bool, 1)
 	c2 := make(chan bool, 1)
 	go func() {
-		time.Sleep(blockDelay)
-		c <- true
+		for i := 0; i < numTries; i++ {
+			time.Sleep(blockDelay)
+			c <- true
+		}
 	}()
-	select {
-	case <-c:
-	case <-c2:
+	for i := 0; i < numTries; i++ {
+		select {
+		case <-c:
+		case <-c2:
+		}
 	}
 }
 
@@ -585,6 +594,9 @@ func func3(c chan int) { <-c }
 func func4(c chan int) { <-c }
 
 func TestGoroutineCounts(t *testing.T) {
+	if runtime.GOOS == "openbsd" {
+		testenv.SkipFlaky(t, 15156)
+	}
 	c := make(chan int)
 	for i := 0; i < 100; i++ {
 		if i%10 == 0 {

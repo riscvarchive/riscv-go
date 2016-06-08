@@ -31,6 +31,7 @@ var (
 	goroot           string
 	goroot_final     string
 	goextlinkenabled string
+	gogcflags        string // For running built compiler
 	workdir          string
 	tooldir          string
 	oldgoos          string
@@ -60,6 +61,7 @@ var okgoarch = []string{
 	"ppc64",
 	"ppc64le",
 	"riscv",
+	"s390x",
 }
 
 // The known operating systems.
@@ -166,6 +168,8 @@ func xinit() {
 		}
 		goextlinkenabled = b
 	}
+
+	gogcflags = os.Getenv("BOOT_GO_GCFLAGS")
 
 	b = os.Getenv("CC")
 	if b == "" {
@@ -461,6 +465,7 @@ var deptab = []struct {
 }{
 	{"cmd/go", []string{
 		"zdefaultcc.go",
+		"zosarch.go",
 	}},
 	{"runtime/internal/sys", []string{
 		"zversion.go",
@@ -482,6 +487,7 @@ var gentab = []struct {
 	gen        func(string, string)
 }{
 	{"zdefaultcc.go", mkzdefaultcc},
+	{"zosarch.go", mkzosarch},
 	{"zversion.go", mkzversion},
 	{"zcgo.go", mkzcgo},
 
@@ -688,6 +694,9 @@ func install(dir string) {
 		archive = b
 	}
 	compile := []string{pathf("%s/compile", tooldir), "-pack", "-o", b, "-p", pkg}
+	if gogcflags != "" {
+		compile = append(compile, strings.Fields(gogcflags)...)
+	}
 	if dir == "runtime" {
 		compile = append(compile, "-+", "-asmhdr", pathf("%s/go_asm.h", workdir))
 	}
@@ -1090,8 +1099,10 @@ var cgoEnabled = map[string]bool{
 	"linux/arm64":     true,
 	"linux/ppc64":     false,
 	"linux/ppc64le":   true,
-	"linux/mips64":    false,
-	"linux/mips64le":  false,
+	"linux/mips64":    true,
+	"linux/mips64le":  true,
+	"linux/riscv":     false,
+	"linux/s390x":     true,
 	"android/386":     true,
 	"android/amd64":   true,
 	"android/arm":     true,
@@ -1134,8 +1145,8 @@ func checkCC() {
 		}
 		fatal("cannot invoke C compiler %q: %v\n\n"+
 			"Go needs a system C compiler for use with cgo.\n"+
-			"To set a C compiler, export CC=the-compiler.\n"+
-			"To disable cgo, export CGO_ENABLED=0.\n%s%s", defaultcc, err, outputHdr, output)
+			"To set a C compiler, set CC=the-compiler.\n"+
+			"To disable cgo, set CGO_ENABLED=0.\n%s%s", defaultcc, err, outputHdr, output)
 	}
 }
 

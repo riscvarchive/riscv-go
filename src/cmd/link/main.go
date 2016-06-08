@@ -12,6 +12,7 @@ import (
 	"cmd/link/internal/mips64"
 	"cmd/link/internal/ppc64"
 	"cmd/link/internal/riscv"
+	"cmd/link/internal/s390x"
 	"cmd/link/internal/x86"
 	"fmt"
 	"os"
@@ -36,5 +37,7 @@ func main() {
 		ppc64.Main()
 	case "riscv":
 		riscv.Main()
+	case "s390x":
+		s390x.Main()
 	}
 }

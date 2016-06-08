@@ -5,6 +5,7 @@
 package gosym
 
 import (
+	"bytes"
 	"debug/elf"
 	"internal/testenv"
 	"io/ioutil"
@@ -42,6 +43,21 @@ func dotest(t *testing.T) {
 	if err := cmd.Run(); err != nil {
 		t.Fatal(err)
 	}
+
+	// stamp .o file as being 'package main' so that go tool link will accept it
+	data, err := ioutil.ReadFile(pclinetestBinary + ".o")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := bytes.IndexByte(data, '\n')
+	if i < 0 {
+		t.Fatal("bad binary")
+	}
+	data = append(append(data[:i:i], "\nmain"...), data[i:]...)
+	if err := ioutil.WriteFile(pclinetestBinary+".o", data, 0666); err != nil {
+		t.Fatal(err)
+	}
+
 	cmd = exec.Command("go", "tool", "link", "-H", "linux",
 		"-o", pclinetestBinary, pclinetestBinary+".o")
 	cmd.Stdout = os.Stdout
@@ -110,8 +126,6 @@ func parse(file string, f *elf.File, t *testing.T) (*elf.File, *Table) {
 
 	return f, tab
 }
-
-var goarch = os.Getenv("O")
 
 func TestLineFromAline(t *testing.T) {
 	skipIfNotELF(t)
@@ -210,6 +224,7 @@ func TestPCLine(t *testing.T) {
 	defer endtest()
 
 	f, tab := crack(pclinetestBinary, t)
+	defer f.Close()
 	text := f.Section(".text")
 	textdat, err := text.Data()
 	if err != nil {

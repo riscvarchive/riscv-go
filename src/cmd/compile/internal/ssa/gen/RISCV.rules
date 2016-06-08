@@ -175,10 +175,11 @@
 (Rsh64Ux32 x y) -> (ADD x y)
 (Rsh64Ux64 x y) -> (ADD x y)
 
-(Lrot8 x [c]) -> (ADD x [c])
-(Lrot16 x [c]) -> (ADD x [c])
-(Lrot32 x [c]) -> (ADD x [c])
-(Lrot64 x [c]) -> (ADD x [c])
+// FIXME(prattmic): ADD does not allow AuxInt.
+//(Lrot8 x [c]) -> (ADD x [c])
+//(Lrot16 x [c]) -> (ADD x [c])
+//(Lrot32 x [c]) -> (ADD x [c])
+//(Lrot64 x [c]) -> (ADD x [c])
 
 (Less64 x y) -> (ADD x y)
 (Less32 x y) -> (ADD x y)

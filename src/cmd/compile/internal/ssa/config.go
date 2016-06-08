@@ -9,21 +9,24 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
-	arch         string                     // "amd64", etc.
-	IntSize      int64                      // 4 or 8
-	PtrSize      int64                      // 4 or 8
-	lowerBlock   func(*Block) bool          // lowering function
-	lowerValue   func(*Value, *Config) bool // lowering function
-	fe           Frontend                   // callbacks into compiler frontend
-	HTML         *HTMLWriter                // html writer, for debugging
-	ctxt         *obj.Link                  // Generic arch information
-	optimize     bool                       // Do optimization
-	noDuffDevice bool                       // Don't use Duff's device
-	curFunc      *Func
+	arch            string                     // "amd64", etc.
+	IntSize         int64                      // 4 or 8
+	PtrSize         int64                      // 4 or 8
+	lowerBlock      func(*Block) bool          // lowering function
+	lowerValue      func(*Value, *Config) bool // lowering function
+	registers       []Register                 // machine registers
+	fe              Frontend                   // callbacks into compiler frontend
+	HTML            *HTMLWriter                // html writer, for debugging
+	ctxt            *obj.Link                  // Generic arch information
+	optimize        bool                       // Do optimization
+	noDuffDevice    bool                       // Don't use Duff's device
+	sparsePhiCutoff uint64                     // Sparse phi location algorithm used above this #blocks*#variables score
+	curFunc         *Func
 
 	// TODO: more stuff. Compiler flags of interest, ...
 
@@ -34,6 +37,10 @@ type Config struct {
 	// Storage for low-numbered values and blocks.
 	values [2000]Value
 	blocks [200]Block
+
+	// Reusable stackAllocState.
+	// See stackalloc.go's {new,put}StackAllocState.
+	stackAllocState *stackAllocState
 
 	domblockstore []ID         // scratch space for computing dominators
 	scrSparse     []*sparseSet // scratch sparse sets to be re-used.
@@ -92,6 +99,14 @@ type Frontend interface {
 	// The SSA compiler uses this function to allocate space for spills.
 	Auto(Type) GCNode
 
+	// Given the name for a compound type, returns the name we should use
+	// for the parts of that compound type.
+	SplitString(LocalSlot) (LocalSlot, LocalSlot)
+	SplitInterface(LocalSlot) (LocalSlot, LocalSlot)
+	SplitSlice(LocalSlot) (LocalSlot, LocalSlot, LocalSlot)
+	SplitComplex(LocalSlot) (LocalSlot, LocalSlot)
+	SplitStruct(LocalSlot, int) LocalSlot
+
 	// Line returns a string describing the given line number.
 	Line(int32) string
 }
@@ -112,11 +127,18 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.PtrSize = 8
 		c.lowerBlock = rewriteBlockAMD64
 		c.lowerValue = rewriteValueAMD64
+		c.registers = registersAMD64[:]
 	case "386":
 		c.IntSize = 4
 		c.PtrSize = 4
 		c.lowerBlock = rewriteBlockAMD64
 		c.lowerValue = rewriteValueAMD64 // TODO(khr): full 32-bit support
+	case "arm":
+		c.IntSize = 4
+		c.PtrSize = 4
+		c.lowerBlock = rewriteBlockARM
+		c.lowerValue = rewriteValueARM
+		c.registers = registersARM[:]
 	case "riscv":
 		c.IntSize = 8
 		c.PtrSize = 8
@@ -144,10 +166,27 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 
 	c.logfiles = make(map[string]*os.File)
 
+	// cutoff is compared with product of numblocks and numvalues,
+	// if product is smaller than cutoff, use old non-sparse method.
+	// cutoff == 0 implies all sparse.
+	// cutoff == -1 implies none sparse.
+	// Good cutoff values seem to be O(million) depending on constant factor cost of sparse.
+	// TODO: get this from a flag, not an environment variable
+	c.sparsePhiCutoff = 2500000 // 0 for testing. // 2500000 determined with crude experiments w/ make.bash
+	ev := os.Getenv("GO_SSA_PHI_LOC_CUTOFF")
+	if ev != "" {
+		v, err := strconv.ParseInt(ev, 10, 64)
+		if err != nil {
+			fe.Fatalf(0, "Environment variable GO_SSA_PHI_LOC_CUTOFF (value '%s') did not parse as a number", ev)
+		}
+		c.sparsePhiCutoff = uint64(v) // convert -1 to maxint, for never use sparse
+	}
+
 	return c
 }
 
-func (c *Config) Frontend() Frontend { return c.fe }
+func (c *Config) Frontend() Frontend      { return c.fe }
+func (c *Config) SparsePhiCutoff() uint64 { return c.sparsePhiCutoff }
 
 // NewFunc returns a new, empty function object.
 // Caller must call f.Free() before calling NewFunc again.
@@ -171,8 +210,7 @@ func (c *Config) Warnl(line int32, msg string, args ...interface{}) { c.fe.Warnl
 func (c *Config) Debug_checknil() bool                              { return c.fe.Debug_checknil() }
 
 func (c *Config) logDebugHashMatch(evname, name string) {
-	var file *os.File
-	file = c.logfiles[evname]
+	file := c.logfiles[evname]
 	if file == nil {
 		file = os.Stdout
 		tmpfile := os.Getenv("GSHS_LOGFILE")
@@ -244,4 +282,8 @@ func (c *Config) DebugHashMatch(evname, name string) bool {
 		}
 	}
 	return false
+}
+
+func (c *Config) DebugNameMatch(evname, name string) bool {
+	return os.Getenv(evname) == name
 }

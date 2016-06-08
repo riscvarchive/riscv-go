@@ -8,7 +8,7 @@
 //	Portions Copyright © 2004,2006 Bruce Ellis
 //	Portions Copyright © 2005-2007 C H Forsyth (forsyth@terzarima.net)
 //	Revisions Copyright © 2000-2007 Lucent Technologies Inc. and others
-//	Portions Copyright © 2009 The Go Authors.  All rights reserved.
+//	Portions Copyright © 2009 The Go Authors. All rights reserved.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -86,17 +86,8 @@ func split64(n *gc.Node, lo *gc.Node, hi *gc.Node) {
 
 			n = &n1
 
-		case gc.ONAME:
-			if n.Class == gc.PPARAMREF {
-				var n1 gc.Node
-				gc.Cgen(n.Name.Heapaddr, &n1)
-				sclean[nsclean-1] = n1
-				n = &n1
-			}
-
+		case gc.ONAME, gc.OINDREG:
 			// nothing
-		case gc.OINDREG:
-			break
 		}
 
 		*lo = *n
@@ -112,7 +103,7 @@ func split64(n *gc.Node, lo *gc.Node, hi *gc.Node) {
 	case gc.OLITERAL:
 		var n1 gc.Node
 		n.Convconst(&n1, n.Type)
-		i := n1.Int()
+		i := n1.Int64()
 		gc.Nodconst(lo, gc.Types[gc.TUINT32], int64(uint32(i)))
 		i >>= 32
 		if n.Type.Etype == gc.TINT64 {
@@ -719,7 +710,7 @@ func raddr(n *gc.Node, p *obj.Prog) {
 	gc.Naddr(&a, n)
 	if a.Type != obj.TYPE_REG {
 		if n != nil {
-			gc.Fatalf("bad in raddr: %v", gc.Oconv(n.Op, 0))
+			gc.Fatalf("bad in raddr: %v", n.Op)
 		} else {
 			gc.Fatalf("bad in raddr: <null>")
 		}
@@ -790,7 +781,7 @@ func optoas(op gc.Op, t *gc.Type) obj.As {
 	a := obj.AXXX
 	switch uint32(op)<<16 | uint32(gc.Simtype[t.Etype]) {
 	default:
-		gc.Fatalf("optoas: no entry %v-%v etype %v simtype %v", gc.Oconv(op, 0), t, gc.Types[t.Etype], gc.Types[gc.Simtype[t.Etype]])
+		gc.Fatalf("optoas: no entry %v-%v etype %v simtype %v", op, t, gc.Types[t.Etype], gc.Types[gc.Simtype[t.Etype]])
 
 		/*	case CASE(OADDR, TPTR32):
 				a = ALEAL;
@@ -1143,7 +1134,7 @@ func sudoaddable(as obj.As, n *gc.Node, a *obj.Addr) bool {
 		if !gc.Isconst(n, gc.CTINT) {
 			break
 		}
-		v := n.Int()
+		v := n.Int64()
 		if v >= 32000 || v <= -32000 {
 			break
 		}

@@ -7,7 +7,7 @@ package gc
 import (
 	"cmd/compile/internal/ssa"
 	"cmd/internal/obj"
-	"crypto/md5"
+	"cmd/internal/sys"
 	"fmt"
 	"sort"
 	"strings"
@@ -15,12 +15,12 @@ import (
 
 // "Portable" code generation.
 
-var makefuncdatasym_nsym int32
+var makefuncdatasym_nsym int
 
-func makefuncdatasym(namefmt string, funcdatakind int64) *Sym {
+func makefuncdatasym(nameprefix string, funcdatakind int64) *Sym {
 	var nod Node
 
-	sym := Lookupf(namefmt, makefuncdatasym_nsym)
+	sym := LookupN(nameprefix, makefuncdatasym_nsym)
 	makefuncdatasym_nsym++
 	pnod := newname(sym)
 	pnod.Class = PEXTERN
@@ -90,7 +90,7 @@ func gvardefx(n *Node, as obj.As) {
 		Fatalf("gvardef nil")
 	}
 	if n.Op != ONAME {
-		Yyerror("gvardef %v; %v", Oconv(n.Op, FmtSharp), n)
+		Yyerror("gvardef %#v; %v", n.Op, n)
 		return
 	}
 
@@ -129,36 +129,27 @@ func removevardef(firstp *obj.Prog) {
 	}
 }
 
-func gcsymdup(s *Sym) {
-	ls := Linksym(s)
-	if len(ls.R) > 0 {
-		Fatalf("cannot rosymdup %s with relocations", ls.Name)
-	}
-	ls.Name = fmt.Sprintf("gclocals·%x", md5.Sum(ls.P))
-	ls.Dupok = 1
-}
-
 func emitptrargsmap() {
 	if Curfn.Func.Nname.Sym.Name == "_" {
 		return
 	}
 	sym := Lookup(fmt.Sprintf("%s.args_stackmap", Curfn.Func.Nname.Sym.Name))
 
-	nptr := int(Curfn.Type.Argwid / int64(Widthptr))
+	nptr := int(Curfn.Type.ArgWidth() / int64(Widthptr))
 	bv := bvalloc(int32(nptr) * 2)
 	nbitmap := 1
-	if Curfn.Type.Outtuple > 0 {
+	if Curfn.Type.Results().NumFields() > 0 {
 		nbitmap = 2
 	}
 	off := duint32(sym, 0, uint32(nbitmap))
 	off = duint32(sym, off, uint32(bv.n))
 	var xoffset int64
-	if Curfn.Type.Thistuple > 0 {
+	if Curfn.Type.Recv() != nil {
 		xoffset = 0
 		onebitwalktype1(Curfn.Type.Recvs(), &xoffset, bv)
 	}
 
-	if Curfn.Type.Intuple > 0 {
+	if Curfn.Type.Params().NumFields() > 0 {
 		xoffset = 0
 		onebitwalktype1(Curfn.Type.Params(), &xoffset, bv)
 	}
@@ -166,7 +157,7 @@ func emitptrargsmap() {
 	for j := 0; int32(j) < bv.n; j += 32 {
 		off = duint32(sym, off, bv.b[j/32])
 	}
-	if Curfn.Type.Outtuple > 0 {
+	if Curfn.Type.Results().NumFields() > 0 {
 		xoffset = 0
 		onebitwalktype1(Curfn.Type.Results(), &xoffset, bv)
 		for j := 0; int32(j) < bv.n; j += 32 {
@@ -286,7 +277,7 @@ func allocauto(ptxt *obj.Prog) {
 		if haspointers(n.Type) {
 			stkptrsize = Stksize
 		}
-		if Thearch.Thechar == '0' || Thearch.Thechar == '5' || Thearch.Thechar == '7' || Thearch.Thechar == '9' {
+		if Thearch.LinkArch.InFamily(sys.MIPS64, sys.ARM, sys.ARM64, sys.PPC64, sys.S390X) {
 			Stksize = Rnd(Stksize, int64(Widthptr))
 		}
 		if Stksize >= 1<<31 {
@@ -318,12 +309,17 @@ func Cgen_checknil(n *Node) {
 	}
 
 	// Ideally we wouldn't see any integer types here, but we do.
-	if n.Type == nil || (!Isptr[n.Type.Etype] && !Isint[n.Type.Etype] && n.Type.Etype != TUNSAFEPTR) {
+	if n.Type == nil || (!n.Type.IsPtr() && !n.Type.IsInteger() && n.Type.Etype != TUNSAFEPTR) {
 		Dump("checknil", n)
 		Fatalf("bad checknil")
 	}
 
-	if ((Thearch.Thechar == '0' || Thearch.Thechar == '5' || Thearch.Thechar == '7' || Thearch.Thechar == '9') && n.Op != OREGISTER) || !n.Addable || n.Op == OLITERAL {
+	// Most architectures require that the address to be checked is
+	// in a register (it could be in memory).
+	needsReg := !Thearch.LinkArch.InFamily(sys.AMD64, sys.I386)
+
+	// Move the address to be checked into a register if necessary.
+	if (needsReg && n.Op != OREGISTER) || !n.Addable || n.Op == OLITERAL {
 		var reg Node
 		Regalloc(&reg, Types[Tptr], n)
 		Cgen(n, &reg)
@@ -357,8 +353,8 @@ func compile(fn *Node) {
 	Curfn = fn
 	dowidth(Curfn.Type)
 
-	if len(fn.Nbody.Slice()) == 0 {
-		if pure_go != 0 || strings.HasPrefix(fn.Func.Nname.Sym.Name, "init.") {
+	if fn.Nbody.Len() == 0 {
+		if pure_go || strings.HasPrefix(fn.Func.Nname.Sym.Name, "init.") {
 			Yyerror("missing function body for %q", fn.Func.Nname.Sym.Name)
 			return
 		}
@@ -375,12 +371,12 @@ func compile(fn *Node) {
 	// set up domain for labels
 	clearlabels()
 
-	if Curfn.Type.Outnamed {
+	if Curfn.Type.FuncType().Outnamed {
 		// add clearing of the output parameters
-		for t, it := IterFields(Curfn.Type.Results()); t != nil; t = it.Next() {
+		for _, t := range Curfn.Type.Results().Fields().Slice() {
 			if t.Nname != nil {
 				n := Nod(OAS, t.Nname, nil)
-				typecheck(&n, Etop)
+				n = typecheck(n, Etop)
 				Curfn.Nbody.Set(append([]*Node{n}, Curfn.Nbody.Slice()...))
 			}
 		}
@@ -442,7 +438,7 @@ func compile(fn *Node) {
 		ptxt.From3.Offset |= obj.REFLECTMETHOD
 	}
 	if fn.Func.Pragma&Systemstack != 0 {
-		ptxt.From.Sym.Cfunc = 1
+		ptxt.From.Sym.Cfunc = true
 	}
 
 	// Clumsy but important.
@@ -456,8 +452,8 @@ func compile(fn *Node) {
 
 	ginit()
 
-	gcargs := makefuncdatasym("gcargs·%d", obj.FUNCDATA_ArgsPointerMaps)
-	gclocals := makefuncdatasym("gclocals·%d", obj.FUNCDATA_LocalsPointerMaps)
+	gcargs := makefuncdatasym("gcargs·", obj.FUNCDATA_ArgsPointerMaps)
+	gclocals := makefuncdatasym("gclocals·", obj.FUNCDATA_LocalsPointerMaps)
 
 	if obj.Fieldtrack_enabled != 0 && len(Curfn.Func.FieldTrack) > 0 {
 		trackSyms := make([]*Sym, 0, len(Curfn.Func.FieldTrack))
@@ -490,6 +486,12 @@ func compile(fn *Node) {
 	}
 }
 
+type symByName []*Sym
+
+func (a symByName) Len() int           { return len(a) }
+func (a symByName) Less(i, j int) bool { return a[i].Name < a[j].Name }
+func (a symByName) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+
 // genlegacy compiles Curfn using the legacy non-SSA code generator.
 func genlegacy(ptxt *obj.Prog, gcargs, gclocals *Sym) {
 	Genlist(Curfn.Func.Enter)
@@ -503,7 +505,7 @@ func genlegacy(ptxt *obj.Prog, gcargs, gclocals *Sym) {
 		lineno = Curfn.Func.Endlineno
 	}
 
-	if Curfn.Type.Outtuple != 0 {
+	if Curfn.Type.Results().NumFields() != 0 {
 		Ginscall(throwreturn, 0)
 	}
 
@@ -546,9 +548,6 @@ func genlegacy(ptxt *obj.Prog, gcargs, gclocals *Sym) {
 
 	// Emit garbage collection symbols.
 	liveness(Curfn, ptxt, gcargs, gclocals)
-
-	gcsymdup(gcargs)
-	gcsymdup(gclocals)
 
 	Thearch.Defframe(ptxt)
 
