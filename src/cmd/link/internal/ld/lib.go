@@ -509,7 +509,10 @@ func loadlib() {
 		Adduint8(Ctxt, s, 1)
 	}
 
-	loadinternal("runtime")
+	if SysArch.Family != sys.RISCV {
+		// FIXME: restore this call when we are ready to link in the runtime.
+		loadinternal("runtime")
+	}
 	if SysArch.Family == sys.ARM {
 		loadinternal("math")
 	}

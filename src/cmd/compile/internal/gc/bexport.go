@@ -1323,7 +1323,7 @@ func (p *exporter) expr(n *Node) {
 			p.exprList(n.List) // emits terminating OEND
 		}
 
-	case OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC, ORECOVER, OPRINT, OPRINTN:
+	case OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC, ORECOVER, OPRINT, OPRINTN, ORISCVEXIT:
 		p.op(op)
 		if n.Left != nil {
 			p.expr(n.Left)

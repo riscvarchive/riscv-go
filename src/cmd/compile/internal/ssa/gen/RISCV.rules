@@ -280,3 +280,7 @@
 //(DeferCall [argwid] mem) ->
 //(GoCall [argwid] mem) ->
 //(InterCall [argwid] _ mem) ->
+
+// Bootstrapping
+
+(ExitProc [rc] mem) -> (LoweredExitProc [rc] mem)

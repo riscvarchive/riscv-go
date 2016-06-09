@@ -5,19 +5,14 @@
 package riscv
 
 import (
-	"log"
-
 	"cmd/compile/internal/gc"
 	"cmd/internal/obj"
 )
 
 // gins generates one instruction.
 func gins(as obj.As, from *gc.Node, to *gc.Node) *obj.Prog {
-	log.Printf("gins %v", as)
-
 	p := gc.Prog(as)
 	gc.Naddr(&p.From, from)
 	gc.Naddr(&p.To, to)
-
 	return p
 }

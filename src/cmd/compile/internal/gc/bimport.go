@@ -895,7 +895,7 @@ func (p *importer) node() *Node {
 		n.List.Set(p.exprList())
 		return n
 
-	case OCOPY, OCOMPLEX, OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC, ORECOVER, OPRINT, OPRINTN:
+	case OCOPY, OCOMPLEX, OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC, ORECOVER, OPRINT, OPRINTN, ORISCVEXIT:
 		n := builtinCall(op)
 		n.List.Set(p.exprList())
 		if op == OAPPEND {
