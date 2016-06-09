@@ -384,6 +384,9 @@ var genericOps = []opData{
 	{name: "VarDef", argLength: 1, aux: "Sym", typ: "Mem"}, // aux is a *gc.Node of a variable that is about to be initialized.  arg0=mem, returns mem
 	{name: "VarKill", argLength: 1, aux: "Sym"},            // aux is a *gc.Node of a variable that is known to be dead.  arg0=mem, returns mem
 	{name: "VarLive", argLength: 1, aux: "Sym"},            // aux is a *gc.Node of a variable that must be kept live.  arg0=mem, returns mem
+
+	// riscv bootstrapping
+	{name: "ExitProc", argLength: 1, aux: "Int64", typ: "Mem"}, // risc-v bootstrapping only: insert process exit syscall, auxint=return code, arg0=memory
 }
 
 //     kind           control    successors       implicit exit

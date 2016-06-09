@@ -410,6 +410,7 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		// does not require instrumentation
 	case OPRINT, // don't bother instrumenting it
 		OPRINTN,     // don't bother instrumenting it
+		ORISCVEXIT,  // don't bother
 		OCHECKNIL,   // always followed by a read.
 		OPARAM,      // it appears only in fn->exit to copy heap params back
 		OCLOSUREVAR, // immutable pointer to captured variable

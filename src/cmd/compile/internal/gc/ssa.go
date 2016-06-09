@@ -887,6 +887,10 @@ func (s *state) stmt(n *Node) {
 		p := s.expr(n.Left)
 		s.nilCheck(p)
 
+	case ORISCVEXIT:
+		s.vars[&memVar] = s.newValue1I(ssa.OpExitProc, ssa.TypeMem, n.List.First().Int(), s.mem())
+		s.exit()
+
 	default:
 		s.Unimplementedf("unhandled stmt %s", opnames[n.Op])
 	}

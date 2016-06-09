@@ -189,6 +189,9 @@ var goopnames = []string{
 	OSUB:      "-",
 	OSWITCH:   "switch",
 	OXOR:      "^",
+
+	// placed in its own block to avoid gofmt whitespace changes, for easier merges
+	ORISCVEXIT: "exit",
 }
 
 // Fmt "%O":  Node opcodes
@@ -961,6 +964,7 @@ var opprec = []int{
 	OPAREN:        8,
 	OPRINTN:       8,
 	OPRINT:        8,
+	ORISCVEXIT:    8,
 	ORUNESTR:      8,
 	OSTRARRAYBYTE: 8,
 	OSTRARRAYRUNE: 8,
@@ -1321,6 +1325,7 @@ func exprfmt(n *Node, prec int) string {
 		ONEW,
 		OPANIC,
 		ORECOVER,
+		ORISCVEXIT,
 		OPRINT,
 		OPRINTN:
 		if n.Left != nil {

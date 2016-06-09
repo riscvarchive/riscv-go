@@ -98,6 +98,7 @@ var opnames = []string{
 	OPANIC:           "PANIC",
 	OPRINT:           "PRINT",
 	OPRINTN:          "PRINTN",
+	ORISCVEXIT:       "RISCVEXIT",
 	OPAREN:           "PAREN",
 	OSEND:            "SEND",
 	OSLICE:           "SLICE",

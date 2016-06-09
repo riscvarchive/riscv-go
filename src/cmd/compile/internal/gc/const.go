@@ -1727,6 +1727,7 @@ func hascallchan(n *Node) bool {
 		OPANIC,
 		OPRINT,
 		OPRINTN,
+		ORISCVEXIT,
 		OREAL,
 		ORECOVER,
 		ORECV:

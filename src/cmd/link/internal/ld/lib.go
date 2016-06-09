@@ -506,7 +506,10 @@ func loadlib() {
 		Adduint8(Ctxt, s, 1)
 	}
 
-	loadinternal("runtime")
+	if Thearch.Thechar != 'V' {
+		// FIXME: restore this call when we are ready to link in the runtime.
+		loadinternal("runtime")
+	}
 	if Thearch.Thechar == '5' {
 		loadinternal("math")
 	}
