@@ -32,9 +32,10 @@ var progmap = map[obj.As]obj.ProgInfo{
 	obj.ANOP: {Flags: gc.LeftRead | gc.RightWrite},
 
 	// RISCV instructions
-	riscv.ALD:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
-	riscv.ASD:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
-	riscv.AMOV: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.ALD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.ASD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOV:   {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.ASCALL: {Flags: gc.OK},
 }
 
 func proginfo(p *obj.Prog) {

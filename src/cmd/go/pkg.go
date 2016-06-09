@@ -856,6 +856,9 @@ func (p *Package) load(stk *importStack, bp *build.Package, err error) *Package 
 	// Everything depends on runtime, except runtime, its internal
 	// subpackages, and unsafe.
 	if !p.Standard || (p.ImportPath != "runtime" && !strings.HasPrefix(p.ImportPath, "runtime/internal/") && p.ImportPath != "unsafe") {
+		if goarch == "riscv" {
+			goto SkipRuntime
+		}
 		importPaths = append(importPaths, "runtime")
 		// When race detection enabled everything depends on runtime/race.
 		// Exclude certain packages to avoid circular dependencies.
@@ -871,6 +874,7 @@ func (p *Package) load(stk *importStack, bp *build.Package, err error) *Package 
 			importPaths = append(importPaths, "math")
 		}
 	}
+SkipRuntime:
 
 	// Runtime and its internal packages depend on runtime/internal/sys,
 	// so that they pick up the generated zversion.go file.

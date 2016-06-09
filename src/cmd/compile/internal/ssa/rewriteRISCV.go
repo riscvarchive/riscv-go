@@ -96,6 +96,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpEq8(v, config)
 	case OpEqPtr:
 		return rewriteValueRISCV_OpEqPtr(v, config)
+	case OpExitProc:
+		return rewriteValueRISCV_OpExitProc(v, config)
 	case OpGeq16:
 		return rewriteValueRISCV_OpGeq16(v, config)
 	case OpGeq16U:
@@ -1113,6 +1115,22 @@ func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
 		v.reset(OpRISCVADD)
 		v.AddArg(x)
 		v.AddArg(y)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpExitProc(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ExitProc [rc] mem)
+	// cond:
+	// result: (LoweredExitProc [rc] mem)
+	for {
+		rc := v.AuxInt
+		mem := v.Args[0]
+		v.reset(OpRISCVLoweredExitProc)
+		v.AuxInt = rc
+		v.AddArg(mem)
 		return true
 	}
 	return false

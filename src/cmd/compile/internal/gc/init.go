@@ -4,6 +4,8 @@
 
 package gc
 
+import "log"
+
 //	case OADD:
 //		if(n->right->op == OLITERAL) {
 //			v = n->right->vconst;
@@ -89,6 +91,10 @@ func anyinit(n []*Node) bool {
 }
 
 func fninit(n []*Node) {
+	if Thearch.Thestring == "riscv" {
+		log.Println("TODO: init function needs function calls")
+		return
+	}
 	if Debug['A'] != 0 {
 		// sys.go or unsafe.go during compiler build
 		return

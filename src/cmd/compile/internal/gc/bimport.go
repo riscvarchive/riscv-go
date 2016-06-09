@@ -670,7 +670,7 @@ func (p *importer) node() *Node {
 		n.Right = p.node()
 
 	case OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC,
-		ORECOVER, OPRINT, OPRINTN:
+		ORECOVER, OPRINT, OPRINTN, ORISCVEXIT:
 		n.Left, _ = p.nodesOrNil()
 		n.List.Set(p.nodeList())
 		n.Isddd = p.bool()

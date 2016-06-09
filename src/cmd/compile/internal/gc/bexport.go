@@ -905,7 +905,7 @@ func (p *exporter) node(n *Node) {
 		p.node(n.Right)
 
 	case OREAL, OIMAG, OAPPEND, OCAP, OCLOSE, ODELETE, OLEN, OMAKE, ONEW, OPANIC,
-		ORECOVER, OPRINT, OPRINTN:
+		ORECOVER, OPRINT, OPRINTN, ORISCVEXIT:
 		p.nodesOrNil(n.Left, nil)
 		p.nodeList(n.List)
 		p.bool(n.Isddd)

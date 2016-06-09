@@ -27,6 +27,13 @@ const (
 	BlockAMD64ORD
 	BlockAMD64NAN
 
+	BlockRISCVEQ
+	BlockRISCVNE
+	BlockRISCVLT
+	BlockRISCVGE
+	BlockRISCVLTU
+	BlockRISCVGEU
+
 	BlockPlain
 	BlockIf
 	BlockCall
@@ -37,13 +44,6 @@ const (
 	BlockExit
 	BlockFirst
 	BlockDead
-
-	BlockRISCVEQ
-	BlockRISCVNE
-	BlockRISCVLT
-	BlockRISCVGE
-	BlockRISCVLTU
-	BlockRISCVGEU
 )
 
 var blockString = [...]string{
@@ -64,6 +64,13 @@ var blockString = [...]string{
 	BlockAMD64ORD: "ORD",
 	BlockAMD64NAN: "NAN",
 
+	BlockRISCVEQ:  "EQ",
+	BlockRISCVNE:  "NE",
+	BlockRISCVLT:  "LT",
+	BlockRISCVGE:  "GE",
+	BlockRISCVLTU: "LTU",
+	BlockRISCVGEU: "GEU",
+
 	BlockPlain:  "Plain",
 	BlockIf:     "If",
 	BlockCall:   "Call",
@@ -74,13 +81,6 @@ var blockString = [...]string{
 	BlockExit:   "Exit",
 	BlockFirst:  "First",
 	BlockDead:   "Dead",
-
-	BlockRISCVEQ:  "EQ",
-	BlockRISCVNE:  "NE",
-	BlockRISCVLT:  "LT",
-	BlockRISCVGE:  "GE",
-	BlockRISCVLTU: "LTU",
-	BlockRISCVGEU: "GEU",
 }
 
 func (k BlockKind) String() string { return blockString[k] }
@@ -326,6 +326,13 @@ const (
 	OpAMD64FlagLT_UGT
 	OpAMD64FlagGT_UGT
 	OpAMD64FlagGT_ULT
+
+	OpRISCVADD
+	OpRISCVMOVmem
+	OpRISCVMOVload
+	OpRISCVMOVstore
+	OpRISCVLoweredNilCheck
+	OpRISCVLoweredExitProc
 
 	OpAdd8
 	OpAdd16
@@ -600,12 +607,7 @@ const (
 	OpVarDef
 	OpVarKill
 	OpVarLive
-
-	OpRISCVADD
-	OpRISCVMOVmem
-	OpRISCVMOVload
-	OpRISCVMOVstore
-	OpRISCVLoweredNilCheck
+	OpExitProc
 )
 
 var opcodeTable = [...]opInfo{
@@ -3982,6 +3984,82 @@ var opcodeTable = [...]opInfo{
 	},
 
 	{
+		name:         "ADD",
+		argLen:       2,
+		commutative:  true,
+		resultInArg0: true,
+		asm:          riscv.AADD,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "MOVmem",
+		auxType: auxSymOff,
+		argLen:  1,
+		asm:     riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "MOVload",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "MOVstore",
+		auxType: auxSymOff,
+		argLen:  3,
+		asm:     riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:   "LoweredNilCheck",
+		argLen: 2,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+			outputs: []regMask{
+				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
+			},
+		},
+	},
+	{
+		name:    "LoweredExitProc",
+		auxType: auxInt64,
+		argLen:  1,
+		reg:     regInfo{},
+	},
+
+	{
 		name:        "Add8",
 		argLen:      2,
 		commutative: true,
@@ -5405,75 +5483,11 @@ var opcodeTable = [...]opInfo{
 		argLen:  1,
 		generic: true,
 	},
-
 	{
-		name:         "ADD",
-		argLen:       2,
-		commutative:  true,
-		resultInArg0: true,
-		asm:          riscv.AADD,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-			outputs: []regMask{
-				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-		},
-	},
-	{
-		name:    "MOVmem",
-		auxType: auxSymOff,
+		name:    "ExitProc",
+		auxType: auxInt64,
 		argLen:  1,
-		asm:     riscv.AMOV,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-			outputs: []regMask{
-				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-		},
-	},
-	{
-		name:    "MOVload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOV,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-			outputs: []regMask{
-				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-		},
-	},
-	{
-		name:    "MOVstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOV,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-			outputs: []regMask{
-				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-		},
-	},
-	{
-		name:   "LoweredNilCheck",
-		argLen: 2,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 4294967295}, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-			outputs: []regMask{
-				4294967295, // .ZERO .RA .SP .GP .TP .T0 .T1 .T2 .S0 .SB .A0 .A1 .A2 .A3 .A4 .A5 .A6 .A7 .RT1 .RT2 .CTXT .G .S6 .S7 .S8 .S9 .S10 .S11 .T3 .T4 .T5 .T6
-			},
-		},
+		generic: true,
 	},
 }
 
