@@ -71,7 +71,7 @@ func loadByType(t ssa.Type) obj.As {
 
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
 func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {
-	log.Printf("ssaMarkMoves")
+	log.Printf("TODO: ssaMarkMoves")
 }
 
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
@@ -145,6 +145,21 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.AddAux(&p.To, v)
 	case ssa.OpRISCVLoweredNilCheck:
 		log.Printf("TODO: LoweredNilCheck")
+	case ssa.OpRISCVLoweredExitProc:
+		// MOV rc, A0
+		p := gc.Prog(riscv.AMOV)
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = v.AuxInt
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_A0
+		// MOV $SYS_EXIT_GROUP, A7
+		p = gc.Prog(riscv.AMOV)
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = 94 // SYS_EXIT_GROUP
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_A7
+		// SCALL
+		p = gc.Prog(riscv.ASCALL)
 	default:
 		log.Printf("Unhandled op %v", v.Op)
 	}

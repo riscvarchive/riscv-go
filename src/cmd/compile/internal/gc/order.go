@@ -495,6 +495,7 @@ func orderstmt(n *Node, order *Order) {
 		OCOPY,
 		OPRINT,
 		OPRINTN,
+		ORISCVEXIT,
 		ORECOVER,
 		ORECV:
 		t := marktemp(order)

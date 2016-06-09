@@ -182,6 +182,7 @@ func walkstmt(n *Node) *Node {
 		OPANIC,
 		OEMPTY,
 		ORECOVER,
+		ORISCVEXIT,
 		OGETG:
 		if n.Typecheck == 0 {
 			Fatalf("missing typecheck: %v", Nconv(n, FmtSign))
@@ -633,6 +634,10 @@ opswitch:
 	case OPRINT, OPRINTN:
 		walkexprlist(n.List.Slice(), init)
 		n = walkprint(n, init)
+
+	case ORISCVEXIT:
+		walkexprlist(n.List.Slice(), init)
+		// leave otherwise unaltered for backend to implement
 
 	case OPANIC:
 		n = mkcall("gopanic", nil, init, n.Left)

@@ -454,6 +454,7 @@ const (
 	OpRISCVMOVload
 	OpRISCVMOVstore
 	OpRISCVLoweredNilCheck
+	OpRISCVLoweredExitProc
 
 	OpAdd8
 	OpAdd16
@@ -757,6 +758,7 @@ const (
 	OpCvt64Fto32U
 	OpSelect0
 	OpSelect1
+	OpExitProc
 )
 
 var opcodeTable = [...]opInfo{
@@ -5470,6 +5472,12 @@ var opcodeTable = [...]opInfo{
 			},
 		},
 	},
+	{
+		name:    "LoweredExitProc",
+		auxType: auxInt64,
+		argLen:  1,
+		reg:     regInfo{},
+	},
 
 	{
 		name:        "Add8",
@@ -7040,6 +7048,12 @@ var opcodeTable = [...]opInfo{
 	},
 	{
 		name:    "Select1",
+		argLen:  1,
+		generic: true,
+	},
+	{
+		name:    "ExitProc",
+		auxType: auxInt64,
 		argLen:  1,
 		generic: true,
 	},

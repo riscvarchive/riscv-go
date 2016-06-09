@@ -1865,6 +1865,36 @@ OpSwitch:
 
 		break OpSwitch
 
+	case ORISCVEXIT:
+		ok |= Etop
+		if n.List.Len() != 1 {
+			Yyerror("wrong number of args to riscvexit")
+			break OpSwitch
+		}
+		rc := n.List.First()
+		rc = typecheck(rc, Erv)
+
+		// For the moment, require riscvexit to take a constant.
+		// Once we can lower and handle constants,
+		// remove this and enable the code below to only
+		// require an integer.
+		// Will also have to change ssa.OpExitProc from using
+		// an auxint to two args.
+		if !Isconst(rc, CTINT) {
+			Yyerror("argument to riscvexit must be constant int, got %v", rc.Type)
+			break OpSwitch
+		}
+		evconst(rc)
+
+		// if t := rc.Type; !Isint[t.Etype] && t.Etype != TIDEAL {
+		// 	Yyerror("non-integer argument to exit: %v", t)
+		// 	break OpSwitch
+		// }
+		// defaultlit(&rc, Types[TINT])
+
+		n.List.Slice()[0] = rc
+		break OpSwitch
+
 	case OPANIC:
 		ok |= Etop
 		if !onearg(n, "panic") {

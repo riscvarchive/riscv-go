@@ -125,6 +125,15 @@ func Ldmain() {
 	obj.Flagparse(usage)
 
 	startProfile()
+	// temporarily disable symbol table on risc-v,
+	// because we can't/don't build the runtime yet.
+	if SysArch.Family == sys.RISCV {
+		// FIXME: restore default flags when RISC-V has an _rt0 function and can link the runtime
+		Debug['s'] = 1 - Debug['s'] // invert symbol table flag
+		if INITENTRY == "" {
+			INITENTRY = "main.main"
+		}
+	}
 	Ctxt.Bso = Bso
 	Ctxt.Debugvlog = int32(Debug['v'])
 	if flagShared != 0 {
@@ -201,7 +210,9 @@ func Ldmain() {
 	if HEADTYPE == obj.Hdarwin {
 		domacho()
 	}
-	dostkcheck()
+	if SysArch.Family != sys.RISCV {
+		dostkcheck()
+	}
 	if HEADTYPE == obj.Hwindows {
 		dope()
 	}

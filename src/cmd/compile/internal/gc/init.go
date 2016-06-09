@@ -4,6 +4,11 @@
 
 package gc
 
+import (
+	"cmd/internal/sys"
+	"log"
+)
+
 //	case OADD:
 //		if(n->right->op == OLITERAL) {
 //			v = n->right->vconst;
@@ -88,6 +93,11 @@ func anyinit(n []*Node) bool {
 }
 
 func fninit(n []*Node) {
+	if Thearch.LinkArch.Family == sys.RISCV {
+		// FIXME: remove once we can compile function calls (and other components of init functions)
+		log.Println("TODO: init function needs function calls")
+		return
+	}
 	if Debug['A'] != 0 {
 		// sys.go or unsafe.go during compiler build
 		return
