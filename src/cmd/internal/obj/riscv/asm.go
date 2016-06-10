@@ -513,7 +513,7 @@ func instr_u(p *obj.Prog) uint32 {
 }
 
 func instr_uj(p *obj.Prog) uint32 {
-	imm := immi(p, p.To, 21)
+	imm := immi(p, p.To, 20)
 	rd := regi(p, p.From)
 	i, ok := encode(p.As)
 	if !ok {
