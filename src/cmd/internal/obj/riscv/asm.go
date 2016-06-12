@@ -217,8 +217,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				}
 				p.As = AADDI
 				*p.From3 = p.From
-				p.From.Type = obj.TYPE_CONST
-				p.From.Offset = 0
+				p.From = obj.Addr{Type: obj.TYPE_CONST}
 			case obj.TYPE_MEM: // MOV Rs, c(Rd) -> S $c, Rs, Rd
 				switch p.As {
 				case AMOVBU, AMOVHU, AMOVWU:
