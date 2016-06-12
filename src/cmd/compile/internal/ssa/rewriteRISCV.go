@@ -42,6 +42,18 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpCom64(v, config)
 	case OpCom8:
 		return rewriteValueRISCV_OpCom8(v, config)
+	case OpConst16:
+		return rewriteValueRISCV_OpConst16(v, config)
+	case OpConst32:
+		return rewriteValueRISCV_OpConst32(v, config)
+	case OpConst64:
+		return rewriteValueRISCV_OpConst64(v, config)
+	case OpConst8:
+		return rewriteValueRISCV_OpConst8(v, config)
+	case OpConstBool:
+		return rewriteValueRISCV_OpConstBool(v, config)
+	case OpConstNil:
+		return rewriteValueRISCV_OpConstNil(v, config)
 	case OpCvt32Fto32:
 		return rewriteValueRISCV_OpCvt32Fto32(v, config)
 	case OpCvt32Fto64:
@@ -672,6 +684,83 @@ func rewriteValueRISCV_OpCom8(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpConst16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const16 [val])
+	// cond:
+	// result: (MOVWconst [val])
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVMOVWconst)
+		v.AuxInt = val
+		return true
+	}
+}
+func rewriteValueRISCV_OpConst32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const32 [val])
+	// cond:
+	// result: (MOVLconst [val])
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVMOVLconst)
+		v.AuxInt = val
+		return true
+	}
+}
+func rewriteValueRISCV_OpConst64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const64 [val])
+	// cond:
+	// result: (MOVQconst [val])
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVMOVQconst)
+		v.AuxInt = val
+		return true
+	}
+}
+func rewriteValueRISCV_OpConst8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const8 [val])
+	// cond:
+	// result: (MOVBconst [val])
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVMOVBconst)
+		v.AuxInt = val
+		return true
+	}
+}
+func rewriteValueRISCV_OpConstBool(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ConstBool [b])
+	// cond:
+	// result: (MOVBconst [b])
+	for {
+		b := v.AuxInt
+		v.reset(OpRISCVMOVBconst)
+		v.AuxInt = b
+		return true
+	}
+}
+func rewriteValueRISCV_OpConstNil(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ConstNil)
+	// cond:
+	// result: (MOVQconst [0])
+	for {
+		v.reset(OpRISCVMOVQconst)
+		v.AuxInt = 0
+		return true
+	}
+}
 func rewriteValueRISCV_OpCvt32Fto32(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -1070,14 +1159,14 @@ func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpExitProc(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (ExitProc [rc] mem)
+	// match: (ExitProc rc mem)
 	// cond:
-	// result: (LoweredExitProc [rc] mem)
+	// result: (LoweredExitProc rc mem)
 	for {
-		rc := v.AuxInt
-		mem := v.Args[0]
+		rc := v.Args[0]
+		mem := v.Args[1]
 		v.reset(OpRISCVLoweredExitProc)
-		v.AuxInt = rc
+		v.AddArg(rc)
 		v.AddArg(mem)
 		return true
 	}

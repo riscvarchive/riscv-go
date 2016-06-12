@@ -443,7 +443,7 @@ var genericOps = []opData{
 	{name: "Select1", argLength: 1}, // the second component of a tuple
 
 	// riscv bootstrapping
-	{name: "ExitProc", argLength: 1, aux: "Int64", typ: "Mem"}, // risc-v bootstrapping only: insert process exit syscall, auxint=return code, arg0=memory
+	{name: "ExitProc", argLength: 2, typ: "Mem"}, // risc-v bootstrapping only: insert process exit syscall, auxint=return code, arg0=memory
 }
 
 //     kind           control    successors       implicit exit
