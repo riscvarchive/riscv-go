@@ -110,7 +110,7 @@ const (
 	REG_ZERO = REG_X0
 	REG_RA   = REG_X1
 	REG_SP   = REG_X2
-	REG_GP   = REG_X3
+	REG_GP   = REG_X3 // TODO: Is it worth giving GP a special name? Why/when do we use GP vs SB?
 	REG_TP   = REG_X4
 	REG_T0   = REG_X5
 	REG_T1   = REG_X6

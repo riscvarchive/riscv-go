@@ -957,7 +957,8 @@ func (s *state) stmt(n *Node) {
 		s.nilCheck(p)
 
 	case ORISCVEXIT:
-		s.vars[&memVar] = s.newValue1I(ssa.OpExitProc, ssa.TypeMem, n.List.First().Int(), s.mem())
+		a := s.expr(n.List.First())
+		s.vars[&memVar] = s.newValue2(ssa.OpExitProc, ssa.TypeMem, a, s.mem())
 		s.exit()
 
 	default:
