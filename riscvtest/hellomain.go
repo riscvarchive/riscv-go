@@ -1,5 +1,6 @@
 package main
 
 func main() {
-	riscvexit(42)
+	rc := 42
+	riscvexit(rc)
 }
