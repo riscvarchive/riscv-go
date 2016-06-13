@@ -302,19 +302,25 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		return
 	}
 	stacksize := text.To.Offset
-	// Insert stack adjustment.  Do not overwrite the TEXT directive itself;
+	// Insert stack adjustment if necessary.
+	// Do not overwrite the TEXT directive itself;
 	// other parts of the assembler assume it's there.
-	spadj := obj.Appendp(ctxt, text)
-	spadj.As = AADDI
-	spadj.From.Type = obj.TYPE_CONST
-	spadj.From.Offset = -stacksize
-	spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-	spadj.To.Type = obj.TYPE_REG
-	spadj.To.Reg = REG_SP
-	spadj.Spadj = int32(-stacksize)
-	// Do, however, skip over the TEXT directive when generating assembly.
-	// (It's not a valid RISC-V instruction, after all.)
-	cursym.Text = spadj
+	if stacksize != 0 {
+		spadj := obj.Appendp(ctxt, text)
+		spadj.As = AADDI
+		spadj.From.Type = obj.TYPE_CONST
+		spadj.From.Offset = -stacksize
+		spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+		spadj.To.Type = obj.TYPE_REG
+		spadj.To.Reg = REG_SP
+		spadj.Spadj = int32(-stacksize)
+		// Do, however, skip over the TEXT directive when generating assembly.
+		// (It's not a valid RISC-V instruction, after all.)
+		cursym.Text = spadj
+	} else {
+		// Skip over TEXT.
+		cursym.Text = text.Link
+	}
 
 	// Delete unneeded instructions.
 	var prev *obj.Prog
@@ -334,15 +340,17 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Replace RET with epilogue.
 	for p := cursym.Text; p != nil; p = p.Link {
 		if p.As == obj.ARET {
-			p.As = AADDI
-			p.From.Type = obj.TYPE_CONST
-			p.From.Offset = stacksize
-			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-			p.To.Type = obj.TYPE_REG
-			p.To.Reg = REG_SP
-			p.Spadj = int32(stacksize)
+			if stacksize != 0 {
+				p.As = AADDI
+				p.From.Type = obj.TYPE_CONST
+				p.From.Offset = stacksize
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+				p.To.Type = obj.TYPE_REG
+				p.To.Reg = REG_SP
+				p.Spadj = int32(stacksize)
+				p = obj.Appendp(ctxt, p)
+			}
 
-			p = obj.Appendp(ctxt, p)
 			p.As = AJALR
 			p.From.Type = obj.TYPE_CONST
 			p.From.Offset = 0
