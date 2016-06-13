@@ -229,9 +229,10 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				// register in p.To.  The data register goes in
 				// p.From3.
 				p.From, *p.From3 = p.To, p.From
-				p.From.Type = obj.TYPE_CONST
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
 				p.From3.Type = obj.TYPE_REG
 				p.To.Type = obj.TYPE_REG
+				p.To.Offset = 0
 			default:
 				ctxt.Diag("progedit: unsupported MOV at %v", p)
 			}
@@ -242,6 +243,21 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AADDI
 			p.From3.Type = obj.TYPE_REG
 			p.From3.Reg = REG_ZERO
+		case obj.TYPE_ADDR: // MOV $sym+off(SP/SB), R
+			if p.To.Type != obj.TYPE_REG || p.As != AMOV {
+				ctxt.Diag("progedit: unsupported addr MOV at %v", p)
+			}
+			p.As = AADDI
+			p.From3.Type = obj.TYPE_REG
+			p.From.Type = obj.TYPE_CONST
+			switch p.From.Name {
+			case obj.NAME_EXTERN:
+				p.From3.Reg = REG_SB
+			case obj.NAME_PARAM, obj.NAME_AUTO:
+				p.From3.Reg = REG_SP
+			default:
+				ctxt.Diag("progedit: bad addr MOV from name %v at %v", p.From.Name, p)
+			}
 		default:
 			ctxt.Diag("progedit: unsupported MOV at %v", p)
 		}
@@ -416,7 +432,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 // regival validates an integer register.
 func regival(r int16) uint32 {
 	if r < REG_X0 || REG_X31 < r {
-		panic("register out of range")
+		panic(fmt.Sprintf("register out of range, want %d < %d < %d", REG_X0, r, REG_X31))
 	}
 	return uint32(r - obj.RBaseRISCV)
 }
