@@ -130,11 +130,33 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVMOVmem:
 		p := gc.Prog(v.Op.Asm())
-		p.From.Type = obj.TYPE_MEM
-		p.From.Reg = gc.SSARegNum(v.Args[0])
-		gc.AddAux(&p.From, v)
+		p.From.Type = obj.TYPE_ADDR
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
+
+		var wantreg string
+		// MOVW $sym+off(base), R
+		switch v.Aux.(type) {
+		default:
+			v.Fatalf("aux is of unknown type %T", v.Aux)
+		case *ssa.ExternSymbol:
+			wantreg = "SB"
+			gc.AddAux(&p.From, v)
+		case *ssa.ArgSymbol, *ssa.AutoSymbol:
+			wantreg = "SP"
+			gc.AddAux(&p.From, v)
+		case nil:
+			// No sym, just MOVW $off(SP), R
+			wantreg = "SP"
+			p.From.Reg = riscv.REG_SP
+			p.From.Offset = v.AuxInt
+		}
+		// TODO: once a version of dev.ssa is merged that contains gc.SSAReg,
+		// uncomment this check.
+		// if reg := gc.SSAReg(v.Args[0]); reg.Name() != wantreg {
+		// 	v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
+		// }
+		_ = wantreg
 	case ssa.OpRISCVMOVload:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
