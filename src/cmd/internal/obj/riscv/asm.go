@@ -264,7 +264,7 @@ func follow(ctxt *obj.Link, s *obj.LSym) {}
 func setpcs(p *obj.Prog, pc int64) {
 	for ; p != nil; p = p.Link {
 		p.Pc = pc
-		if p.As != obj.ATEXT { // if this is a real instruction
+		if p.As != obj.ATEXT && p.As != obj.ANOP { // if this is a real instruction
 			pc += 4
 		}
 	}
@@ -293,7 +293,7 @@ func invbr(i obj.As) obj.As {
 // preprocess is called once for each linker symbol.  It generates prologue and
 // epilogue code and computes PC-relative branch and jump offsets.  By the time
 // preprocess finishes, all instructions in the symbol are concrete, real RISC-V
-// instructions.
+// instructions or ANOPs.
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Generate the prologue.
 	text := cursym.Text
@@ -304,17 +304,29 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	stacksize := text.To.Offset
 	// Insert stack adjustment.  Do not overwrite the TEXT directive itself;
 	// other parts of the assembler assume it's there.
-	spadj := obj.Appendp(ctxt, text)
-	spadj.As = AADDI
-	spadj.From.Type = obj.TYPE_CONST
-	spadj.From.Offset = -stacksize
-	spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-	spadj.To.Type = obj.TYPE_REG
-	spadj.To.Reg = REG_SP
-	spadj.Spadj = int32(-stacksize)
-	// Do, however, skip over the TEXT directive when generating assembly.
-	// (It's not a valid RISC-V instruction, after all.)
-	cursym.Text = spadj
+	// If the stack adjustment is zero, instead insert a fake stack adjustment
+	// for stkcheck.
+	if stacksize != 0 {
+		spadj := obj.Appendp(ctxt, text)
+		spadj.As = AADDI
+		spadj.From.Type = obj.TYPE_CONST
+		spadj.From.Offset = -stacksize
+		spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+		spadj.To.Type = obj.TYPE_REG
+		spadj.To.Reg = REG_SP
+		spadj.Spadj = int32(-stacksize)
+		// Do, however, skip over the TEXT directive when generating assembly.
+		// (It's not a valid RISC-V instruction, after all.)
+		cursym.Text = spadj
+	} else {
+		fakeneg := obj.Appendp(ctxt, text)
+		fakeneg.As = obj.ANOP
+		fakeneg.Spadj = int32(-ctxt.Arch.Ptrsize)
+		fakepos := obj.Appendp(ctxt, fakeneg)
+		fakepos.As = obj.ANOP
+		fakepos.Spadj = int32(ctxt.Arch.Ptrsize)
+		cursym.Text = fakeneg
+	}
 
 	// Delete unneeded instructions.
 	var prev *obj.Prog
@@ -334,15 +346,17 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Replace RET with epilogue.
 	for p := cursym.Text; p != nil; p = p.Link {
 		if p.As == obj.ARET {
-			p.As = AADDI
-			p.From.Type = obj.TYPE_CONST
-			p.From.Offset = stacksize
-			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-			p.To.Type = obj.TYPE_REG
-			p.To.Reg = REG_SP
-			p.Spadj = int32(stacksize)
+			if stacksize != 0 {
+				p.As = AADDI
+				p.From.Type = obj.TYPE_CONST
+				p.From.Offset = stacksize
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+				p.To.Type = obj.TYPE_REG
+				p.To.Reg = REG_SP
+				p.Spadj = int32(stacksize)
+				p = obj.Appendp(ctxt, p)
+			}
 
-			p = obj.Appendp(ctxt, p)
 			p.As = AJALR
 			p.From.Type = obj.TYPE_CONST
 			p.From.Offset = 0
@@ -552,6 +566,9 @@ func asmout(p *obj.Prog) uint32 {
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	var symcode []uint32 // machine code for this symbol
 	for p := cursym.Text; p != nil; p = p.Link {
+		if p.As == obj.ANOP {
+			continue
+		}
 		symcode = append(symcode, asmout(p))
 	}
 	cursym.Size = int64(4 * len(symcode))
