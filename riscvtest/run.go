@@ -13,6 +13,7 @@ var tests = [...]struct {
 	want int
 }{
 	{name: "hellomain", want: 42},
+	{name: "loadstore", want: 0},
 }
 
 func main() {
