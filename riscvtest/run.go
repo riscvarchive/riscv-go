@@ -14,6 +14,7 @@ var tests = [...]struct {
 }{
 	{name: "hellomain", want: 42},
 	{name: "loadstore", want: 0},
+	{name: "add", want: 12},
 }
 
 func main() {

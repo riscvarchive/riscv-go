@@ -207,7 +207,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			}
 			p.As = movtol(p.As)
 			*p.From3 = p.From
-			p.From.Type = obj.TYPE_CONST
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
 			p.From3.Type = obj.TYPE_REG
 		case obj.TYPE_REG:
 			switch p.To.Type {
