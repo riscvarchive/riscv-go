@@ -122,6 +122,13 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r
+	case ssa.OpRISCVADDconst:
+		p := gc.Prog(v.Op.Asm())
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = v.AuxInt
+		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: gc.SSARegNum(v.Args[0])}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVMOVBconst, ssa.OpRISCVMOVWconst, ssa.OpRISCVMOVLconst, ssa.OpRISCVMOVQconst:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST

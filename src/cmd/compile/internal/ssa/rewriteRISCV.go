@@ -296,6 +296,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpNeqPtr(v, config)
 	case OpNilCheck:
 		return rewriteValueRISCV_OpNilCheck(v, config)
+	case OpOffPtr:
+		return rewriteValueRISCV_OpOffPtr(v, config)
 	case OpOr16:
 		return rewriteValueRISCV_OpOr16(v, config)
 	case OpOr32:
@@ -418,6 +420,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpXor64(v, config)
 	case OpXor8:
 		return rewriteValueRISCV_OpXor8(v, config)
+	case OpZero:
+		return rewriteValueRISCV_OpZero(v, config)
 	case OpZeroExt16to32:
 		return rewriteValueRISCV_OpZeroExt16to32(v, config)
 	case OpZeroExt16to64:
@@ -2560,6 +2564,21 @@ func rewriteValueRISCV_OpNilCheck(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpOffPtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (OffPtr [off] ptr)
+	// cond:
+	// result: (ADDconst [off] ptr)
+	for {
+		off := v.AuxInt
+		ptr := v.Args[0]
+		v.reset(OpRISCVADDconst)
+		v.AuxInt = off
+		v.AddArg(ptr)
+		return true
+	}
+}
 func rewriteValueRISCV_OpOr16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -3463,6 +3482,92 @@ func rewriteValueRISCV_OpXor8(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
+}
+func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Zero [0] _ mem)
+	// cond:
+	// result: mem
+	for {
+		if v.AuxInt != 0 {
+			break
+		}
+		mem := v.Args[1]
+		v.reset(OpCopy)
+		v.Type = mem.Type
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Zero [1] ptr mem)
+	// cond:
+	// result: (MOVstore ptr (MOVBconst [0]) mem)
+	for {
+		if v.AuxInt != 1 {
+			break
+		}
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVMOVstore)
+		v.AddArg(ptr)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVBconst, config.fe.TypeUInt8())
+		v0.AuxInt = 0
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Zero [2] ptr mem)
+	// cond:
+	// result: (MOVstore ptr (MOVWconst [0]) mem)
+	for {
+		if v.AuxInt != 2 {
+			break
+		}
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVMOVstore)
+		v.AddArg(ptr)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVWconst, config.fe.TypeUInt16())
+		v0.AuxInt = 0
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Zero [4] ptr mem)
+	// cond:
+	// result: (MOVstore ptr (MOVLconst [0]) mem)
+	for {
+		if v.AuxInt != 4 {
+			break
+		}
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVMOVstore)
+		v.AddArg(ptr)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVLconst, config.fe.TypeUInt32())
+		v0.AuxInt = 0
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Zero [8] ptr mem)
+	// cond:
+	// result: (MOVstore ptr (MOVQconst [0]) mem)
+	for {
+		if v.AuxInt != 8 {
+			break
+		}
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVMOVstore)
+		v.AddArg(ptr)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
+		v0.AuxInt = 0
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	return false
 }
 func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
 	b := v.Block
