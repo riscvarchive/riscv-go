@@ -13,11 +13,11 @@
 (Add32F x y) -> (ADD x y)
 (Add64F x y) -> (ADD x y)
 
-(Sub64 x y) -> (ADD x y)
-(SubPtr x y) -> (ADD x y)
-(Sub32 x y) -> (ADD x y)
-(Sub16 x y) -> (ADD x y)
-(Sub8 x y) -> (ADD x y)
+(Sub64 x y) -> (SUB x y)
+(SubPtr x y) -> (SUB x y)
+(Sub32 x y) -> (SUB x y)
+(Sub16 x y) -> (SUB x y)
+(Sub8 x y) -> (SUB x y)
 (Sub32F x y) -> (ADD x y)
 (Sub64F x y) -> (ADD x y)
 

@@ -3220,11 +3220,11 @@ func rewriteValueRISCV_OpSub16(v *Value, config *Config) bool {
 	_ = b
 	// match: (Sub16 x y)
 	// cond:
-	// result: (ADD x y)
+	// result: (SUB x y)
 	for {
 		x := v.Args[0]
 		y := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVSUB)
 		v.AddArg(x)
 		v.AddArg(y)
 		return true
@@ -3235,11 +3235,11 @@ func rewriteValueRISCV_OpSub32(v *Value, config *Config) bool {
 	_ = b
 	// match: (Sub32 x y)
 	// cond:
-	// result: (ADD x y)
+	// result: (SUB x y)
 	for {
 		x := v.Args[0]
 		y := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVSUB)
 		v.AddArg(x)
 		v.AddArg(y)
 		return true
@@ -3265,11 +3265,11 @@ func rewriteValueRISCV_OpSub64(v *Value, config *Config) bool {
 	_ = b
 	// match: (Sub64 x y)
 	// cond:
-	// result: (ADD x y)
+	// result: (SUB x y)
 	for {
 		x := v.Args[0]
 		y := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVSUB)
 		v.AddArg(x)
 		v.AddArg(y)
 		return true
@@ -3295,11 +3295,11 @@ func rewriteValueRISCV_OpSub8(v *Value, config *Config) bool {
 	_ = b
 	// match: (Sub8 x y)
 	// cond:
-	// result: (ADD x y)
+	// result: (SUB x y)
 	for {
 		x := v.Args[0]
 		y := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVSUB)
 		v.AddArg(x)
 		v.AddArg(y)
 		return true
@@ -3310,11 +3310,11 @@ func rewriteValueRISCV_OpSubPtr(v *Value, config *Config) bool {
 	_ = b
 	// match: (SubPtr x y)
 	// cond:
-	// result: (ADD x y)
+	// result: (SUB x y)
 	for {
 		x := v.Args[0]
 		y := v.Args[1]
-		v.reset(OpRISCVADD)
+		v.reset(OpRISCVSUB)
 		v.AddArg(x)
 		v.AddArg(y)
 		return true
