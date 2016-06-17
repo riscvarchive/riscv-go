@@ -633,6 +633,7 @@ func (p *Parser) asmInstruction(op obj.As, cond string, a []obj.Addr) {
 		case sys.RISCV:
 			prog.From = a[0]
 			prog.From3 = newAddr(a[1])
+			prog.To = a[2]
 		case sys.S390X:
 			if arch.IsS390xWithLength(op) || arch.IsS390xWithIndex(op) {
 				prog.From = a[1]
