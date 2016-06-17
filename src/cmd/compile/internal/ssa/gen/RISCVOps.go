@@ -17,11 +17,11 @@ func init() {
 	// regMask for the gp and fp registers as we go.
 	for r := riscv.REG_X0; r <= riscv.REG_X31; r++ {
 		gpMask |= regMask(1) << uint(len(regNamesRISCV))
-		regNamesRISCV = append(regNamesRISCV, "."+riscv.RegNames[int16(r)])
+		regNamesRISCV = append(regNamesRISCV, riscv.RegNames[int16(r)])
 	}
 	for r := riscv.REG_F0; r <= riscv.REG_F31; r++ {
 		fpMask |= regMask(1) << uint(len(regNamesRISCV))
-		regNamesRISCV = append(regNamesRISCV, "."+riscv.RegNames[int16(r)])
+		regNamesRISCV = append(regNamesRISCV, riscv.RegNames[int16(r)])
 	}
 
 	if len(regNamesRISCV) > 64 {
@@ -54,11 +54,15 @@ func init() {
 	}
 
 	archs = append(archs, arch{
-		name:     "RISCV",
-		pkg:      "cmd/internal/obj/riscv",
-		genfile:  "../../riscv/ssa.go",
-		ops:      RISCVops,
-		blocks:   RISCVblocks,
-		regnames: regNamesRISCV,
+		name:            "RISCV",
+		pkg:             "cmd/internal/obj/riscv",
+		genfile:         "../../riscv/ssa.go",
+		ops:             RISCVops,
+		blocks:          RISCVblocks,
+		regnames:        regNamesRISCV,
+		gpregmask:       gpMask,
+		fpregmask:       fpMask,
+		flagmask:        0,  // no flags
+		framepointerreg: -1, // not used
 	})
 }

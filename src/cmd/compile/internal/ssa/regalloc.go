@@ -206,6 +206,7 @@ type regAllocState struct {
 	numRegs     register
 	SPReg       register
 	SBReg       register
+	GReg        register
 	allocatable regMask
 
 	// for each block, its primary predecessor.
@@ -438,28 +439,56 @@ func (s *regAllocState) allocValToReg(v *Value, mask regMask, nospill bool, line
 func (s *regAllocState) init(f *Func) {
 	s.f = f
 	s.registers = f.Config.registers
-	s.numRegs = register(len(s.registers))
-	if s.numRegs > noRegister || s.numRegs > register(unsafe.Sizeof(regMask(0))*8) {
-		panic("too many registers")
+	if nr := len(s.registers); nr == 0 || nr > int(noRegister) || nr > int(unsafe.Sizeof(regMask(0))*8) {
+		s.f.Fatalf("bad number of registers: %d", nr)
+	} else {
+		s.numRegs = register(nr)
 	}
+	// Locate SP, SB, and g registers.
+	s.SPReg = noRegister
+	s.SBReg = noRegister
+	s.GReg = noRegister
 	for r := register(0); r < s.numRegs; r++ {
-		if s.registers[r].Name() == "SP" {
+		switch s.registers[r].Name() {
+		case "SP":
 			s.SPReg = r
-		}
-		if s.registers[r].Name() == "SB" {
+		case "SB":
 			s.SBReg = r
+		case "g":
+			s.GReg = r
+		}
+	}
+	// Make sure we found all required registers.
+	switch noRegister {
+	case s.SPReg:
+		s.f.Fatalf("no SP register found")
+	case s.SBReg:
+		s.f.Fatalf("no SB register found")
+	case s.GReg:
+		if f.Config.hasGReg {
+			s.f.Fatalf("no g register found")
 		}
 	}
 
 	// Figure out which registers we're allowed to use.
-	s.allocatable = regMask(1)<<s.numRegs - 1
+	s.allocatable = s.f.Config.gpRegMask | s.f.Config.fpRegMask | s.f.Config.flagRegMask
 	s.allocatable &^= 1 << s.SPReg
 	s.allocatable &^= 1 << s.SBReg
-	if s.f.Config.ctxt.Framepointer_enabled {
-		s.allocatable &^= 1 << 5 // BP
+	if s.f.Config.hasGReg {
+		s.allocatable &^= 1 << s.GReg
+	}
+	if s.f.Config.ctxt.Framepointer_enabled && s.f.Config.FPReg >= 0 {
+		s.allocatable &^= 1 << uint(s.f.Config.FPReg)
 	}
 	if s.f.Config.ctxt.Flag_dynlink {
-		s.allocatable &^= 1 << 15 // R15
+		switch s.f.Config.arch {
+		case "amd64":
+			s.allocatable &^= 1 << 15 // R15
+		case "arm":
+			s.allocatable &^= 1 << 9 // R9
+		default:
+			s.f.Config.fe.Unimplementedf(0, "arch %s not implemented", s.f.Config.arch)
+		}
 	}
 
 	s.regs = make([]regState, s.numRegs)
@@ -564,9 +593,9 @@ func (s *regAllocState) setState(regs []endReg) {
 func (s *regAllocState) compatRegs(t Type) regMask {
 	var m regMask
 	if t.IsFloat() || t == TypeInt128 {
-		m = 0xffff << 16 // X0-X15
+		m = s.f.Config.fpRegMask
 	} else {
-		m = 0xffff << 0 // AX-R15
+		m = s.f.Config.gpRegMask
 	}
 	return m & s.allocatable
 }
@@ -930,6 +959,26 @@ func (s *regAllocState) regalloc(f *Func) {
 				s.advanceUses(v)
 				continue
 			}
+			if v.Op == OpGetG && s.f.Config.hasGReg {
+				// use hardware g register
+				if s.regs[s.GReg].v != nil {
+					s.freeReg(s.GReg) // kick out the old value
+				}
+				s.assignReg(s.GReg, v, v)
+				b.Values = append(b.Values, v)
+				s.advanceUses(v)
+				// spill unconditionally, will be deleted if never used
+				spill := b.NewValue1(v.Line, OpStoreReg, v.Type, v)
+				s.setOrig(spill, v)
+				s.values[v.ID].spill = spill
+				s.values[v.ID].spillUsed = false
+				if loop != nil {
+					loop.spills = append(loop.spills, v)
+					nSpillsInner++
+				}
+				nSpills++
+				continue
+			}
 			if v.Op == OpArg {
 				// Args are "pre-spilled" values. We don't allocate
 				// any register here. We just set up the spill pointer to
@@ -1002,7 +1051,7 @@ func (s *regAllocState) regalloc(f *Func) {
 			args = append(args[:0], v.Args...)
 			for _, i := range regspec.inputs {
 				mask := i.regs
-				if mask == flagRegMask {
+				if mask == f.Config.flagRegMask {
 					// TODO: remove flag input from regspec.inputs.
 					continue
 				}

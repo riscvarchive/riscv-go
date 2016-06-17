@@ -20,6 +20,11 @@ type Config struct {
 	lowerBlock      func(*Block) bool          // lowering function
 	lowerValue      func(*Value, *Config) bool // lowering function
 	registers       []Register                 // machine registers
+	gpRegMask       regMask                    // general purpose integer register mask
+	fpRegMask       regMask                    // floating point register mask
+	flagRegMask     regMask                    // flag register mask
+	FPReg           int8                       // register number of frame pointer, -1 if not used
+	hasGReg         bool                       // has hardware g register
 	fe              Frontend                   // callbacks into compiler frontend
 	HTML            *HTMLWriter                // html writer, for debugging
 	ctxt            *obj.Link                  // Generic arch information
@@ -106,6 +111,7 @@ type Frontend interface {
 	SplitSlice(LocalSlot) (LocalSlot, LocalSlot, LocalSlot)
 	SplitComplex(LocalSlot) (LocalSlot, LocalSlot)
 	SplitStruct(LocalSlot, int) LocalSlot
+	SplitInt64(LocalSlot) (LocalSlot, LocalSlot) // returns (hi, lo)
 
 	// Line returns a string describing the given line number.
 	Line(int32) string
@@ -128,6 +134,11 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.lowerBlock = rewriteBlockAMD64
 		c.lowerValue = rewriteValueAMD64
 		c.registers = registersAMD64[:]
+		c.gpRegMask = gpRegMaskAMD64
+		c.fpRegMask = fpRegMaskAMD64
+		c.flagRegMask = flagRegMaskAMD64
+		c.FPReg = framepointerRegAMD64
+		c.hasGReg = false
 	case "386":
 		c.IntSize = 4
 		c.PtrSize = 4
@@ -139,11 +150,22 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.lowerBlock = rewriteBlockARM
 		c.lowerValue = rewriteValueARM
 		c.registers = registersARM[:]
+		c.gpRegMask = gpRegMaskARM
+		c.fpRegMask = fpRegMaskARM
+		c.flagRegMask = flagRegMaskARM
+		c.FPReg = framepointerRegARM
+		c.hasGReg = true
 	case "riscv":
 		c.IntSize = 8
 		c.PtrSize = 8
 		c.lowerBlock = rewriteBlockRISCV
 		c.lowerValue = rewriteValueRISCV
+		c.registers = registersRISCV[:]
+		c.gpRegMask = gpRegMaskRISCV
+		c.fpRegMask = fpRegMaskRISCV
+		c.flagRegMask = flagRegMaskRISCV
+		c.FPReg = framepointerRegRISCV
+		c.hasGReg = false // FIXME: flip to true once we assign and name a G register
 	default:
 		fe.Unimplementedf(0, "arch %s not implemented", arch)
 	}
