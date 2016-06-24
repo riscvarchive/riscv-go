@@ -55,9 +55,7 @@ start:
 	JALR	T1, (T0)			// 67830200
 	JALR	T1, 4(T0)			// 67834200
 
-	// TODO(bbaren): This expands to two instructions, but trying to test
-	// both does not work.  Figure out why and test the second instruction.
-	RET					// 13010100
+	RET					// 67800000
 
 	SCALL					// 73000000
 	RDCYCLE	T0				// f32200c0
@@ -68,7 +66,7 @@ start:
 	AUIPC	$0, A1 				// 97050000
 	AUIPC	$1, A0				// 17150000
 
-	LUI	$167, A5			// 000a77b7
+	LUI	$167, A5			// b7770a00
 
 	MOV	T0, T1				// 13830200
 	MOV	$2047, T0			// 9302f07f
