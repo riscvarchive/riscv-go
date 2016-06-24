@@ -110,8 +110,8 @@ const (
 	REG_ZERO = REG_X0
 	REG_RA   = REG_X1
 	REG_SP   = REG_X2
-	REG_GP   = REG_X3 // TODO: Is it worth giving GP a special name? Why/when do we use GP vs SB?
-	REG_TP   = REG_X4
+	REG_GP   = REG_X3 // aka REG_SB
+	REG_TP   = REG_X4 // aka REG_G
 	REG_T0   = REG_X5
 	REG_T1   = REG_X6
 	REG_T2   = REG_X7
@@ -141,13 +141,12 @@ const (
 	REG_T5   = REG_X30
 	REG_T6   = REG_X31
 
-	// Golang runtime register names.
-	// TODO(myenik) Revisit these mappings.
-	REG_SB   = REG_S1 // First saved register reserved for SB.
-	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy), second saved register.
-	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy), third saved register.
+	// Go runtime register names.
+	REG_SB   = REG_X3 // Static base.
+	REG_G    = REG_X4 // G pointer.
+	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy).
+	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy).
 	REG_CTXT = REG_S4 // Context for closures.
-	REG_G    = REG_S5 // G pointer.
 
 	// ABI names for floating point registers.
 	REG_FT0  = REG_F0

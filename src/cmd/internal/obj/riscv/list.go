@@ -48,14 +48,14 @@ var (
 		REG_ZERO: "ZERO",
 		REG_RA:   "RA",
 		REG_SP:   "SP",
-		REG_GP:   "GP",
-		REG_TP:   "TP",
-		REG_T0:   "T0",
-		REG_T1:   "T1",
-		REG_T2:   "T2",
-		REG_S0:   "S0",
+		// REG_GP is REG_SB
+		// REG_TP is REG_G
+		REG_T0: "T0",
+		REG_T1: "T1",
+		REG_T2: "T2",
+		REG_S0: "S0",
 		// REG_FP is REG_S0.
-		// REG_S1 is REG_SB.
+		REG_S1: "S1",
 		REG_A0: "A0",
 		REG_A1: "A1",
 		REG_A2: "A2",
@@ -67,7 +67,7 @@ var (
 		// REG_S2 is REG_RT1.
 		// REG_S3 is REG_RT2.
 		// REG_S4 is REG_CTXT.
-		// REG_S5 is REG_G.
+		REG_S5:  "S5",
 		REG_S6:  "S6",
 		REG_S7:  "S7",
 		REG_S8:  "S8",
@@ -79,12 +79,12 @@ var (
 		REG_T5:  "T5",
 		REG_T6:  "T6",
 
-		// Golang runtime register names.
+		// Go runtime register names.
 		REG_SB:   "SB",
 		REG_RT1:  "RT1",
 		REG_RT2:  "RT2",
 		REG_CTXT: "CTXT",
-		REG_G:    "G",
+		REG_G:    "g",
 
 		// ABI names for floating point registers.
 		REG_FT0:  "FT0",

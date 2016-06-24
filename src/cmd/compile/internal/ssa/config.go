@@ -165,7 +165,7 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.fpRegMask = fpRegMaskRISCV
 		c.flagRegMask = flagRegMaskRISCV
 		c.FPReg = framepointerRegRISCV
-		c.hasGReg = false // FIXME: flip to true once we assign and name a G register
+		c.hasGReg = true
 	default:
 		fe.Unimplementedf(0, "arch %s not implemented", arch)
 	}
