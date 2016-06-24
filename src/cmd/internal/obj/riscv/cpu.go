@@ -141,13 +141,12 @@ const (
 	REG_T5   = REG_X30
 	REG_T6   = REG_X31
 
-	// Golang runtime register names.
-	// TODO(myenik) Revisit these mappings.
-	REG_SB   = REG_S1 // First saved register reserved for SB.
-	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy), second saved register.
-	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy), third saved register.
+	// Go runtime register names.
+	REG_SB   = REG_X3 // Static base.
+	REG_G    = REG_X4 // G pointer.
+	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy).
+	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy).
 	REG_CTXT = REG_S4 // Context for closures.
-	REG_G    = REG_S5 // G pointer.
 
 	// ABI names for floating point registers.
 	REG_FT0  = REG_F0
