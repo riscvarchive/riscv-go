@@ -5415,11 +5415,11 @@ var opcodeTable = [...]opInfo{
 		asm:         riscv.AADD,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
-				{1, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5430,10 +5430,10 @@ var opcodeTable = [...]opInfo{
 		asm:     riscv.AADDI,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292870140}, // SP GP TP T0 T1 T2 S0 SB A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5443,11 +5443,11 @@ var opcodeTable = [...]opInfo{
 		asm:    riscv.ASUB,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
-				{1, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5458,10 +5458,10 @@ var opcodeTable = [...]opInfo{
 		asm:     riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292870140}, // SP GP TP T0 T1 T2 S0 SB A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5473,7 +5473,7 @@ var opcodeTable = [...]opInfo{
 		asm:               riscv.AMOV,
 		reg: regInfo{
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5485,7 +5485,7 @@ var opcodeTable = [...]opInfo{
 		asm:               riscv.AMOV,
 		reg: regInfo{
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5497,7 +5497,7 @@ var opcodeTable = [...]opInfo{
 		asm:               riscv.AMOV,
 		reg: regInfo{
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5509,7 +5509,7 @@ var opcodeTable = [...]opInfo{
 		asm:               riscv.AMOV,
 		reg: regInfo{
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5520,10 +5520,10 @@ var opcodeTable = [...]opInfo{
 		asm:     riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292870140}, // SP GP TP T0 T1 T2 S0 SB A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
-				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5534,8 +5534,8 @@ var opcodeTable = [...]opInfo{
 		asm:     riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{1, 4292869628}, // SP GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
-				{0, 4292870140}, // SP GP TP T0 T1 T2 S0 SB A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5544,7 +5544,7 @@ var opcodeTable = [...]opInfo{
 		argLen: 2,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292869628}, // SP GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -5553,7 +5553,7 @@ var opcodeTable = [...]opInfo{
 		argLen: 2,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -7224,13 +7224,13 @@ var registersRISCV = [...]Register{
 	{0, "ZERO"},
 	{1, "RA"},
 	{2, "SP"},
-	{3, "GP"},
-	{4, "TP"},
+	{3, "SB"},
+	{4, "g"},
 	{5, "T0"},
 	{6, "T1"},
 	{7, "T2"},
 	{8, "S0"},
-	{9, "SB"},
+	{9, "S1"},
 	{10, "A0"},
 	{11, "A1"},
 	{12, "A2"},
@@ -7242,7 +7242,7 @@ var registersRISCV = [...]Register{
 	{18, "RT1"},
 	{19, "RT2"},
 	{20, "CTXT"},
-	{21, "G"},
+	{21, "S5"},
 	{22, "S6"},
 	{23, "S7"},
 	{24, "S8"},
@@ -7286,7 +7286,7 @@ var registersRISCV = [...]Register{
 	{62, "FT10"},
 	{63, "FT11"},
 }
-var gpRegMaskRISCV = regMask(4292869624)
+var gpRegMaskRISCV = regMask(4294967264)
 var fpRegMaskRISCV = regMask(18446744069414584320)
 var flagRegMaskRISCV = regMask(0)
 var framepointerRegRISCV = int8(-1)
