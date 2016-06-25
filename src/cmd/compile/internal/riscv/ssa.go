@@ -109,16 +109,16 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.Gvarlive(v.Aux.(*gc.Node))
 	case ssa.OpSP, ssa.OpSB:
 		// nothing to do
-	case ssa.OpRISCVADD:
+	case ssa.OpRISCVADD, ssa.OpRISCVSUB:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
 		r2 := gc.SSARegNum(v.Args[1])
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
-		p.From.Reg = r1
+		p.From.Reg = r2
 		p.From3 = &obj.Addr{
 			Type: obj.TYPE_REG,
-			Reg:  r2,
+			Reg:  r1,
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r

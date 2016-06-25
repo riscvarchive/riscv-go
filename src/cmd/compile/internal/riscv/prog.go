@@ -36,6 +36,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.ALD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.ASD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOV:   {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.ASUB:   {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.ASCALL: {Flags: gc.OK},
 }
 
