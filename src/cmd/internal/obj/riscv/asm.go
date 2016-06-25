@@ -268,6 +268,17 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	// switch the operands around so you can write SLT T0, T1, T2 instead.
 	case ASLT, ASLTI, ASLTU, ASLTIU:
 		p.From, *p.From3 = *p.From3, p.From
+
+	case ASEQZ:
+		// SEQZ rs, rd -> SLTIU $1, rs, rd
+		p.As = ASLTIU
+		*p.From3 = p.From
+		p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 1}
+
+	case ASNEZ:
+		// SNEZ rs, rd -> SLTU rs, x0, rd
+		p.As = ASLTU
+		*p.From3 = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
 	}
 }
 

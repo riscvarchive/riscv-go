@@ -195,4 +195,6 @@ var Anames = []string{
 	"MOVBU",
 	"MOVHU",
 	"MOVWU",
+	"SEQZ",
+	"SNEZ",
 }

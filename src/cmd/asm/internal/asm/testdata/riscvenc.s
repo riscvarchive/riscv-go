@@ -93,3 +93,6 @@ start:
 	SLT	T0, $55, T2			// 93a37203
 	SLTU	T0, T1, T2			// b3b36200
 	SLTU	T0, $55, T2			// 93b37203
+
+	SEQZ	A5, A5				// 93b71700
+	SNEZ	A5, A5				// b337f000
