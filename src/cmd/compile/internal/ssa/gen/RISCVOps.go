@@ -61,9 +61,10 @@ func init() {
 	)
 
 	RISCVops := []opData{
-		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true},  // arg0 + arg1
-		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB"},                     // arg0 - arg1
-		{name: "MOVmem", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
+		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true},    // arg0 + arg1
+		{name: "ADDconst", argLength: 1, reg: gp11sb, asm: "ADDI", aux: "Int64"}, // arg0 + auxInt
+		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB"},                       // arg0 - arg1
+		{name: "MOVmem", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff"},   // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
 
 		{name: "MOVBconst", reg: gp01, asm: "MOV", typ: "UInt8", aux: "Int8", rematerializeable: true},   // 8 low bits of auxint

@@ -450,6 +450,7 @@ const (
 	OpARMMOVWconvert
 
 	OpRISCVADD
+	OpRISCVADDconst
 	OpRISCVSUB
 	OpRISCVMOVmem
 	OpRISCVMOVBconst
@@ -5416,6 +5417,20 @@ var opcodeTable = [...]opInfo{
 			inputs: []inputInfo{
 				{0, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 				{1, 4292869624}, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "ADDconst",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     riscv.AADDI,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4292870140}, // SP GP TP T0 T1 T2 S0 SB A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 			outputs: []regMask{
 				4292869624, // GP TP T0 T1 T2 S0 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S6 S7 S8 S9 S10 S11 T3 T4 T5 T6

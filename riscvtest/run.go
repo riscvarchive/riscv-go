@@ -16,6 +16,7 @@ var tests = [...]struct {
 	{name: "loadstore", want: 0},
 	{name: "add", want: 12},
 	{name: "sub", want: 12},
+	{name: "zero8", want: 3},
 }
 
 func main() {
