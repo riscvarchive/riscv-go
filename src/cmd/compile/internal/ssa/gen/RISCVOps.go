@@ -55,14 +55,16 @@ func init() {
 		gp01    = regInfo{outputs: []regMask{gpMask}}
 		// FIXME(prattmic): This is a hack to get things to build, but it probably
 		// not correct.
+		gp11   = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{gpMask}}
 		gp21   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{gpMask}}
+		gp20   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{}}
 		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
 		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
 	)
 
 	RISCVops := []opData{
 		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true},    // arg0 + arg1
-		{name: "ADDconst", argLength: 1, reg: gp11sb, asm: "ADDI", aux: "Int64"}, // arg0 + auxInt
+		{name: "ADDconst", argLength: 1, reg: gp11sb, asm: "ADDI", aux: "Int64"}, // arg0 + auxint
 		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB"},                       // arg0 - arg1
 		{name: "MOVmem", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff"},   // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
@@ -76,16 +78,48 @@ func init() {
 		{name: "MOVstore", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"}, // store value in arg1 to arg0+auxint+aux. arg2=mem
 		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},    // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
 
+		// Shift ops
+		{name: "SLLI", argLength: 1, reg: gp11, asm: "SLLI", aux: "Int64"}, // arg0 << auxint
+
+		// Bitwise ops
+		{name: "XOR", argLength: 2, reg: gp21, asm: "XOR", commutative: true}, // arg0 ^ arg1
+		{name: "XORI", argLength: 1, reg: gp11, asm: "XORI", aux: "Int64"},    // arg0 ^ auxint
+		{name: "OR", argLength: 2, reg: gp21, asm: "OR", commutative: true},   // arg0 | arg1
+		{name: "ORI", argLength: 1, reg: gp11, asm: "ORI", aux: "Int64"},      // arg0 | auxint
+		{name: "AND", argLength: 2, reg: gp21, asm: "AND", commutative: true}, // arg0 & arg1
+		{name: "ANDI", argLength: 1, reg: gp11, asm: "ANDI", aux: "Int64"},    // arg0 & auxint
+
+		// Generate boolean values
+		{name: "SEQZ", argLength: 1, reg: gp11, asm: "SEQZ"}, // arg0 == 0, result is 0 or 1
+		{name: "SNEZ", argLength: 1, reg: gp11, asm: "SNEZ"}, // arg0 != 0, result is 0 or 1
+		{name: "SLT", argLength: 2, reg: gp21, asm: "SLT"},   // arg0 < arg1, result is 0 or 1
+		{name: "SLTU", argLength: 2, reg: gp21, asm: "SLTU"}, // arg0 < arg1, unsigned, result is 0 or 1
+
+		// Flag pseudo-ops.
+		// RISC-V doesn't have flags, but SSA wants branches to be flag-based.
+		// These are pseudo-ops that contain the arguments to the comparison.
+		// There is a single branching block type, BRANCH,
+		// which accepts one of these values as its control.
+		// During code generation we consult the control value
+		// to emit the correct conditional branch instruction.
+		{name: "BEQ", argLength: 2, reg: gp20, asm: "BEQ", typ: "Flags"},   // branch if arg0 == arg1
+		{name: "BNE", argLength: 2, reg: gp20, asm: "BNE", typ: "Flags"},   // branch if arg0 != arg1
+		{name: "BLT", argLength: 2, reg: gp20, asm: "BLT", typ: "Flags"},   // branch if arg0 < arg1
+		{name: "BLTU", argLength: 2, reg: gp20, asm: "BLTU", typ: "Flags"}, // branch if arg0 < arg1, unsigned
+		{name: "BGE", argLength: 2, reg: gp20, asm: "BGE", typ: "Flags"},   // branch if arg0 >= arg1
+		{name: "BGEU", argLength: 2, reg: gp20, asm: "BGEU", typ: "Flags"}, // branch if arg0 >= arg1, unsigned
+
+		// MOVconvert converts between pointers and integers.
+		// We have a special op for this so as to not confuse GC
+		// (particularly stack maps). It takes a memory arg so it
+		// gets correctly ordered with respect to GC safepoints.
+		{name: "MOVconvert", argLength: 2, reg: gp11, asm: "MOV"}, // arg0, but converted to int/ptr as appropriate; arg1=mem
+
 		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed[".A0"] | regNamed[".A7"]}}, // arg0=mem, auxint=return code
 	}
 
 	RISCVblocks := []blockData{
-		{name: "EQ"},
-		{name: "NE"},
-		{name: "LT"},
-		{name: "GE"},
-		{name: "LTU"},
-		{name: "GEU"},
+		{name: "BRANCH"}, // see flag pseudo-ops above.
 	}
 
 	archs = append(archs, arch{

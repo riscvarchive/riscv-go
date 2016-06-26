@@ -236,13 +236,37 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			default:
 				ctxt.Diag("progedit: unsupported MOV at %v", p)
 			}
-		case obj.TYPE_CONST: // MOV $c, R -> ADD $c, ZERO, R
+		case obj.TYPE_CONST:
+			// MOV $c, R
+			// If c is small enough, convert to:
+			//   ADD $c, ZERO, R
+			// If not, convert to:
+			//   LUI top20bits(c), R
+			//   ADD bottom12bits(c), R, R
 			if p.As != AMOV {
 				ctxt.Diag("progedit: unsupported constant load at %v", p)
 			}
+			off := p.From.Offset
+			if !immFits(off, 32) {
+				ctxt.Diag("%v: constant %d too large; use SLLI and ADD on 32 bit immediates to generate 64 bit immediates", p, off)
+			}
+			to := p.To
+			needLUI := !immFits(off, 12)
+			if needLUI {
+				p.As = ALUI
+				p.To = to
+				// Pass top 20 bits to LUI.
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: int64(uint64(off) >> 12)}
+				p = obj.Appendp(ctxt, p)
+			}
 			p.As = AADDI
-			p.From3.Type = obj.TYPE_REG
-			p.From3.Reg = REG_ZERO
+			p.To = to
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: off & ((1 << 12) - 1)}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+			if needLUI {
+				p.From3.Reg = to.Reg
+			}
+
 		case obj.TYPE_ADDR: // MOV $sym+off(SP/SB), R
 			if p.To.Type != obj.TYPE_REG || p.As != AMOV {
 				ctxt.Diag("progedit: unsupported addr MOV at %v", p)
@@ -297,8 +321,8 @@ func setpcs(p *obj.Prog, pc int64) {
 	}
 }
 
-// invbr inverts the condition of a conditional branch.
-func invbr(i obj.As) obj.As {
+// InvertBranch inverts the condition of a conditional branch.
+func InvertBranch(i obj.As) obj.As {
 	switch i {
 	case ABEQ:
 		return ABNE
@@ -313,7 +337,7 @@ func invbr(i obj.As) obj.As {
 	case ABGEU:
 		return ABLTU
 	default:
-		panic("invbr: not a branch")
+		panic("InvertBranch: not a branch")
 	}
 }
 
@@ -408,7 +432,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				jmp.To = obj.Addr{Type: obj.TYPE_BRANCH}
 				jmp.Pcond = p.Pcond
 
-				p.As = invbr(p.As)
+				p.As = InvertBranch(p.As)
 				p.Pcond = jmp.Link
 				// All future PCs are now invalid, so recompute
 				// them.
@@ -456,13 +480,18 @@ func regi(a obj.Addr) uint32 {
 	return regival(a.Reg)
 }
 
+// immFits reports whether immediate value x fits in nbits bits.
+func immFits(x int64, nbits uint) bool {
+	return x >= -(1<<(nbits)) && (1<<(nbits))-1 >= x
+}
+
 // immi extracts the integer literal of the specified size from an Addr.
 func immi(a obj.Addr, nbits uint) uint32 {
 	if a.Type != obj.TYPE_CONST {
 		panic(fmt.Sprintf("ill typed: %+v", a))
 	}
-	if a.Offset < -(1<<(nbits-1)) || (1<<(nbits-1))-1 < a.Offset {
-		panic(fmt.Sprintf("immediate cannot fit in %d bits", nbits))
+	if !immFits(a.Offset, nbits) {
+		panic(fmt.Sprintf("immediate %d in %v cannot fit in %d bits", a.Offset, a, nbits))
 	}
 	return uint32(a.Offset)
 }
