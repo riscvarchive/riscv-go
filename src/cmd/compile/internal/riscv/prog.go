@@ -26,19 +26,34 @@ var progmap = map[obj.As]obj.ProgInfo{
 	obj.AVARKILL:  {Flags: gc.Pseudo | gc.RightWrite},
 	obj.AVARLIVE:  {Flags: gc.Pseudo | gc.LeftRead},
 	obj.ARET:      {Flags: gc.Break},
+	obj.AJMP:      {Flags: gc.Jump | gc.Break | gc.KillCarry},
 
 	// NOP is an internal no-op that also stands for USED and SET
 	// annotations.
 	obj.ANOP: {Flags: gc.LeftRead | gc.RightWrite},
 
+	// RISCV simple three operand instructions
+	riscv.AADD: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AAND: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AOR:  {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.ASUB: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AXOR: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+
 	// RISCV instructions
-	riscv.AADD:   {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.AADDI:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.ALD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.ASD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOV:   {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
-	riscv.ASUB:   {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.ASEQZ:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.ASCALL: {Flags: gc.OK},
+
+	// RISCV conditional branches
+	riscv.ABEQ:  {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
+	riscv.ABNE:  {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
+	riscv.ABGE:  {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
+	riscv.ABGEU: {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
+	riscv.ABLT:  {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
+	riscv.ABLTU: {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
 }
 
 func proginfo(p *obj.Prog) {

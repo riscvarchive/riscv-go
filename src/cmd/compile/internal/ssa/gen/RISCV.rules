@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Optimizations TODO:
+// * Somehow track when values are already zero/signed-extended, avoid re-extending
+// * Use SLTI and SLTIU for comparisons to constants, instead of SLT/SLTU with constants in registers
+
 // FIXME(prattmic): obviously these shouldn't all be ADD
 
 // Lowering arithmetic
@@ -60,48 +64,48 @@
 (Mod8 x y) ->  (ADD x y)
 (Mod8u x y) ->  (ADD x y)
 
-(And64 x y) -> (ADD x y)
-(And32 x y) -> (ADD x y)
-(And16 x y) -> (ADD x y)
-(And8 x y) -> (ADD x y)
+(And64 x y) -> (AND x y)
+(And32 x y) -> (AND x y)
+(And16 x y) -> (AND x y)
+(And8  x y) -> (AND x y)
 
-(Or64 x y) -> (ADD x y)
-(Or32 x y) -> (ADD x y)
-(Or16 x y) -> (ADD x y)
-(Or8 x y) -> (ADD x y)
+(Or64 x y) -> (OR x y)
+(Or32 x y) -> (OR x y)
+(Or16 x y) -> (OR x y)
+(Or8  x y) -> (OR x y)
 
-(Xor64 x y) -> (ADD x y)
-(Xor32 x y) -> (ADD x y)
-(Xor16 x y) -> (ADD x y)
-(Xor8 x y) -> (ADD x y)
+(Xor64 x y) -> (XOR x y)
+(Xor32 x y) -> (XOR x y)
+(Xor16 x y) -> (XOR x y)
+(Xor8  x y) -> (XOR x y)
 
-(Neg64 x) -> (ADD x x)
-(Neg32 x) -> (ADD x x)
-(Neg16 x) -> (ADD x x)
-(Neg8 x) -> (ADD x x)
-(Neg32F x) -> (ADD x x)
-(Neg64F x) -> (ADD x x)
+//(Neg64 x) -> (NEG x)
+//(Neg32 x) -> (NEG x)
+//(Neg16 x) -> (NEG x)
+//(Neg8  x) -> (NEG x)
+//(Neg32F x) -> (ADD x)
+//(Neg64F x) -> (ADD x)
 
-(Com64 x) -> (ADD x x)
-(Com32 x) -> (ADD x x)
-(Com16 x) -> (ADD x x)
-(Com8 x) -> (ADD x x)
+(Com64 x) -> (XORI [int64(-1)] x)
+(Com32 x) -> (XORI [int64(-1)] x)
+(Com16 x) -> (XORI [int64(-1)] x)
+(Com8  x) -> (XORI [int64(-1)] x)
 
 (Sqrt x) -> (ADD x x)
 
-(SignExt8to16 x) -> (ADD x x)
-(SignExt8to32 x) -> (ADD x x)
-(SignExt8to64 x) -> (ADD x x)
-(SignExt16to32 x) -> (ADD x x)
-(SignExt16to64 x) -> (ADD x x)
-(SignExt32to64 x) -> (ADD x x)
+//(SignExt8to16 x) -> (ADD x x)
+//(SignExt8to32 x) -> (ADD x x)
+//(SignExt8to64 x) -> (ADD x x)
+//(SignExt16to32 x) -> (ADD x x)
+//(SignExt16to64 x) -> (ADD x x)
+//(SignExt32to64 x) -> (ADD x x)
 
-(ZeroExt8to16 x) -> (ADD x x)
-(ZeroExt8to32 x) -> (ADD x x)
-(ZeroExt8to64 x) -> (ADD x x)
-(ZeroExt16to32 x) -> (ADD x x)
-(ZeroExt16to64 x) -> (ADD x x)
-(ZeroExt32to64 x) -> (ADD x x)
+//(ZeroExt8to16 x) -> (ADD x x)
+//(ZeroExt8to32 x) -> (ADD x x)
+//(ZeroExt8to64 x) -> (ADD x x)
+//(ZeroExt16to32 x) -> (ADD x x)
+//(ZeroExt16to64 x) -> (ADD x x)
+//(ZeroExt32to64 x) -> (ADD x x)
 
 (Cvt32to32F x) -> (ADD x x)
 (Cvt32to64F x) -> (ADD x x)
@@ -181,65 +185,68 @@
 //(Lrot32 x [c]) -> (ADD x [c])
 //(Lrot64 x [c]) -> (ADD x [c])
 
-(Less64 x y) -> (ADD x y)
-(Less32 x y) -> (ADD x y)
-(Less16 x y) -> (ADD x y)
-(Less8  x y) -> (ADD x y)
-(Less64U x y) -> (ADD x y)
-(Less32U x y) -> (ADD x y)
-(Less16U x y) -> (ADD x y)
-(Less8U  x y) -> (ADD x y)
-(Less64F x y) -> (ADD x y)
-(Less32F x y) -> (ADD x y)
+(Less64  x y) -> (SLT  x y)
+(Less32  x y) -> (SLT  (SignExt32to64 x) (SignExt32to64 y))
+(Less16  x y) -> (SLT  (SignExt16to64 x) (SignExt16to64 y))
+(Less8   x y) -> (SLT  (SignExt8to64  x) (SignExt8to64  y))
+(Less64U x y) -> (SLTU x y)
+(Less32U x y) -> (SLTU (ZeroExt32to64 x) (ZeroExt32to64 y))
+(Less16U x y) -> (SLTU (ZeroExt16to64 x) (ZeroExt16to64 y))
+(Less8U  x y) -> (SLTU (ZeroExt8to64  x) (ZeroExt8to64  y))
+//(Less64F x y) -> (ADD x y)
+//(Less32F x y) -> (ADD x y)
 
-(Leq64 x y) -> (ADD x y)
-(Leq32 x y) -> (ADD x y)
-(Leq16 x y) -> (ADD x y)
-(Leq8  x y) -> (ADD x y)
-(Leq64U x y) -> (ADD x y)
-(Leq32U x y) -> (ADD x y)
-(Leq16U x y) -> (ADD x y)
-(Leq8U  x y) -> (ADD x y)
-(Leq64F x y) -> (ADD x y)
-(Leq32F x y) -> (ADD x y)
+// Convert x <= y to !(y > x).
+(Leq64  x y) -> (Not (Less64  y x))
+(Leq32  x y) -> (Not (Less32  y x))
+(Leq16  x y) -> (Not (Less16  y x))
+(Leq8   x y) -> (Not (Less8   y x))
+(Leq64U x y) -> (Not (Less64U y x))
+(Leq32U x y) -> (Not (Less32U y x))
+(Leq16U x y) -> (Not (Less16U y x))
+(Leq8U  x y) -> (Not (Less8U  y x))
+//(Leq64F x y) -> (ADD x y)
+//(Leq32F x y) -> (ADD x y)
 
-(Greater64 x y) -> (ADD x y)
-(Greater32 x y) -> (ADD x y)
-(Greater16 x y) -> (ADD x y)
-(Greater8  x y) -> (ADD x y)
-(Greater64U x y) -> (ADD x y)
-(Greater32U x y) -> (ADD x y)
-(Greater16U x y) -> (ADD x y)
-(Greater8U  x y) -> (ADD x y)
-(Greater64F x y) -> (ADD x y)
-(Greater32F x y) -> (ADD x y)
+// Convert x > y to y < x.
+(Greater64  x y) -> (Less64  y x)
+(Greater32  x y) -> (Less32  y x)
+(Greater16  x y) -> (Less16  y x)
+(Greater8   x y) -> (Less8   y x)
+(Greater64U x y) -> (Less64U y x)
+(Greater32U x y) -> (Less32U y x)
+(Greater16U x y) -> (Less16U y x)
+(Greater8U  x y) -> (Less8U  y x)
+//(Greater64F x y) -> (ADD x y)
+//(Greater32F x y) -> (ADD x y)
 
-(Geq64 x y) -> (ADD x y)
-(Geq32 x y) -> (ADD x y)
-(Geq16 x y) -> (ADD x y)
-(Geq8  x y) -> (ADD x y)
-(Geq64U x y) -> (ADD x y)
-(Geq32U x y) -> (ADD x y)
-(Geq16U x y) -> (ADD x y)
-(Geq8U  x y) -> (ADD x y)
-(Geq64F x y) -> (ADD x y)
-(Geq32F x y) -> (ADD x y)
+// Convert x >= y to !(x < y)
+(Geq64  x y) -> (Not (Less64  x y))
+(Geq32  x y) -> (Not (Less32  x y))
+(Geq16  x y) -> (Not (Less16  x y))
+(Geq8   x y) -> (Not (Less8   x y))
+(Geq64U x y) -> (Not (Less64U x y))
+(Geq32U x y) -> (Not (Less32U x y))
+(Geq16U x y) -> (Not (Less16U x y))
+(Geq8U  x y) -> (Not (Less8U  x y))
+//(Geq64F x y) -> (ADD x y)
+//(Geq32F x y) -> (ADD x y)
 
-(Eq64 x y) -> (ADD x y)
-(Eq32 x y) -> (ADD x y)
-(Eq16 x y) -> (ADD x y)
-(Eq8 x y) -> (ADD x y)
-(EqPtr x y) -> (ADD x y)
-(Eq64F x y) -> (ADD x y)
-(Eq32F x y) -> (ADD x y)
+(EqPtr <t> x y) -> (SEQZ (SUB <t> x y))
+(Eq64  <t> x y) -> (SEQZ (SUB <t> x y))
+(Eq32  <t> x y) -> (SEQZ (ZeroExt32to64 (SUB <t> x y)))
+(Eq16  <t> x y) -> (SEQZ (ZeroExt16to64 (SUB <t> x y)))
+(Eq8   <t> x y) -> (SEQZ (ZeroExt8to64  (SUB <t> x y)))
+//(Eq64F x y) -> (ADD x y)
+//(Eq32F x y) -> (ADD x y)
 
-(Neq64 x y) -> (ADD x y)
-(Neq32 x y) -> (ADD x y)
-(Neq16 x y) -> (ADD x y)
-(Neq8 x y) -> (ADD x y)
-(NeqPtr x y) -> (ADD x y)
-(Neq64F x y) -> (ADD x y)
-(Neq32F x y) -> (ADD x y)
+(NeqPtr <t> x y) -> (SNEZ (SUB <t> x y))
+(Neq64  <t> x y) -> (SNEZ (SUB <t> x y))
+(Neq32  <t> x y) -> (SNEZ (ZeroExt32to64 (SUB <t> x y)))
+(Neq16  <t> x y) -> (SNEZ (ZeroExt16to64 (SUB <t> x y)))
+(Neq8   <t> x y) -> (SNEZ (ZeroExt8to64  (SUB <t> x y)))
+//(Neq64F x y) -> (ADD x y)
+//(Neq32F x y) -> (ADD x y)
 
 // Loads and stores
 (Load ptr mem) -> (MOVload ptr mem)
@@ -255,7 +262,7 @@
 (Zero [4] ptr mem) -> (MOVstore ptr (MOVLconst [0]) mem)
 (Zero [8] ptr mem) -> (MOVstore ptr (MOVQconst [0]) mem)
 
-//(Convert x y) ->
+(Convert x mem) -> (MOVconvert x mem)
 
 // Checks
 //(IsNonNil p) ->
@@ -266,7 +273,12 @@
 // Moves
 //(Move dst src _) ->
 
-//(Not x) ->
+// Boolean ops; 0=false, 1=true
+(AndB x y) -> (AND  x y)
+(OrB  x y) -> (OR   x y)
+(EqB  x y) -> (Eq8  x y)
+(NeqB x y) -> (Neq8 x y)
+(Not  x)   -> (XORI [1] x)
 
 // TODO: Special handling for SP offsets, like ARM
 (OffPtr [off] ptr) -> (ADDconst [off] ptr)
@@ -280,11 +292,26 @@
 (ConstNil) -> (MOVQconst [0])
 (ConstBool [b]) -> (MOVBconst [b])
 
+// Convert 64 bit immediate to two 32 bit immediates, combine with add and shift.
+(MOVQconst <t> [c]) && !is32Bit(c) -> (ADD (SLLI <t> [32] (MOVQconst [int64(uint64(c)>>32)])) (MOVQconst [int64(int32(c))]))
+
 (Addr {sym} base) -> (MOVmem {sym} base)
 
 //(ITab) ->
 
-//(If cond yes no) ->
+// Conditional branches
+(If (Eq64    x y) yes no) -> (BRANCH (BEQ  x y) yes no)
+(If (Neq64   x y) yes no) -> (BRANCH (BNE  x y) yes no)
+(If (Less64  x y) yes no) -> (BRANCH (BLT  x y) yes no)
+(If (Less64U x y) yes no) -> (BRANCH (BLTU x y) yes no)
+(If (Geq64   x y) yes no) -> (BRANCH (BGE  x y) yes no)
+(If (Geq64U  x y) yes no) -> (BRANCH (BGEU x y) yes no)
+
+// Conditional branches using reversed operands
+(If (Leq64      x y) yes no) -> (BRANCH (BGE  y x) yes no)
+(If (Leq64U     x y) yes no) -> (BRANCH (BGEU y x) yes no)
+(If (Greater64  x y) yes no) -> (BRANCH (BLT  y x) yes no)
+(If (Greater64U x y) yes no) -> (BRANCH (BLTU y x) yes no)
 
 //(StaticCall [argwid] {target} _) ->
 //(ClosureCall entry _ mem) ->

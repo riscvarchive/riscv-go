@@ -39,12 +39,7 @@ const (
 	BlockARMUGT
 	BlockARMUGE
 
-	BlockRISCVEQ
-	BlockRISCVNE
-	BlockRISCVLT
-	BlockRISCVGE
-	BlockRISCVLTU
-	BlockRISCVGEU
+	BlockRISCVBRANCH
 
 	BlockPlain
 	BlockIf
@@ -86,12 +81,7 @@ var blockString = [...]string{
 	BlockARMUGT: "UGT",
 	BlockARMUGE: "UGE",
 
-	BlockRISCVEQ:  "EQ",
-	BlockRISCVNE:  "NE",
-	BlockRISCVLT:  "LT",
-	BlockRISCVGE:  "GE",
-	BlockRISCVLTU: "LTU",
-	BlockRISCVGEU: "GEU",
+	BlockRISCVBRANCH: "BRANCH",
 
 	BlockPlain:  "Plain",
 	BlockIf:     "If",
@@ -460,6 +450,24 @@ const (
 	OpRISCVMOVload
 	OpRISCVMOVstore
 	OpRISCVLoweredNilCheck
+	OpRISCVSLLI
+	OpRISCVXOR
+	OpRISCVXORI
+	OpRISCVOR
+	OpRISCVORI
+	OpRISCVAND
+	OpRISCVANDI
+	OpRISCVSEQZ
+	OpRISCVSNEZ
+	OpRISCVSLT
+	OpRISCVSLTU
+	OpRISCVBEQ
+	OpRISCVBNE
+	OpRISCVBLT
+	OpRISCVBLTU
+	OpRISCVBGE
+	OpRISCVBGEU
+	OpRISCVMOVconvert
 	OpRISCVLoweredExitProc
 
 	OpAdd8
@@ -5545,6 +5553,240 @@ var opcodeTable = [...]opInfo{
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "SLLI",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     riscv.ASLLI,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "XOR",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AXOR,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "XORI",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     riscv.AXORI,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "OR",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AOR,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "ORI",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     riscv.AORI,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "AND",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AAND,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "ANDI",
+		auxType: auxInt64,
+		argLen:  1,
+		asm:     riscv.AANDI,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SEQZ",
+		argLen: 1,
+		asm:    riscv.ASEQZ,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SNEZ",
+		argLen: 1,
+		asm:    riscv.ASNEZ,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SLT",
+		argLen: 2,
+		asm:    riscv.ASLT,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SLTU",
+		argLen: 2,
+		asm:    riscv.ASLTU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BEQ",
+		argLen: 2,
+		asm:    riscv.ABEQ,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BNE",
+		argLen: 2,
+		asm:    riscv.ABNE,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BLT",
+		argLen: 2,
+		asm:    riscv.ABLT,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BLTU",
+		argLen: 2,
+		asm:    riscv.ABLTU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BGE",
+		argLen: 2,
+		asm:    riscv.ABGE,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "BGEU",
+		argLen: 2,
+		asm:    riscv.ABGEU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "MOVconvert",
+		argLen: 2,
+		asm:    riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},

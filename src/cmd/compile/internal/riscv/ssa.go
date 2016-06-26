@@ -82,6 +82,25 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		// memory arg needs no code
 	case ssa.OpArg:
 		// input args need no code
+	case ssa.OpPhi:
+		gc.CheckLoweredPhi(v)
+	case ssa.OpCopy, ssa.OpRISCVMOVconvert:
+		if v.Type.IsMemory() {
+			return
+		}
+		rs := gc.SSARegNum(v.Args[0])
+		rd := gc.SSARegNum(v)
+		if rs == rd {
+			return
+		}
+		if v.Type.IsFloat() {
+			v.Fatalf("OpCopy float not implemented")
+		}
+		p := gc.Prog(riscv.AMOV)
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = rs
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = rd
 	case ssa.OpLoadReg:
 		if v.Type.IsFlags() {
 			v.Unimplementedf("load flags not implemented: %v", v.LongString())
@@ -109,7 +128,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.Gvarlive(v.Aux.(*gc.Node))
 	case ssa.OpSP, ssa.OpSB:
 		// nothing to do
-	case ssa.OpRISCVADD, ssa.OpRISCVSUB:
+	case ssa.OpRISCVADD, ssa.OpRISCVSUB, ssa.OpRISCVXOR, ssa.OpRISCVOR, ssa.OpRISCVAND,
+		ssa.OpRISCVSLT, ssa.OpRISCVSLTU:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
 		r2 := gc.SSARegNum(v.Args[1])
@@ -122,7 +142,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r
-	case ssa.OpRISCVADDconst:
+	case ssa.OpRISCVADDconst, ssa.OpRISCVXORI, ssa.OpRISCVORI, ssa.OpRISCVANDI, ssa.OpRISCVSLLI:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST
 		p.From.Offset = v.AuxInt
@@ -178,6 +198,16 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Reg = gc.SSARegNum(v.Args[0])
 		gc.AddAux(&p.To, v)
+	case ssa.OpRISCVSEQZ, ssa.OpRISCVSNEZ:
+		p := gc.Prog(v.Op.Asm())
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpRISCVBEQ, ssa.OpRISCVBNE, ssa.OpRISCVBLT, ssa.OpRISCVBLTU, ssa.OpRISCVBGE, ssa.OpRISCVBGEU:
+		// These are flag pseudo-ops used as control values for conditional branch blocks.
+		// See the discussion in RISCVOps.
+		// The actual conditional branch instruction will be issued in ssaGenBlock.
 	case ssa.OpRISCVLoweredNilCheck:
 		log.Printf("TODO: LoweredNilCheck")
 	case ssa.OpRISCVLoweredExitProc:
@@ -196,7 +226,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		// SCALL
 		p = gc.Prog(riscv.ASCALL)
 	default:
-		log.Printf("Unhandled op %v", v.Op)
+		v.Fatalf("Unhandled op %v", v.Op)
 	}
 }
 
@@ -208,13 +238,41 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 		if b.Succs[0].Block() != next {
 			p := gc.Prog(obj.AJMP)
 			p.To.Type = obj.TYPE_BRANCH
-			s.Branches = append(s.Branches, gc.Branch{p, b.Succs[0].Block()})
+			s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[0].Block()})
 		}
 	case ssa.BlockExit:
 		gc.Prog(obj.AUNDEF)
 	case ssa.BlockRet:
 		gc.Prog(obj.ARET)
+	case ssa.BlockRISCVBRANCH:
+		// Conditional branch. The control value tells us what kind.
+		v := b.Control
+		// Double-check that the value is exactly where we expect it.
+		if v.Block != b {
+			gc.Fatalf("control value in the wrong block %v, want %v: %v", v.Block, b, v.LongString())
+		}
+		if v != b.Values[len(b.Values)-1] {
+			gc.Fatalf("badly scheduled control value for block %v: %v", b, v.LongString())
+		}
+		p := gc.Prog(v.Op.Asm())
+		p.To.Type = obj.TYPE_BRANCH
+		p.Reg = gc.SSARegNum(v.Args[1])
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		switch next {
+		case b.Succs[0].Block():
+			p.As = riscv.InvertBranch(p.As)
+			s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[1].Block()})
+		case b.Succs[1].Block():
+			s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[0].Block()})
+		default:
+			s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[0].Block()})
+			q := gc.Prog(obj.AJMP)
+			q.To.Type = obj.TYPE_BRANCH
+			s.Branches = append(s.Branches, gc.Branch{P: q, B: b.Succs[1].Block()})
+		}
+
 	default:
-		log.Printf("Unhandled kind %v", b.Kind)
+		b.Fatalf("Unhandled kind %v", b.Kind)
 	}
 }
