@@ -440,7 +440,7 @@ const (
 	OpARMMOVWconvert
 
 	OpRISCVADD
-	OpRISCVADDconst
+	OpRISCVADDI
 	OpRISCVSUB
 	OpRISCVMOVmem
 	OpRISCVMOVBconst
@@ -5432,7 +5432,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "ADDconst",
+		name:    "ADDI",
 		auxType: auxInt64,
 		argLen:  1,
 		asm:     riscv.AADDI,

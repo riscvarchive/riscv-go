@@ -2457,11 +2457,11 @@ func rewriteValueRISCV_OpOffPtr(v *Value, config *Config) bool {
 	_ = b
 	// match: (OffPtr [off] ptr)
 	// cond:
-	// result: (ADDconst [off] ptr)
+	// result: (ADDI [off] ptr)
 	for {
 		off := v.AuxInt
 		ptr := v.Args[0]
-		v.reset(OpRISCVADDconst)
+		v.reset(OpRISCVADDI)
 		v.AuxInt = off
 		v.AddArg(ptr)
 		return true
