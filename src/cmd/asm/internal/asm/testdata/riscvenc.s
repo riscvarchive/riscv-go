@@ -96,3 +96,20 @@ start:
 
 	SEQZ	A5, A5				// 93b71700
 	SNEZ	A5, A5				// b337f000
+
+
+	// M extension
+	MUL	T0, T1, T2			// b3035302
+	MULH	T0, T1, T2			// b3135302
+	MULHU	T0, T1, T2			// b3335302
+	MULHSU	T0, T1, T2			// b3235302
+	MULW	T0, T1, T2			// bb035302
+
+	DIV	T0, T1, T2			// b3435302
+	DIVU	T0, T1, T2			// b3535302
+	REM	T0, T1, T2			// b3635302
+	REMU	T0, T1, T2			// b3735302
+	DIVW	T0, T1, T2			// bb435302
+	DIVUW	T0, T1, T2			// bb535302
+	REMW	T0, T1, T2			// bb635302
+	REMUW	T0, T1, T2			// bb735302

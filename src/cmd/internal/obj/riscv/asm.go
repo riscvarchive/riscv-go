@@ -121,7 +121,9 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	// Expand binary instructions to ternary ones.
 	if p.From3.Type == obj.TYPE_NONE {
 		switch p.As {
-		case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND:
+		case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND, AMUL, AMULH,
+			AMULHU, AMULHSU, AMULW, ADIV, ADIVU, AREM, AREMU, ADIVW,
+			ADIVUW, AREMW, AREMUW:
 			p.From3.Type = obj.TYPE_REG
 			p.From3.Reg = p.To.Reg
 		}
@@ -584,7 +586,9 @@ func instr_uj(p *obj.Prog) uint32 {
 // asmout generates the machine code for a Prog.
 func asmout(p *obj.Prog) uint32 {
 	switch p.As {
-	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND, ASLT, ASLTU:
+	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND, ASLT, ASLTU, AMUL,
+		AMULH, AMULHU, AMULHSU, AMULW, ADIV, ADIVU, AREM, AREMU, ADIVW,
+		ADIVUW, AREMW, AREMUW:
 		return instr_r(p)
 	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, ASCALL,
 		ARDCYCLE, ARDTIME, ARDINSTRET, ALB, ALH, ALW, ALD, ALBU, ALHU,
