@@ -35,7 +35,7 @@ wordscheck:
 	SLTU	T1, T5, T3
 	BNE	T3, ZERO, words
 
-	JMP	out
+	JMP	outcheck
 out:
 	MOVB	ZERO, (T1)
 	ADD	$1, T1
