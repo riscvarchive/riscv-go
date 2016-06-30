@@ -17,5 +17,5 @@ TEXT _rt0_riscv_linux(SB),0,$8
 	// TODO: Add SEQZ support directly
 	SLTIU	A0, $1, A0
 	MOV	$SYS_EXIT_GROUP, A7
-	SCALL
+	ECALL
 	RET

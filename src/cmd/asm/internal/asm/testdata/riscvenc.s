@@ -57,6 +57,7 @@ start:
 
 	RET					// 67800000
 
+	ECALL					// 73000000
 	SCALL					// 73000000
 	RDCYCLE	T0				// f32200c0
 	RDTIME	T0				// f32210c0

@@ -183,7 +183,12 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	case AJALR:
 		lowerjalr(p)
 
-	case ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+	case AECALL, ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+		// SCALL is the old name for ECALL.
+		if p.As == ASCALL {
+			p.As = AECALL
+		}
+
 		i, ok := encode(p.As)
 		if !ok {
 			panic("progedit: tried to rewrite nonexistent instruction")
@@ -590,7 +595,7 @@ func asmout(p *obj.Prog) uint32 {
 		AMULH, AMULHU, AMULHSU, AMULW, ADIV, ADIVU, AREM, AREMU, ADIVW,
 		ADIVUW, AREMW, AREMUW:
 		return instr_r(p)
-	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, ASCALL,
+	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, AECALL,
 		ARDCYCLE, ARDTIME, ARDINSTRET, ALB, ALH, ALW, ALD, ALBU, ALHU,
 		ALWU, ASLTI, ASLTIU:
 		return instr_i(p)
