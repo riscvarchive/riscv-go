@@ -6,63 +6,61 @@
 // * Somehow track when values are already zero/signed-extended, avoid re-extending
 // * Use SLTI and SLTIU for comparisons to constants, instead of SLT/SLTU with constants in registers
 
-// FIXME(prattmic): obviously these shouldn't all be ADD
-
 // Lowering arithmetic
 (Add64 x y) -> (ADD x y)
 (AddPtr x y) -> (ADD x y)
 (Add32 x y) -> (ADD x y)
 (Add16 x y) -> (ADD x y)
 (Add8 x y) -> (ADD x y)
-(Add32F x y) -> (ADD x y)
-(Add64F x y) -> (ADD x y)
+//(Add32F x y) ->
+//(Add64F x y) ->
 
 (Sub64 x y) -> (SUB x y)
 (SubPtr x y) -> (SUB x y)
 (Sub32 x y) -> (SUB x y)
 (Sub16 x y) -> (SUB x y)
 (Sub8 x y) -> (SUB x y)
-(Sub32F x y) -> (ADD x y)
-(Sub64F x y) -> (ADD x y)
+//(Sub32F x y) ->
+//(Sub64F x y) ->
 
-(Mul64 x y) -> (ADD x y)
-(Mul32 x y) -> (ADD x y)
-(Mul16 x y) -> (ADD x y)
-(Mul8 x y) -> (ADD x y)
-(Mul32F x y) -> (ADD x y)
-(Mul64F x y) -> (ADD x y)
+//(Mul64 x y) ->
+//(Mul32 x y) ->
+//(Mul16 x y) ->
+//(Mul8 x y) ->
+//(Mul32F x y) ->
+//(Mul64F x y) ->
 
-(Div32F x y) -> (ADD x y)
-(Div64F x y) -> (ADD x y)
+//(Div32F x y) ->
+//(Div64F x y) ->
 
-(Div64 x y) -> (ADD x y)
-(Div64u x y) -> (ADD x y)
-(Div32 x y) -> (ADD x y)
-(Div32u x y) -> (ADD x y)
-(Div16 x y) -> (ADD x y)
-(Div16u x y) -> (ADD x y)
-(Div8 x y) ->  (ADD x y)
-(Div8u x y) ->  (ADD x y)
+//(Div64 x y) ->
+//(Div64u x y) ->
+//(Div32 x y) ->
+//(Div32u x y) ->
+//(Div16 x y) ->
+//(Div16u x y) ->
+//(Div8 x y) ->
+//(Div8u x y) ->
 
-(Hmul64 x y) -> (ADD x y)
-(Hmul64u x y) -> (ADD x y)
-(Hmul32 x y) -> (ADD x y)
-(Hmul32u x y) -> (ADD x y)
-(Hmul16 x y) -> (ADD x y)
-(Hmul16u x y) -> (ADD x y)
-(Hmul8 x y) ->  (ADD x y)
-(Hmul8u x y) ->  (ADD x y)
+//(Hmul64 x y) ->
+//(Hmul64u x y) ->
+//(Hmul32 x y) ->
+//(Hmul32u x y) ->
+//(Hmul16 x y) ->
+//(Hmul16u x y) ->
+//(Hmul8 x y) ->
+//(Hmul8u x y) ->
 
-(Avg64u x y) -> (ADD x y)
+//(Avg64u x y) ->
 
-(Mod64 x y) -> (ADD x y)
-(Mod64u x y) -> (ADD x y)
-(Mod32 x y) -> (ADD x y)
-(Mod32u x y) -> (ADD x y)
-(Mod16 x y) -> (ADD x y)
-(Mod16u x y) -> (ADD x y)
-(Mod8 x y) ->  (ADD x y)
-(Mod8u x y) ->  (ADD x y)
+//(Mod64 x y) ->
+//(Mod64u x y) ->
+//(Mod32 x y) ->
+//(Mod32u x y) ->
+//(Mod16 x y) ->
+//(Mod16u x y) ->
+//(Mod8 x y) ->
+//(Mod8u x y) ->
 
 (And64 x y) -> (AND x y)
 (And32 x y) -> (AND x y)
@@ -83,107 +81,106 @@
 //(Neg32 x) -> (NEG x)
 //(Neg16 x) -> (NEG x)
 //(Neg8  x) -> (NEG x)
-//(Neg32F x) -> (ADD x)
-//(Neg64F x) -> (ADD x)
+//(Neg32F x) ->
+//(Neg64F x) ->
 
 (Com64 x) -> (XORI [int64(-1)] x)
 (Com32 x) -> (XORI [int64(-1)] x)
 (Com16 x) -> (XORI [int64(-1)] x)
 (Com8  x) -> (XORI [int64(-1)] x)
 
-(Sqrt x) -> (ADD x x)
+//(Sqrt x) ->
 
-//(SignExt8to16 x) -> (ADD x x)
-//(SignExt8to32 x) -> (ADD x x)
-//(SignExt8to64 x) -> (ADD x x)
-//(SignExt16to32 x) -> (ADD x x)
-//(SignExt16to64 x) -> (ADD x x)
-//(SignExt32to64 x) -> (ADD x x)
+//(SignExt8to16 x) ->
+//(SignExt8to32 x) ->
+//(SignExt8to64 x) ->
+//(SignExt16to32 x) ->
+//(SignExt16to64 x) ->
+//(SignExt32to64 x) ->
 
-//(ZeroExt8to16 x) -> (ADD x x)
-//(ZeroExt8to32 x) -> (ADD x x)
-//(ZeroExt8to64 x) -> (ADD x x)
-//(ZeroExt16to32 x) -> (ADD x x)
-//(ZeroExt16to64 x) -> (ADD x x)
-//(ZeroExt32to64 x) -> (ADD x x)
+//(ZeroExt8to16 x) ->
+//(ZeroExt8to32 x) ->
+//(ZeroExt8to64 x) ->
+//(ZeroExt16to32 x) ->
+//(ZeroExt16to64 x) ->
+//(ZeroExt32to64 x) ->
 
-(Cvt32to32F x) -> (ADD x x)
-(Cvt32to64F x) -> (ADD x x)
-(Cvt64to32F x) -> (ADD x x)
-(Cvt64to64F x) -> (ADD x x)
+//(Cvt32to32F x) ->
+//(Cvt32to64F x) ->
+//(Cvt64to32F x) ->
+//(Cvt64to64F x) ->
 
-(Cvt32Fto32 x) -> (ADD x x)
-(Cvt32Fto64 x) -> (ADD x x)
-(Cvt64Fto32 x) -> (ADD x x)
-(Cvt64Fto64 x) -> (ADD x x)
+//(Cvt32Fto32 x) ->
+//(Cvt32Fto64 x) ->
+//(Cvt64Fto32 x) ->
+//(Cvt64Fto64 x) ->
 
-(Cvt32Fto64F x) -> (ADD x x)
-(Cvt64Fto32F x) -> (ADD x x)
+//(Cvt32Fto64F x) ->
+//(Cvt64Fto32F x) ->
 
-(Trunc16to8 x) -> (ADD x x)
-(Trunc32to8 x) -> (ADD x x)
-(Trunc32to16 x) -> (ADD x x)
-(Trunc64to8 x) -> (ADD x x)
-(Trunc64to16 x) -> (ADD x x)
-(Trunc64to32 x) -> (ADD x x)
+//(Trunc16to8 x) ->
+//(Trunc32to8 x) ->
+//(Trunc32to16 x) ->
+//(Trunc64to8 x) ->
+//(Trunc64to16 x) ->
+//(Trunc64to32 x) ->
 
 // Shifts
-(Lsh8x8 x y) -> (ADD x y)
-(Lsh8x16 x y) -> (ADD x y)
-(Lsh8x32 x y) -> (ADD x y)
-(Lsh8x64 x y) -> (ADD x y)
-(Lsh16x8 x y) -> (ADD x y)
-(Lsh16x16 x y) -> (ADD x y)
-(Lsh16x32 x y) -> (ADD x y)
-(Lsh16x64 x y) -> (ADD x y)
-(Lsh32x8 x y) -> (ADD x y)
-(Lsh32x16 x y) -> (ADD x y)
-(Lsh32x32 x y) -> (ADD x y)
-(Lsh32x64 x y) -> (ADD x y)
-(Lsh64x8 x y) -> (ADD x y)
-(Lsh64x16 x y) -> (ADD x y)
-(Lsh64x32 x y) -> (ADD x y)
-(Lsh64x64 x y) -> (ADD x y)
+//(Lsh8x8 x y) ->
+//(Lsh8x16 x y) ->
+//(Lsh8x32 x y) ->
+//(Lsh8x64 x y) ->
+//(Lsh16x8 x y) ->
+//(Lsh16x16 x y) ->
+//(Lsh16x32 x y) ->
+//(Lsh16x64 x y) ->
+//(Lsh32x8 x y) ->
+//(Lsh32x16 x y) ->
+//(Lsh32x32 x y) ->
+//(Lsh32x64 x y) ->
+//(Lsh64x8 x y) ->
+//(Lsh64x16 x y) ->
+//(Lsh64x32 x y) ->
+//(Lsh64x64 x y) ->
 
-(Rsh8x8 x y) -> (ADD x y)
-(Rsh8x16 x y) -> (ADD x y)
-(Rsh8x32 x y) -> (ADD x y)
-(Rsh8x64 x y) -> (ADD x y)
-(Rsh16x8 x y) -> (ADD x y)
-(Rsh16x16 x y) -> (ADD x y)
-(Rsh16x32 x y) -> (ADD x y)
-(Rsh16x64 x y) -> (ADD x y)
-(Rsh32x8 x y) -> (ADD x y)
-(Rsh32x16 x y) -> (ADD x y)
-(Rsh32x32 x y) -> (ADD x y)
-(Rsh32x64 x y) -> (ADD x y)
-(Rsh64x8 x y) -> (ADD x y)
-(Rsh64x16 x y) -> (ADD x y)
-(Rsh64x32 x y) -> (ADD x y)
-(Rsh64x64 x y) -> (ADD x y)
+//(Rsh8x8 x y) ->
+//(Rsh8x16 x y) ->
+//(Rsh8x32 x y) ->
+//(Rsh8x64 x y) ->
+//(Rsh16x8 x y) ->
+//(Rsh16x16 x y) ->
+//(Rsh16x32 x y) ->
+//(Rsh16x64 x y) ->
+//(Rsh32x8 x y) ->
+//(Rsh32x16 x y) ->
+//(Rsh32x32 x y) ->
+//(Rsh32x64 x y) ->
+//(Rsh64x8 x y) ->
+//(Rsh64x16 x y) ->
+//(Rsh64x32 x y) ->
+//(Rsh64x64 x y) ->
 
-(Rsh8Ux8 x y) -> (ADD x y)
-(Rsh8Ux16 x y) -> (ADD x y)
-(Rsh8Ux32 x y) -> (ADD x y)
-(Rsh8Ux64 x y) -> (ADD x y)
-(Rsh16Ux8 x y) -> (ADD x y)
-(Rsh16Ux16 x y) -> (ADD x y)
-(Rsh16Ux32 x y) -> (ADD x y)
-(Rsh16Ux64 x y) -> (ADD x y)
-(Rsh32Ux8 x y) -> (ADD x y)
-(Rsh32Ux16 x y) -> (ADD x y)
-(Rsh32Ux32 x y) -> (ADD x y)
-(Rsh32Ux64 x y) -> (ADD x y)
-(Rsh64Ux8 x y) -> (ADD x y)
-(Rsh64Ux16 x y) -> (ADD x y)
-(Rsh64Ux32 x y) -> (ADD x y)
-(Rsh64Ux64 x y) -> (ADD x y)
+//(Rsh8Ux8 x y) ->
+//(Rsh8Ux16 x y) ->
+//(Rsh8Ux32 x y) ->
+//(Rsh8Ux64 x y) ->
+//(Rsh16Ux8 x y) ->
+//(Rsh16Ux16 x y) ->
+//(Rsh16Ux32 x y) ->
+//(Rsh16Ux64 x y) ->
+//(Rsh32Ux8 x y) ->
+//(Rsh32Ux16 x y) ->
+//(Rsh32Ux32 x y) ->
+//(Rsh32Ux64 x y) ->
+//(Rsh64Ux8 x y) ->
+//(Rsh64Ux16 x y) ->
+//(Rsh64Ux32 x y) ->
+//(Rsh64Ux64 x y) ->
 
-// FIXME(prattmic): ADD does not allow AuxInt.
-//(Lrot8 x [c]) -> (ADD x [c])
-//(Lrot16 x [c]) -> (ADD x [c])
-//(Lrot32 x [c]) -> (ADD x [c])
-//(Lrot64 x [c]) -> (ADD x [c])
+//(Lrot8 x [c]) ->
+//(Lrot16 x [c]) ->
+//(Lrot32 x [c]) ->
+//(Lrot64 x [c]) ->
 
 (Less64  x y) -> (SLT  x y)
 (Less32  x y) -> (SLT  (SignExt32to64 x) (SignExt32to64 y))
@@ -193,8 +190,8 @@
 (Less32U x y) -> (SLTU (ZeroExt32to64 x) (ZeroExt32to64 y))
 (Less16U x y) -> (SLTU (ZeroExt16to64 x) (ZeroExt16to64 y))
 (Less8U  x y) -> (SLTU (ZeroExt8to64  x) (ZeroExt8to64  y))
-//(Less64F x y) -> (ADD x y)
-//(Less32F x y) -> (ADD x y)
+//(Less64F x y) ->
+//(Less32F x y) ->
 
 // Convert x <= y to !(y > x).
 (Leq64  x y) -> (Not (Less64  y x))
@@ -205,8 +202,8 @@
 (Leq32U x y) -> (Not (Less32U y x))
 (Leq16U x y) -> (Not (Less16U y x))
 (Leq8U  x y) -> (Not (Less8U  y x))
-//(Leq64F x y) -> (ADD x y)
-//(Leq32F x y) -> (ADD x y)
+//(Leq64F x y) ->
+//(Leq32F x y) ->
 
 // Convert x > y to y < x.
 (Greater64  x y) -> (Less64  y x)
@@ -217,8 +214,8 @@
 (Greater32U x y) -> (Less32U y x)
 (Greater16U x y) -> (Less16U y x)
 (Greater8U  x y) -> (Less8U  y x)
-//(Greater64F x y) -> (ADD x y)
-//(Greater32F x y) -> (ADD x y)
+//(Greater64F x y) ->
+//(Greater32F x y) ->
 
 // Convert x >= y to !(x < y)
 (Geq64  x y) -> (Not (Less64  x y))
@@ -229,24 +226,24 @@
 (Geq32U x y) -> (Not (Less32U x y))
 (Geq16U x y) -> (Not (Less16U x y))
 (Geq8U  x y) -> (Not (Less8U  x y))
-//(Geq64F x y) -> (ADD x y)
-//(Geq32F x y) -> (ADD x y)
+//(Geq64F x y) ->
+//(Geq32F x y) ->
 
 (EqPtr <t> x y) -> (SEQZ (SUB <t> x y))
 (Eq64  <t> x y) -> (SEQZ (SUB <t> x y))
 (Eq32  <t> x y) -> (SEQZ (ZeroExt32to64 (SUB <t> x y)))
 (Eq16  <t> x y) -> (SEQZ (ZeroExt16to64 (SUB <t> x y)))
 (Eq8   <t> x y) -> (SEQZ (ZeroExt8to64  (SUB <t> x y)))
-//(Eq64F x y) -> (ADD x y)
-//(Eq32F x y) -> (ADD x y)
+//(Eq64F x y) ->
+//(Eq32F x y) ->
 
 (NeqPtr <t> x y) -> (SNEZ (SUB <t> x y))
 (Neq64  <t> x y) -> (SNEZ (SUB <t> x y))
 (Neq32  <t> x y) -> (SNEZ (ZeroExt32to64 (SUB <t> x y)))
 (Neq16  <t> x y) -> (SNEZ (ZeroExt16to64 (SUB <t> x y)))
 (Neq8   <t> x y) -> (SNEZ (ZeroExt8to64  (SUB <t> x y)))
-//(Neq64F x y) -> (ADD x y)
-//(Neq32F x y) -> (ADD x y)
+//(Neq64F x y) ->
+//(Neq32F x y) ->
 
 // Loads and stores
 (Load ptr mem) -> (MOVload ptr mem)
