@@ -469,6 +469,18 @@ const (
 	OpRISCVBGEU
 	OpRISCVMOVconvert
 	OpRISCVLoweredExitProc
+	OpRISCVMUL
+	OpRISCVMULW
+	OpRISCVMULH
+	OpRISCVMULHU
+	OpRISCVDIV
+	OpRISCVDIVU
+	OpRISCVDIVW
+	OpRISCVDIVUW
+	OpRISCVREM
+	OpRISCVREMU
+	OpRISCVREMW
+	OpRISCVREMUW
 
 	OpAdd8
 	OpAdd16
@@ -5796,6 +5808,178 @@ var opcodeTable = [...]opInfo{
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "MUL",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AMUL,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "MULW",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AMULW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "MULH",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AMULH,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:        "MULHU",
+		argLen:      2,
+		commutative: true,
+		asm:         riscv.AMULHU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "DIV",
+		argLen: 2,
+		asm:    riscv.ADIV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "DIVU",
+		argLen: 2,
+		asm:    riscv.ADIVU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "DIVW",
+		argLen: 2,
+		asm:    riscv.ADIVW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "DIVUW",
+		argLen: 2,
+		asm:    riscv.ADIVUW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "REM",
+		argLen: 2,
+		asm:    riscv.AREM,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "REMU",
+		argLen: 2,
+		asm:    riscv.AREMU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "REMW",
+		argLen: 2,
+		asm:    riscv.AREMW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "REMUW",
+		argLen: 2,
+		asm:    riscv.AREMUW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},

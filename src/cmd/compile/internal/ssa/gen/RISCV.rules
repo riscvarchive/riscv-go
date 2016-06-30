@@ -23,8 +23,8 @@
 //(Sub32F x y) ->
 //(Sub64F x y) ->
 
-//(Mul64 x y) ->
-//(Mul32 x y) ->
+(Mul64 x y) -> (MUL x y)
+(Mul32 x y) -> (MULW x y)
 //(Mul16 x y) ->
 //(Mul8 x y) ->
 //(Mul32F x y) ->
@@ -33,17 +33,17 @@
 //(Div32F x y) ->
 //(Div64F x y) ->
 
-//(Div64 x y) ->
-//(Div64u x y) ->
-//(Div32 x y) ->
-//(Div32u x y) ->
+(Div64 x y) -> (DIV x y)
+(Div64u x y) -> (DIVU x y)
+(Div32 x y) -> (DIVW x y)
+(Div32u x y) -> (DIVUW x y)
 //(Div16 x y) ->
 //(Div16u x y) ->
 //(Div8 x y) ->
 //(Div8u x y) ->
 
-//(Hmul64 x y) ->
-//(Hmul64u x y) ->
+(Hmul64 x y) -> (MULH x y)
+(Hmul64u x y) -> (MULHU x y)
 //(Hmul32 x y) ->
 //(Hmul32u x y) ->
 //(Hmul16 x y) ->
@@ -53,10 +53,10 @@
 
 //(Avg64u x y) ->
 
-//(Mod64 x y) ->
-//(Mod64u x y) ->
-//(Mod32 x y) ->
-//(Mod32u x y) ->
+(Mod64 x y) -> (REM x y)
+(Mod64u x y) -> (REMU x y)
+(Mod32 x y) -> (REMW x y)
+(Mod32u x y) -> (REMUW x y)
 //(Mod16 x y) ->
 //(Mod16u x y) ->
 //(Mod8 x y) ->

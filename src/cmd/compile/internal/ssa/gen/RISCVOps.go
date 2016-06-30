@@ -116,6 +116,20 @@ func init() {
 		{name: "MOVconvert", argLength: 2, reg: gp11, asm: "MOV"}, // arg0, but converted to int/ptr as appropriate; arg1=mem
 
 		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed[".A0"] | regNamed[".A7"]}}, // arg0=mem, auxint=return code
+
+		// M extension
+		{name: "MUL", argLength: 2, reg: gp21, asm: "MUL", commutative: true},
+		{name: "MULW", argLength: 2, reg: gp21, asm: "MULW", commutative: true},
+		{name: "MULH", argLength: 2, reg: gp21, asm: "MULH", commutative: true},
+		{name: "MULHU", argLength: 2, reg: gp21, asm: "MULHU", commutative: true},
+		{name: "DIV", argLength: 2, reg: gp21, asm: "DIV"},
+		{name: "DIVU", argLength: 2, reg: gp21, asm: "DIVU"},
+		{name: "DIVW", argLength: 2, reg: gp21, asm: "DIVW"},
+		{name: "DIVUW", argLength: 2, reg: gp21, asm: "DIVUW"},
+		{name: "REM", argLength: 2, reg: gp21, asm: "REM"},
+		{name: "REMU", argLength: 2, reg: gp21, asm: "REMU"},
+		{name: "REMW", argLength: 2, reg: gp21, asm: "REMW"},
+		{name: "REMUW", argLength: 2, reg: gp21, asm: "REMUW"},
 	}
 
 	RISCVblocks := []blockData{
