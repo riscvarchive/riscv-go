@@ -67,6 +67,7 @@ var (
 	asmArchMips64LE = asmArch{"mips64", 8, 8, 8, false, "R29", true}
 	asmArchPpc64    = asmArch{"ppc64", 8, 8, 8, true, "R1", true}
 	asmArchPpc64LE  = asmArch{"ppc64le", 8, 8, 8, false, "R1", true}
+	asmArchRISCV    = asmArch{"riscv", 8, 8, 8, false, "X2", true}
 
 	arches = []*asmArch{
 		&asmArch386,
@@ -78,6 +79,7 @@ var (
 		&asmArchMips64LE,
 		&asmArchPpc64,
 		&asmArchPpc64LE,
+		&asmArchRISCV,
 	}
 )
 
