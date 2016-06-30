@@ -224,7 +224,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = riscv.REG_A7
 		// SCALL
-		p = gc.Prog(riscv.ASCALL)
+		p = gc.Prog(riscv.AECALL)
 	default:
 		v.Fatalf("Unhandled op %v", v.Op)
 	}

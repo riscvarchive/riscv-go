@@ -45,7 +45,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.ASD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOV:   {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.ASEQZ:  {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.ASCALL: {Flags: gc.OK},
+	riscv.AECALL: {Flags: gc.OK},
 
 	// RISCV conditional branches
 	riscv.ABEQ:  {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
