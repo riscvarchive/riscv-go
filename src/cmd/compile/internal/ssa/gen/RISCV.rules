@@ -77,10 +77,10 @@
 (Xor16 x y) -> (XOR x y)
 (Xor8  x y) -> (XOR x y)
 
-//(Neg64 x) -> (NEG x)
-//(Neg32 x) -> (NEG x)
-//(Neg16 x) -> (NEG x)
-//(Neg8  x) -> (NEG x)
+(Neg64 x) -> (SUB (MOVQconst) x)
+(Neg32 x) -> (SUB (MOVLconst) x)
+(Neg16 x) -> (SUB (MOVWconst) x)
+(Neg8  x) -> (SUB (MOVBconst) x)
 //(Neg32F x) ->
 //(Neg64F x) ->
 

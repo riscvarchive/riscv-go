@@ -39,11 +39,24 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.ASUB: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.AXOR: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 
-	// RISCV instructions
-	riscv.AADDI:  {Flags: gc.LeftRead | gc.RightWrite},
+	// RISC-V register-immediate instructions
+	riscv.AADDI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.ASLLI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.ASRLI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.ASRAI: {Flags: gc.LeftRead | gc.RightWrite},
+
+	// RISCV moves, loads, and stores
 	riscv.ALD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.ASD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOV:   {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVB:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVBU: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVH:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVHU: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVW:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVWU: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+
+	// Other RISC-V instructions
 	riscv.ASEQZ:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AECALL: {Flags: gc.OK},
 
