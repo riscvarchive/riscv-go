@@ -134,6 +134,14 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpLoad(v, config)
 	case OpRISCVMOVQconst:
 		return rewriteValueRISCV_OpRISCVMOVQconst(v, config)
+	case OpNeg16:
+		return rewriteValueRISCV_OpNeg16(v, config)
+	case OpNeg32:
+		return rewriteValueRISCV_OpNeg32(v, config)
+	case OpNeg64:
+		return rewriteValueRISCV_OpNeg64(v, config)
+	case OpNeg8:
+		return rewriteValueRISCV_OpNeg8(v, config)
 	case OpNeq16:
 		return rewriteValueRISCV_OpNeq16(v, config)
 	case OpNeq32:
@@ -1202,6 +1210,66 @@ func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 		return true
 	}
 	return false
+}
+func rewriteValueRISCV_OpNeg16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg16 x)
+	// cond:
+	// result: (SUB (MOVWconst) x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVSUB)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVWconst, config.fe.TypeUInt16())
+		v.AddArg(v0)
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpNeg32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg32 x)
+	// cond:
+	// result: (SUB (MOVLconst) x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVSUB)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVLconst, config.fe.TypeUInt32())
+		v.AddArg(v0)
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpNeg64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg64 x)
+	// cond:
+	// result: (SUB (MOVQconst) x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVSUB)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
+		v.AddArg(v0)
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpNeg8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Neg8  x)
+	// cond:
+	// result: (SUB (MOVBconst) x)
+	for {
+		x := v.Args[0]
+		v.reset(OpRISCVSUB)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVBconst, config.fe.TypeUInt8())
+		v.AddArg(v0)
+		v.AddArg(x)
+		return true
+	}
 }
 func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
 	b := v.Block

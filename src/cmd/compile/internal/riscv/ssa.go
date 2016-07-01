@@ -178,12 +178,9 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			p.From.Reg = riscv.REG_SP
 			p.From.Offset = v.AuxInt
 		}
-		// TODO: once a version of dev.ssa is merged that contains gc.SSAReg,
-		// uncomment this check.
-		// if reg := gc.SSAReg(v.Args[0]); reg.Name() != wantreg {
-		// 	v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
-		// }
-		_ = wantreg
+		if reg := gc.SSAReg(v.Args[0]); reg.Name() != wantreg {
+			v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
+		}
 	case ssa.OpRISCVMOVload:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
