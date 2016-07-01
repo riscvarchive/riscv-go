@@ -254,19 +254,35 @@
 //(Neq64F x y) ->
 //(Neq32F x y) ->
 
-// Loads and stores
-(Load ptr mem) -> (MOVload ptr mem)
-(Store ptr val mem) -> (MOVstore ptr val mem)
+// Loads
+(Load <t> ptr mem) &&  t.IsBoolean()                  -> (LBU ptr mem)
+(Load <t> ptr mem) && ( is8BitInt(t) &&  isSigned(t)) -> (LB  ptr mem)
+(Load <t> ptr mem) && ( is8BitInt(t) && !isSigned(t)) -> (LBU ptr mem)
+(Load <t> ptr mem) && (is16BitInt(t) &&  isSigned(t)) -> (LH  ptr mem)
+(Load <t> ptr mem) && (is16BitInt(t) && !isSigned(t)) -> (LHU ptr mem)
+(Load <t> ptr mem) && (is32BitInt(t) &&  isSigned(t)) -> (LW  ptr mem)
+(Load <t> ptr mem) && (is32BitInt(t) && !isSigned(t)) -> (LWU ptr mem)
+(Load <t> ptr mem) &&  is64BitInt(t)                  -> (LD  ptr mem)
+//(Load <t> ptr mem) &&  is32BitFloat(t)                -> (FLW ptr mem)
+//(Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
+
+// Stores
+(Store [1] ptr val mem)                            -> (SB_ ptr val mem)
+(Store [2] ptr val mem)                            -> (SH  ptr val mem)
+(Store [4] ptr val mem) && !is32BitFloat(val.Type) -> (SW  ptr val mem)
+(Store [8] ptr val mem) && !is64BitFloat(val.Type) -> (SD  ptr val mem)
+//(Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
+//(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
 // Zeroing
 // FIXME: check alignment?
 // TODO: Optimize, e.g. by storing from the zero register instead of writing 0 to a register
 // TODO: Implement larger and arbitrary zeroing
 (Zero [0] _ mem) -> mem
-(Zero [1] ptr mem) -> (MOVstore ptr (MOVBconst [0]) mem)
-(Zero [2] ptr mem) -> (MOVstore ptr (MOVWconst [0]) mem)
-(Zero [4] ptr mem) -> (MOVstore ptr (MOVLconst [0]) mem)
-(Zero [8] ptr mem) -> (MOVstore ptr (MOVQconst [0]) mem)
+(Zero [1] ptr mem) -> (SB_ ptr (MOVBconst) mem)
+(Zero [2] ptr mem) -> (SH  ptr (MOVWconst) mem)
+(Zero [4] ptr mem) -> (SW  ptr (MOVLconst) mem)
+(Zero [8] ptr mem) -> (SD  ptr (MOVQconst) mem)
 
 (Convert x mem) -> (MOVconvert x mem)
 
