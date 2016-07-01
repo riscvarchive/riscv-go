@@ -1197,17 +1197,127 @@ func rewriteValueRISCV_OpLess8U(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Load ptr mem)
-	// cond:
-	// result: (MOVload ptr mem)
+	// match: (Load <t> ptr mem)
+	// cond: t.IsBoolean()
+	// result: (LBU ptr mem)
 	for {
+		t := v.Type
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVMOVload)
+		if !(t.IsBoolean()) {
+			break
+		}
+		v.reset(OpRISCVLBU)
 		v.AddArg(ptr)
 		v.AddArg(mem)
 		return true
 	}
+	// match: (Load <t> ptr mem)
+	// cond: ( is8BitInt(t) &&  isSigned(t))
+	// result: (LB  ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is8BitInt(t) && isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLB)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: ( is8BitInt(t) && !isSigned(t))
+	// result: (LBU ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is8BitInt(t) && !isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLBU)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: (is16BitInt(t) &&  isSigned(t))
+	// result: (LH  ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is16BitInt(t) && isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLH)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: (is16BitInt(t) && !isSigned(t))
+	// result: (LHU ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is16BitInt(t) && !isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLHU)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: (is32BitInt(t) &&  isSigned(t))
+	// result: (LW  ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is32BitInt(t) && isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLW)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: (is32BitInt(t) && !isSigned(t))
+	// result: (LWU ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is32BitInt(t) && !isSigned(t)) {
+			break
+		}
+		v.reset(OpRISCVLWU)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Load <t> ptr mem)
+	// cond: is64BitInt(t)
+	// result: (LD  ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is64BitInt(t)) {
+			break
+		}
+		v.reset(OpRISCVLD)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
+	return false
 }
 func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 	b := v.Block
@@ -1636,19 +1746,77 @@ func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Store ptr val mem)
+	// match: (Store [1] ptr val mem)
 	// cond:
-	// result: (MOVstore ptr val mem)
+	// result: (SB_ ptr val mem)
 	for {
+		if v.AuxInt != 1 {
+			break
+		}
 		ptr := v.Args[0]
 		val := v.Args[1]
 		mem := v.Args[2]
-		v.reset(OpRISCVMOVstore)
+		v.reset(OpRISCVSB_)
 		v.AddArg(ptr)
 		v.AddArg(val)
 		v.AddArg(mem)
 		return true
 	}
+	// match: (Store [2] ptr val mem)
+	// cond:
+	// result: (SH  ptr val mem)
+	for {
+		if v.AuxInt != 2 {
+			break
+		}
+		ptr := v.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSH)
+		v.AddArg(ptr)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Store [4] ptr val mem)
+	// cond: !is32BitFloat(val.Type)
+	// result: (SW  ptr val mem)
+	for {
+		if v.AuxInt != 4 {
+			break
+		}
+		ptr := v.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(!is32BitFloat(val.Type)) {
+			break
+		}
+		v.reset(OpRISCVSW)
+		v.AddArg(ptr)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Store [8] ptr val mem)
+	// cond: !is64BitFloat(val.Type)
+	// result: (SD  ptr val mem)
+	for {
+		if v.AuxInt != 8 {
+			break
+		}
+		ptr := v.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(!is64BitFloat(val.Type)) {
+			break
+		}
+		v.reset(OpRISCVSD)
+		v.AddArg(ptr)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	return false
 }
 func rewriteValueRISCV_OpSub16(v *Value, config *Config) bool {
 	b := v.Block
@@ -1803,68 +1971,64 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 	}
 	// match: (Zero [1] ptr mem)
 	// cond:
-	// result: (MOVstore ptr (MOVBconst [0]) mem)
+	// result: (SB_ ptr (MOVBconst) mem)
 	for {
 		if v.AuxInt != 1 {
 			break
 		}
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVMOVstore)
+		v.reset(OpRISCVSB_)
 		v.AddArg(ptr)
 		v0 := b.NewValue0(v.Line, OpRISCVMOVBconst, config.fe.TypeUInt8())
-		v0.AuxInt = 0
 		v.AddArg(v0)
 		v.AddArg(mem)
 		return true
 	}
 	// match: (Zero [2] ptr mem)
 	// cond:
-	// result: (MOVstore ptr (MOVWconst [0]) mem)
+	// result: (SH  ptr (MOVWconst) mem)
 	for {
 		if v.AuxInt != 2 {
 			break
 		}
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVMOVstore)
+		v.reset(OpRISCVSH)
 		v.AddArg(ptr)
 		v0 := b.NewValue0(v.Line, OpRISCVMOVWconst, config.fe.TypeUInt16())
-		v0.AuxInt = 0
 		v.AddArg(v0)
 		v.AddArg(mem)
 		return true
 	}
 	// match: (Zero [4] ptr mem)
 	// cond:
-	// result: (MOVstore ptr (MOVLconst [0]) mem)
+	// result: (SW  ptr (MOVLconst) mem)
 	for {
 		if v.AuxInt != 4 {
 			break
 		}
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVMOVstore)
+		v.reset(OpRISCVSW)
 		v.AddArg(ptr)
 		v0 := b.NewValue0(v.Line, OpRISCVMOVLconst, config.fe.TypeUInt32())
-		v0.AuxInt = 0
 		v.AddArg(v0)
 		v.AddArg(mem)
 		return true
 	}
 	// match: (Zero [8] ptr mem)
 	// cond:
-	// result: (MOVstore ptr (MOVQconst [0]) mem)
+	// result: (SD  ptr (MOVQconst) mem)
 	for {
 		if v.AuxInt != 8 {
 			break
 		}
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		v.reset(OpRISCVMOVstore)
+		v.reset(OpRISCVSD)
 		v.AddArg(ptr)
 		v0 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
-		v0.AuxInt = 0
 		v.AddArg(v0)
 		v.AddArg(mem)
 		return true

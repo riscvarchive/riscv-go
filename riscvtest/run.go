@@ -19,6 +19,7 @@ var tests = [...]struct {
 	{name: "zero8", want: 3},
 	{name: "cmp"},
 	{name: "bits"},
+	{name: "ext"},
 }
 
 func main() {
