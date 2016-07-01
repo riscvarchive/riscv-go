@@ -522,6 +522,7 @@ func instr_i(p *obj.Prog) uint32 {
 	if !ok {
 		panic("instr_i: could not encode instruction")
 	}
+	imm |= uint32(i.csr)
 	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
