@@ -170,6 +170,18 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpOr8(v, config)
 	case OpOrB:
 		return rewriteValueRISCV_OpOrB(v, config)
+	case OpSignExt16to32:
+		return rewriteValueRISCV_OpSignExt16to32(v, config)
+	case OpSignExt16to64:
+		return rewriteValueRISCV_OpSignExt16to64(v, config)
+	case OpSignExt32to64:
+		return rewriteValueRISCV_OpSignExt32to64(v, config)
+	case OpSignExt8to16:
+		return rewriteValueRISCV_OpSignExt8to16(v, config)
+	case OpSignExt8to32:
+		return rewriteValueRISCV_OpSignExt8to32(v, config)
+	case OpSignExt8to64:
+		return rewriteValueRISCV_OpSignExt8to64(v, config)
 	case OpStore:
 		return rewriteValueRISCV_OpStore(v, config)
 	case OpSub16:
@@ -192,6 +204,18 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpXor8(v, config)
 	case OpZero:
 		return rewriteValueRISCV_OpZero(v, config)
+	case OpZeroExt16to32:
+		return rewriteValueRISCV_OpZeroExt16to32(v, config)
+	case OpZeroExt16to64:
+		return rewriteValueRISCV_OpZeroExt16to64(v, config)
+	case OpZeroExt32to64:
+		return rewriteValueRISCV_OpZeroExt32to64(v, config)
+	case OpZeroExt8to16:
+		return rewriteValueRISCV_OpZeroExt8to16(v, config)
+	case OpZeroExt8to32:
+		return rewriteValueRISCV_OpZeroExt8to32(v, config)
+	case OpZeroExt8to64:
+		return rewriteValueRISCV_OpZeroExt8to64(v, config)
 	}
 	return false
 }
@@ -1501,6 +1525,114 @@ func rewriteValueRISCV_OpOrB(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpSignExt16to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt16to32 <t> x)
+	// cond:
+	// result: (SRAI [48] (SLLI <t> [48] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 48
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 48
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSignExt16to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt16to64 <t> x)
+	// cond:
+	// result: (SRAI [48] (SLLI <t> [48] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 48
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 48
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSignExt32to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt32to64 <t> x)
+	// cond:
+	// result: (SRAI [32] (SLLI <t> [32] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 32
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 32
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSignExt8to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to16  <t> x)
+	// cond:
+	// result: (SRAI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSignExt8to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to32  <t> x)
+	// cond:
+	// result: (SRAI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SignExt8to64  <t> x)
+	// cond:
+	// result: (SRAI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRAI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
 func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -1738,6 +1870,114 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 		return true
 	}
 	return false
+}
+func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt16to32 <t> x)
+	// cond:
+	// result: (SRLI [48] (SLLI <t> [48] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 48
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 48
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpZeroExt16to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt16to64 <t> x)
+	// cond:
+	// result: (SRLI [48] (SLLI <t> [48] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 48
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 48
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpZeroExt32to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt32to64 <t> x)
+	// cond:
+	// result: (SRLI [32] (SLLI <t> [32] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 32
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 32
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpZeroExt8to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to16  <t> x)
+	// cond:
+	// result: (SRLI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpZeroExt8to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to32  <t> x)
+	// cond:
+	// result: (SRLI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpZeroExt8to64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ZeroExt8to64  <t> x)
+	// cond:
+	// result: (SRLI [56] (SLLI <t> [56] x))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVSRLI)
+		v.AuxInt = 56
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 56
+		v0.AddArg(x)
+		v.AddArg(v0)
+		return true
+	}
 }
 func rewriteBlockRISCV(b *Block) bool {
 	switch b.Kind {
