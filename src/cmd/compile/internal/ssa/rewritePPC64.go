@@ -8,8 +8,6 @@ import "math"
 var _ = math.MinInt8 // in case not otherwise used
 func rewriteValuePPC64(v *Value, config *Config) bool {
 	switch v.Op {
-	case OpPPC64ADD:
-		return rewriteValuePPC64_OpPPC64ADD(v, config)
 	case OpAdd16:
 		return rewriteValuePPC64_OpAdd16(v, config)
 	case OpAdd32:
@@ -178,6 +176,8 @@ func rewriteValuePPC64(v *Value, config *Config) bool {
 		return rewriteValuePPC64_OpOr64(v, config)
 	case OpOr8:
 		return rewriteValuePPC64_OpOr8(v, config)
+	case OpPPC64ADD:
+		return rewriteValuePPC64_OpPPC64ADD(v, config)
 	case OpSignExt16to32:
 		return rewriteValuePPC64_OpSignExt16to32(v, config)
 	case OpSignExt16to64:
@@ -242,41 +242,6 @@ func rewriteValuePPC64(v *Value, config *Config) bool {
 		return rewriteValuePPC64_OpZeroExt8to32(v, config)
 	case OpZeroExt8to64:
 		return rewriteValuePPC64_OpZeroExt8to64(v, config)
-	}
-	return false
-}
-func rewriteValuePPC64_OpPPC64ADD(v *Value, config *Config) bool {
-	b := v.Block
-	_ = b
-	// match: (ADD (MOVDconst [c]) x)
-	// cond:
-	// result: (ADDconst [c] x)
-	for {
-		v_0 := v.Args[0]
-		if v_0.Op != OpPPC64MOVDconst {
-			break
-		}
-		c := v_0.AuxInt
-		x := v.Args[1]
-		v.reset(OpPPC64ADDconst)
-		v.AuxInt = c
-		v.AddArg(x)
-		return true
-	}
-	// match: (ADD x (MOVDconst [c]))
-	// cond:
-	// result: (ADDconst [c] x)
-	for {
-		x := v.Args[0]
-		v_1 := v.Args[1]
-		if v_1.Op != OpPPC64MOVDconst {
-			break
-		}
-		c := v_1.AuxInt
-		v.reset(OpPPC64ADDconst)
-		v.AuxInt = c
-		v.AddArg(x)
-		return true
 	}
 	return false
 }
@@ -1863,6 +1828,41 @@ func rewriteValuePPC64_OpOr8(v *Value, config *Config) bool {
 		v.AddArg(v1)
 		return true
 	}
+}
+func rewriteValuePPC64_OpPPC64ADD(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ADD (MOVDconst [c]) x)
+	// cond:
+	// result: (ADDconst [c] x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpPPC64MOVDconst {
+			break
+		}
+		c := v_0.AuxInt
+		x := v.Args[1]
+		v.reset(OpPPC64ADDconst)
+		v.AuxInt = c
+		v.AddArg(x)
+		return true
+	}
+	// match: (ADD x (MOVDconst [c]))
+	// cond:
+	// result: (ADDconst [c] x)
+	for {
+		x := v.Args[0]
+		v_1 := v.Args[1]
+		if v_1.Op != OpPPC64MOVDconst {
+			break
+		}
+		c := v_1.AuxInt
+		v.reset(OpPPC64ADDconst)
+		v.AuxInt = c
+		v.AddArg(x)
+		return true
+	}
+	return false
 }
 func rewriteValuePPC64_OpSignExt16to32(v *Value, config *Config) bool {
 	b := v.Block

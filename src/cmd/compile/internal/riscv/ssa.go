@@ -182,14 +182,14 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		if reg := gc.SSAReg(v.Args[0]); reg.Name() != wantreg {
 			v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
 		}
-	case ssa.OpRISCVMOVload:
+	case ssa.OpRISCVLB, ssa.OpRISCVLH, ssa.OpRISCVLW, ssa.OpRISCVLD, ssa.OpRISCVLBU, ssa.OpRISCVLHU, ssa.OpRISCVLWU:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
 		p.From.Reg = gc.SSARegNum(v.Args[0])
 		gc.AddAux(&p.From, v)
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpRISCVMOVstore:
+	case ssa.OpRISCVSB, ssa.OpRISCVSH, ssa.OpRISCVSW, ssa.OpRISCVSD:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = gc.SSARegNum(v.Args[1])

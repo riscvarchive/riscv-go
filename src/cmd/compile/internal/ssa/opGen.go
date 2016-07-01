@@ -535,9 +535,17 @@ const (
 	OpRISCVMOVWconst
 	OpRISCVMOVLconst
 	OpRISCVMOVQconst
-	OpRISCVMOVload
-	OpRISCVMOVstore
-	OpRISCVLoweredNilCheck
+	OpRISCVLB
+	OpRISCVLH
+	OpRISCVLW
+	OpRISCVLD
+	OpRISCVLBU
+	OpRISCVLHU
+	OpRISCVLWU
+	OpRISCVSB
+	OpRISCVSH
+	OpRISCVSW
+	OpRISCVSD
 	OpRISCVSLLI
 	OpRISCVSRAI
 	OpRISCVSRLI
@@ -558,6 +566,7 @@ const (
 	OpRISCVBGE
 	OpRISCVBGEU
 	OpRISCVMOVconvert
+	OpRISCVLoweredNilCheck
 	OpRISCVLoweredExitProc
 
 	OpAdd8
@@ -6449,7 +6458,49 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVload",
+		name:    "LB",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVB,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "LH",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVH,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "LW",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "LD",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOV,
@@ -6463,10 +6514,52 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVstore",
+		name:    "LBU",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVBU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "LHU",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVHU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "LWU",
+		auxType: auxSymOff,
+		argLen:  2,
+		asm:     riscv.AMOVWU,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "SB",
 		auxType: auxSymOff,
 		argLen:  3,
-		asm:     riscv.AMOV,
+		asm:     riscv.AMOVB,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
@@ -6475,11 +6568,38 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:   "LoweredNilCheck",
-		argLen: 2,
+		name:    "SH",
+		auxType: auxSymOff,
+		argLen:  3,
+		asm:     riscv.AMOVH,
 		reg: regInfo{
 			inputs: []inputInfo{
-				{0, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "SW",
+		auxType: auxSymOff,
+		argLen:  3,
+		asm:     riscv.AMOVW,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:    "SD",
+		auxType: auxSymOff,
+		argLen:  3,
+		asm:     riscv.AMOV,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
@@ -6746,12 +6866,22 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
+		name:   "LoweredNilCheck",
+		argLen: 2,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
 		name:   "LoweredExitProc",
 		argLen: 2,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
+			clobbers: 132096, // A0 A7
 		},
 	},
 

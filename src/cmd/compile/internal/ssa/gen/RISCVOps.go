@@ -74,9 +74,20 @@ func init() {
 		{name: "MOVLconst", reg: gp01, asm: "MOV", typ: "UInt32", aux: "Int32", rematerializeable: true}, // 32 low bits of auxint
 		{name: "MOVQconst", reg: gp01, asm: "MOV", typ: "UInt64", aux: "Int64", rematerializeable: true}, // auxint
 
-		{name: "MOVload", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff"},               // load from arg0+auxint+aux. arg1=mem
-		{name: "MOVstore", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"}, // store value in arg1 to arg0+auxint+aux. arg2=mem
-		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},    // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		// Loads: load <size> bits from arg0+auxint+aux and extend to 64 bits; arg1=mem
+		{name: "LB", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff"},   //  8 bits, sign extend
+		{name: "LH", argLength: 2, reg: gpload, asm: "MOVH", aux: "SymOff"},   // 16 bits, sign extend
+		{name: "LW", argLength: 2, reg: gpload, asm: "MOVW", aux: "SymOff"},   // 32 bits, sign extend
+		{name: "LD", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff"},    // 64 bits
+		{name: "LBU", argLength: 2, reg: gpload, asm: "MOVBU", aux: "SymOff"}, //  8 bits, zero extend
+		{name: "LHU", argLength: 2, reg: gpload, asm: "MOVHU", aux: "SymOff"}, // 16 bits, zero extend
+		{name: "LWU", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff"}, // 32 bits, zero extend
+
+		// Stores: store <size> lowest bits in arg1 to arg0+auxint+aux; arg2=mem
+		{name: "SB", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem"}, //  8 bits
+		{name: "SH", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem"}, // 16 bits
+		{name: "SW", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem"}, // 32 bits
+		{name: "SD", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},  // 64 bits
 
 		// Shift ops
 		{name: "SLLI", argLength: 1, reg: gp11, asm: "SLLI", aux: "Int64"}, // arg0 << auxint
@@ -117,7 +128,9 @@ func init() {
 		// gets correctly ordered with respect to GC safepoints.
 		{name: "MOVconvert", argLength: 2, reg: gp11, asm: "MOV"}, // arg0, but converted to int/ptr as appropriate; arg1=mem
 
-		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed[".A0"] | regNamed[".A7"]}}, // arg0=mem, auxint=return code
+		// Lowering pass-throughs
+		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},                                                         // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed["A0"] | regNamed["A7"]}}, // arg0=mem, auxint=return code
 	}
 
 	RISCVblocks := []blockData{
