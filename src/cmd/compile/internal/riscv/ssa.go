@@ -126,7 +126,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	case ssa.OpSP, ssa.OpSB:
 		// nothing to do
 	case ssa.OpRISCVADD, ssa.OpRISCVSUB, ssa.OpRISCVXOR, ssa.OpRISCVOR, ssa.OpRISCVAND,
-		ssa.OpRISCVSLT, ssa.OpRISCVSLTU:
+		ssa.OpRISCVSLL, ssa.OpRISCVSRA, ssa.OpRISCVSRL, ssa.OpRISCVSLT, ssa.OpRISCVSLTU:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
 		r2 := gc.SSARegNum(v.Args[1])

@@ -36,6 +36,9 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.AADD: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.AAND: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.AOR:  {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.ASLL: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.ASRA: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.ASRL: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.ASUB: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 	riscv.AXOR: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 

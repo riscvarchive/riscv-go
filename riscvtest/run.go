@@ -23,6 +23,9 @@ var tests = [...]struct {
 	{name: "bool"},
 	{name: "nilcheck", want: 255}, // intentionally faults
 	{name: "com"},
+	{name: "left_shift"},
+	{name: "right_shift"},
+	{name: "right_shift_unsigned"},
 }
 
 func main() {

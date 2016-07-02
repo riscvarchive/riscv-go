@@ -546,6 +546,9 @@ const (
 	OpRISCVSH
 	OpRISCVSW
 	OpRISCVSD
+	OpRISCVSLL
+	OpRISCVSRA
+	OpRISCVSRL
 	OpRISCVSLLI
 	OpRISCVSRAI
 	OpRISCVSRLI
@@ -6601,6 +6604,48 @@ var opcodeTable = [...]opInfo{
 			inputs: []inputInfo{
 				{1, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 				{0, 4294967276}, // SP SB T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SLL",
+		argLen: 2,
+		asm:    riscv.ASLL,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SRA",
+		argLen: 2,
+		asm:    riscv.ASRA,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "SRL",
+		argLen: 2,
+		asm:    riscv.ASRL,
+		reg: regInfo{
+			inputs: []inputInfo{
+				{0, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+				{1, 4294967264}, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+			outputs: []regMask{
+				4294967264, // T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
 			},
 		},
 	},
