@@ -91,6 +91,9 @@ func init() {
 		{name: "SD", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},   // 64 bits
 
 		// Shift ops
+		{name: "SLL", argLength: 2, reg: gp21, asm: "SLL"},                 // arg0 << aux1
+		{name: "SRA", argLength: 2, reg: gp21, asm: "SRA"},                 // arg0 >> aux1, signed
+		{name: "SRL", argLength: 2, reg: gp21, asm: "SRL"},                 // arg0 >> aux1, unsigned
 		{name: "SLLI", argLength: 1, reg: gp11, asm: "SLLI", aux: "Int64"}, // arg0 << auxint
 		{name: "SRAI", argLength: 1, reg: gp11, asm: "SRAI", aux: "Int64"}, // arg0 >> auxint, signed
 		{name: "SRLI", argLength: 1, reg: gp11, asm: "SRLI", aux: "Int64"}, // arg0 >> auxint, unsigned
@@ -104,10 +107,12 @@ func init() {
 		{name: "ANDI", argLength: 1, reg: gp11, asm: "ANDI", aux: "Int64"},    // arg0 & auxint
 
 		// Generate boolean values
-		{name: "SEQZ", argLength: 1, reg: gp11, asm: "SEQZ"}, // arg0 == 0, result is 0 or 1
-		{name: "SNEZ", argLength: 1, reg: gp11, asm: "SNEZ"}, // arg0 != 0, result is 0 or 1
-		{name: "SLT", argLength: 2, reg: gp21, asm: "SLT"},   // arg0 < arg1, result is 0 or 1
-		{name: "SLTU", argLength: 2, reg: gp21, asm: "SLTU"}, // arg0 < arg1, unsigned, result is 0 or 1
+		{name: "SEQZ", argLength: 1, reg: gp11, asm: "SEQZ"},                 // arg0 == 0, result is 0 or 1
+		{name: "SNEZ", argLength: 1, reg: gp11, asm: "SNEZ"},                 // arg0 != 0, result is 0 or 1
+		{name: "SLT", argLength: 2, reg: gp21, asm: "SLT"},                   // arg0 < arg1, result is 0 or 1
+		{name: "SLTI", argLength: 1, reg: gp11, asm: "SLTI", aux: "Int64"},   // arg0 < auxint, result is 0 or 1
+		{name: "SLTU", argLength: 2, reg: gp21, asm: "SLTU"},                 // arg0 < arg1, unsigned, result is 0 or 1
+		{name: "SLTIU", argLength: 1, reg: gp11, asm: "SLTIU", aux: "Int64"}, // arg0 < auxint, unsigned, result is 0 or 1
 
 		// Flag pseudo-ops.
 		// RISC-V doesn't have flags, but SSA wants branches to be flag-based.
