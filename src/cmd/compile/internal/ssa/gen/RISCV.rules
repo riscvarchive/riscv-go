@@ -139,56 +139,56 @@
 (Trunc64to32 x) -> x
 
 // Shifts
-//(Lsh8x8 x y) ->
-//(Lsh8x16 x y) ->
-//(Lsh8x32 x y) ->
-//(Lsh8x64 x y) ->
-//(Lsh16x8 x y) ->
-//(Lsh16x16 x y) ->
-//(Lsh16x32 x y) ->
-//(Lsh16x64 x y) ->
-//(Lsh32x8 x y) ->
-//(Lsh32x16 x y) ->
-//(Lsh32x32 x y) ->
-//(Lsh32x64 x y) ->
-//(Lsh64x8 x y) ->
-//(Lsh64x16 x y) ->
-//(Lsh64x32 x y) ->
-//(Lsh64x64 x y) ->
+(Lsh8x8 x y)   -> (SLL x (ZeroExt8to64 y))
+(Lsh8x16 x y)  -> (SLL x (ZeroExt16to64 y))
+(Lsh8x32 x y)  -> (SLL x (ZeroExt32to64 y))
+(Lsh8x64 x y)  -> (SLL x y)
+(Lsh16x8 x y)  -> (SLL x (ZeroExt8to64 y))
+(Lsh16x16 x y) -> (SLL x (ZeroExt16to64 y))
+(Lsh16x32 x y) -> (SLL x (ZeroExt32to64 y))
+(Lsh16x64 x y) -> (SLL x y)
+(Lsh32x8 x y)  -> (SLL x (ZeroExt8to64 y))
+(Lsh32x16 x y) -> (SLL x (ZeroExt16to64 y))
+(Lsh32x32 x y) -> (SLL x (ZeroExt32to64 y))
+(Lsh32x64 x y) -> (SLL x y)
+(Lsh64x8 x y)  -> (SLL x (ZeroExt8to64 y))
+(Lsh64x16 x y) -> (SLL x (ZeroExt16to64 y))
+(Lsh64x32 x y) -> (SLL x (ZeroExt32to64 y))
+(Lsh64x64 x y) -> (SLL x y)
 
-//(Rsh8x8 x y) ->
-//(Rsh8x16 x y) ->
-//(Rsh8x32 x y) ->
-//(Rsh8x64 x y) ->
-//(Rsh16x8 x y) ->
-//(Rsh16x16 x y) ->
-//(Rsh16x32 x y) ->
-//(Rsh16x64 x y) ->
-//(Rsh32x8 x y) ->
-//(Rsh32x16 x y) ->
-//(Rsh32x32 x y) ->
-//(Rsh32x64 x y) ->
-//(Rsh64x8 x y) ->
-//(Rsh64x16 x y) ->
-//(Rsh64x32 x y) ->
-//(Rsh64x64 x y) ->
+(Rsh8x8 x y)   -> (SRA x (ZeroExt8to64 y))
+(Rsh8x16 x y)  -> (SRA x (ZeroExt16to64 y))
+(Rsh8x32 x y)  -> (SRA x (ZeroExt32to64 y))
+(Rsh8x64 x y)  -> (SRA x y)
+(Rsh16x8 x y)  -> (SRA x (ZeroExt8to64 y))
+(Rsh16x16 x y) -> (SRA x (ZeroExt16to64 y))
+(Rsh16x32 x y) -> (SRA x (ZeroExt32to64 y))
+(Rsh16x64 x y) -> (SRA x y)
+(Rsh32x8 x y)  -> (SRA x (ZeroExt8to64 y))
+(Rsh32x16 x y) -> (SRA x (ZeroExt16to64 y))
+(Rsh32x32 x y) -> (SRA x (ZeroExt32to64 y))
+(Rsh32x64 x y) -> (SRA x y)
+(Rsh64x8 x y)  -> (SRA x (ZeroExt8to64 y))
+(Rsh64x16 x y) -> (SRA x (ZeroExt16to64 y))
+(Rsh64x32 x y) -> (SRA x (ZeroExt32to64 y))
+(Rsh64x64 x y) -> (SRA x y)
 
-//(Rsh8Ux8 x y) ->
-//(Rsh8Ux16 x y) ->
-//(Rsh8Ux32 x y) ->
-//(Rsh8Ux64 x y) ->
-//(Rsh16Ux8 x y) ->
-//(Rsh16Ux16 x y) ->
-//(Rsh16Ux32 x y) ->
-//(Rsh16Ux64 x y) ->
-//(Rsh32Ux8 x y) ->
-//(Rsh32Ux16 x y) ->
-//(Rsh32Ux32 x y) ->
-//(Rsh32Ux64 x y) ->
-//(Rsh64Ux8 x y) ->
-//(Rsh64Ux16 x y) ->
-//(Rsh64Ux32 x y) ->
-//(Rsh64Ux64 x y) ->
+(Rsh8Ux8 x y)   -> (SRL x (ZeroExt8to64 y))
+(Rsh8Ux16 x y)  -> (SRL x (ZeroExt16to64 y))
+(Rsh8Ux32 x y)  -> (SRL x (ZeroExt32to64 y))
+(Rsh8Ux64 x y)  -> (SRL x y)
+(Rsh16Ux8 x y)  -> (SRL x (ZeroExt8to64 y))
+(Rsh16Ux16 x y) -> (SRL x (ZeroExt16to64 y))
+(Rsh16Ux32 x y) -> (SRL x (ZeroExt32to64 y))
+(Rsh16Ux64 x y) -> (SRL x y)
+(Rsh32Ux8 x y)  -> (SRL x (ZeroExt8to64 y))
+(Rsh32Ux16 x y) -> (SRL x (ZeroExt16to64 y))
+(Rsh32Ux32 x y) -> (SRL x (ZeroExt32to64 y))
+(Rsh32Ux64 x y) -> (SRL x y)
+(Rsh64Ux8 x y)  -> (SRL x (ZeroExt8to64 y))
+(Rsh64Ux16 x y) -> (SRL x (ZeroExt16to64 y))
+(Rsh64Ux32 x y) -> (SRL x (ZeroExt32to64 y))
+(Rsh64Ux64 x y) -> (SRL x y)
 
 //(Lrot8 x [c]) ->
 //(Lrot16 x [c]) ->

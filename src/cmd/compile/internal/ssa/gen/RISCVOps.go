@@ -91,6 +91,9 @@ func init() {
 		{name: "SD", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},   // 64 bits
 
 		// Shift ops
+		{name: "SLL", argLength: 2, reg: gp21, asm: "SLL"}, // arg0 << aux1
+		{name: "SRA", argLength: 2, reg: gp21, asm: "SRA"}, // arg0 >> aux1, signed
+		{name: "SRL", argLength: 2, reg: gp21, asm: "SRL"}, // arg0 >> aux1, unsigned
 		{name: "SLLI", argLength: 1, reg: gp11, asm: "SLLI", aux: "Int64"}, // arg0 << auxint
 		{name: "SRAI", argLength: 1, reg: gp11, asm: "SRAI", aux: "Int64"}, // arg0 >> auxint, signed
 		{name: "SRLI", argLength: 1, reg: gp11, asm: "SRLI", aux: "Int64"}, // arg0 >> auxint, unsigned
