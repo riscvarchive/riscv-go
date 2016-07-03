@@ -469,6 +469,11 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			}
 		}
 	}
+
+	// Validate all instructions. This provides nice error messages.
+	for p := cursym.Text; p != nil; p = p.Link {
+		validate(p)
+	}
 }
 
 // regival validates an integer register.
@@ -487,6 +492,17 @@ func regi(a obj.Addr) uint32 {
 	return regival(a.Reg)
 }
 
+// wantIntReg checks that a contains an integer register.
+func wantIntReg(p *obj.Prog, pos string, a obj.Addr) {
+	if a.Type != obj.TYPE_REG {
+		p.Ctxt.Diag("%v\texpected register in %s position but got %s", p, pos, p.Ctxt.Dconv(&a))
+		return
+	}
+	if a.Reg < REG_X0 || REG_X31 < a.Reg {
+		p.Ctxt.Diag("%v\texpected integer register in %s position but got non-integer register %s", p, pos, p.Ctxt.Dconv(&a))
+	}
+}
+
 // immFits reports whether immediate value x fits in nbits bits.
 func immFits(x int64, nbits uint) bool {
 	return x >= -(1<<(nbits)) && (1<<(nbits))-1 >= x
@@ -503,35 +519,63 @@ func immi(a obj.Addr, nbits uint) uint32 {
 	return uint32(a.Offset)
 }
 
-func instr_r(p *obj.Prog) uint32 {
+func wantImm(p *obj.Prog, pos string, a obj.Addr, nbits uint) {
+	if a.Type != obj.TYPE_CONST {
+		p.Ctxt.Diag("%v\texpected immediate in %s position but got %s", p, pos, p.Ctxt.Dconv(&a))
+		return
+	}
+	if !immFits(a.Offset, nbits) {
+		p.Ctxt.Diag("%v\timmediate in %s position cannot be larger than %d bits but got %d", p, pos, nbits, a.Offset)
+	}
+}
+
+func validateR(p *obj.Prog) {
+	wantIntReg(p, "from", p.From)
+	wantIntReg(p, "from3", *p.From3)
+	wantIntReg(p, "to", p.To)
+}
+
+func encodeR(p *obj.Prog) uint32 {
 	rs2 := regi(p.From)
 	rs1 := regi(*p.From3)
 	rd := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_r: could not encode instruction")
+		panic("encodeR: could not encode instruction")
 	}
 	return i.funct7<<25 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func instr_i(p *obj.Prog) uint32 {
+func validateI(p *obj.Prog) {
+	wantImm(p, "from", p.From, 12)
+	wantIntReg(p, "from3", *p.From3)
+	wantIntReg(p, "to", p.To)
+}
+
+func encodeI(p *obj.Prog) uint32 {
 	imm := immi(p.From, 12)
 	rs1 := regi(*p.From3)
 	rd := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_i: could not encode instruction")
+		panic("encodeI: could not encode instruction")
 	}
 	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func instr_s(p *obj.Prog) uint32 {
+func validateS(p *obj.Prog) {
+	wantImm(p, "from", p.From, 12)
+	wantIntReg(p, "from3", *p.From3)
+	wantIntReg(p, "to", p.To)
+}
+
+func encodeS(p *obj.Prog) uint32 {
 	imm := immi(p.From, 12)
 	rs2 := regi(*p.From3)
 	rs1 := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_i: could not encode instruction")
+		panic("encodeS: could not encode instruction")
 	}
 	return (imm>>5)<<25 |
 		rs2<<20 |
@@ -541,13 +585,19 @@ func instr_s(p *obj.Prog) uint32 {
 		i.opcode
 }
 
-func instr_sb(p *obj.Prog) uint32 {
+func validateSB(p *obj.Prog) {
+	wantImm(p, "to", p.To, 13)
+	// TODO: validate the register from p.Reg is in range
+	wantIntReg(p, "from", p.From)
+}
+
+func encodeSB(p *obj.Prog) uint32 {
 	imm := immi(p.To, 13)
 	rs2 := regival(p.Reg)
 	rs1 := regi(p.From)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_sb: could not encode instruction")
+		panic("encodeSB: could not encode instruction")
 	}
 	return (imm>>12)<<31 |
 		((imm>>5)&0x3f)<<25 |
@@ -559,8 +609,13 @@ func instr_sb(p *obj.Prog) uint32 {
 		i.opcode
 }
 
-func instr_u(p *obj.Prog) uint32 {
-	// The immediates for instr_u are the upper 20 bits of a 32 bit value.
+func validateU(p *obj.Prog) {
+	wantImm(p, "from", p.From, 20)
+	wantIntReg(p, "to", p.To)
+}
+
+func encodeU(p *obj.Prog) uint32 {
+	// The immediates for encodeU are the upper 20 bits of a 32 bit value.
 	// Rather than have the user/compiler generate a 32 bit constant,
 	// the bottommost bits of which must all be zero,
 	// instead accept just the top bits.
@@ -568,17 +623,22 @@ func instr_u(p *obj.Prog) uint32 {
 	rd := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_u: could not encode instruction")
+		panic("encodeU: could not encode instruction")
 	}
 	return imm<<12 | rd<<7 | i.opcode
 }
 
-func instr_uj(p *obj.Prog) uint32 {
+func validateUJ(p *obj.Prog) {
+	wantImm(p, "to", p.To, 20)
+	wantIntReg(p, "from", p.From)
+}
+
+func encodeUJ(p *obj.Prog) uint32 {
 	imm := immi(p.To, 20)
 	rd := regi(p.From)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("instr_uj: could not encode instruction")
+		panic("encodeUJ: could not encode instruction")
 	}
 	return (imm>>20)<<31 |
 		((imm>>1)&0x3ff)<<21 |
@@ -588,27 +648,117 @@ func instr_uj(p *obj.Prog) uint32 {
 		i.opcode
 }
 
+type encoding struct {
+	encode   func(*obj.Prog) uint32 // encode returns the machine code for a Prog
+	validate func(*obj.Prog)        // validate validates a Prog, calling ctxt.Diag for any issues
+}
+
+var (
+	rEncoding   = encoding{encode: encodeR, validate: validateR}
+	iEncoding   = encoding{encode: encodeI, validate: validateI}
+	sEncoding   = encoding{encode: encodeS, validate: validateS}
+	sbEncoding  = encoding{encode: encodeSB, validate: validateSB}
+	uEncoding   = encoding{encode: encodeU, validate: validateU}
+	ujEncoding  = encoding{encode: encodeUJ, validate: validateUJ}
+	badEncoding = encoding{encode: func(*obj.Prog) uint32 { return 0 }, validate: func(*obj.Prog) {}}
+)
+
+// encodingForAs contains the encoding for a RISC-V instruction.
+// Instructions are masked with obj.AMask to keep indices small.
+// TODO: merge this with the encoding table in inst.go.
+// TODO: add other useful per-As info, like whether it is a branch (used in preprocess).
+var encodingForAs = [...]encoding{
+	AADD & obj.AMask:    rEncoding,
+	ASUB & obj.AMask:    rEncoding,
+	ASLL & obj.AMask:    rEncoding,
+	AXOR & obj.AMask:    rEncoding,
+	ASRL & obj.AMask:    rEncoding,
+	ASRA & obj.AMask:    rEncoding,
+	AOR & obj.AMask:     rEncoding,
+	AAND & obj.AMask:    rEncoding,
+	ASLT & obj.AMask:    rEncoding,
+	ASLTU & obj.AMask:   rEncoding,
+	AMUL & obj.AMask:    rEncoding,
+	AMULH & obj.AMask:   rEncoding,
+	AMULHU & obj.AMask:  rEncoding,
+	AMULHSU & obj.AMask: rEncoding,
+	AMULW & obj.AMask:   rEncoding,
+	ADIV & obj.AMask:    rEncoding,
+	ADIVU & obj.AMask:   rEncoding,
+	AREM & obj.AMask:    rEncoding,
+	AREMU & obj.AMask:   rEncoding,
+	ADIVW & obj.AMask:   rEncoding,
+	ADIVUW & obj.AMask:  rEncoding,
+	AREMW & obj.AMask:   rEncoding,
+	AREMUW & obj.AMask:  rEncoding,
+
+	AADDI & obj.AMask:      iEncoding,
+	ASLLI & obj.AMask:      iEncoding,
+	AXORI & obj.AMask:      iEncoding,
+	ASRLI & obj.AMask:      iEncoding,
+	ASRAI & obj.AMask:      iEncoding,
+	AORI & obj.AMask:       iEncoding,
+	AANDI & obj.AMask:      iEncoding,
+	AJALR & obj.AMask:      iEncoding,
+	AECALL & obj.AMask:     iEncoding,
+	ARDCYCLE & obj.AMask:   iEncoding,
+	ARDTIME & obj.AMask:    iEncoding,
+	ARDINSTRET & obj.AMask: iEncoding,
+	ALB & obj.AMask:        iEncoding,
+	ALH & obj.AMask:        iEncoding,
+	ALW & obj.AMask:        iEncoding,
+	ALD & obj.AMask:        iEncoding,
+	ALBU & obj.AMask:       iEncoding,
+	ALHU & obj.AMask:       iEncoding,
+	ALWU & obj.AMask:       iEncoding,
+	ASLTI & obj.AMask:      iEncoding,
+	ASLTIU & obj.AMask:     iEncoding,
+
+	ASB & obj.AMask: sEncoding,
+	ASH & obj.AMask: sEncoding,
+	ASW & obj.AMask: sEncoding,
+	ASD & obj.AMask: sEncoding,
+
+	ABEQ & obj.AMask:  sbEncoding,
+	ABNE & obj.AMask:  sbEncoding,
+	ABLT & obj.AMask:  sbEncoding,
+	ABGE & obj.AMask:  sbEncoding,
+	ABLTU & obj.AMask: sbEncoding,
+	ABGEU & obj.AMask: sbEncoding,
+
+	AAUIPC & obj.AMask: uEncoding,
+	ALUI & obj.AMask:   uEncoding,
+
+	AJAL & obj.AMask: ujEncoding,
+}
+
+// encodingForP returns the encoding (encode+validate funcs) for a Prog.
+func encodingForP(p *obj.Prog) encoding {
+	if p.As&^obj.AMask != obj.ABaseRISCV {
+		p.Ctxt.Diag("encodingForP: not a RISC-V instruction %s", p.As)
+		return badEncoding
+	}
+	as := p.As & obj.AMask
+	if int(as) >= len(encodingForAs) {
+		p.Ctxt.Diag("encodingForP: bad RISC-V instruction %s", p.As)
+		return badEncoding
+	}
+	enc := encodingForAs[as]
+	if enc.encode == nil {
+		p.Ctxt.Diag("encodingForP: no encoding for instruction %s", p.As)
+		return badEncoding
+	}
+	return enc
+}
+
 // asmout generates the machine code for a Prog.
 func asmout(p *obj.Prog) uint32 {
-	switch p.As {
-	case AADD, ASUB, ASLL, AXOR, ASRL, ASRA, AOR, AAND, ASLT, ASLTU, AMUL,
-		AMULH, AMULHU, AMULHSU, AMULW, ADIV, ADIVU, AREM, AREMU, ADIVW,
-		ADIVUW, AREMW, AREMUW:
-		return instr_r(p)
-	case AADDI, ASLLI, AXORI, ASRLI, ASRAI, AORI, AANDI, AJALR, AECALL,
-		ARDCYCLE, ARDTIME, ARDINSTRET, ALB, ALH, ALW, ALD, ALBU, ALHU,
-		ALWU, ASLTI, ASLTIU:
-		return instr_i(p)
-	case ASB, ASH, ASW, ASD:
-		return instr_s(p)
-	case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
-		return instr_sb(p)
-	case AAUIPC, ALUI:
-		return instr_u(p)
-	case AJAL:
-		return instr_uj(p)
-	}
-	panic(fmt.Sprintf("asmout: unrecognized instruction %s", obj.Aconv(p.As)))
+	return encodingForP(p).encode(p)
+}
+
+// validate validates a Prog.
+func validate(p *obj.Prog) {
+	encodingForP(p).validate(p)
 }
 
 // assemble is called at the very end of the assembly process.  It actually
