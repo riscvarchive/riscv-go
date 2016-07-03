@@ -294,7 +294,10 @@
 (IsNonNil p) -> (NeqPtr (MOVQconst) p)
 (IsInBounds idx len) -> (Less64U idx len)
 (IsSliceInBounds idx len) -> (Leq64U idx len)
+
+// Trivial lowering
 (NilCheck ptr mem) -> (LoweredNilCheck ptr mem)
+(GetClosurePtr) -> (LoweredGetClosurePtr)
 
 // Moves
 //(Move dst src _) ->

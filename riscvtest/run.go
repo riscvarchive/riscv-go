@@ -21,6 +21,7 @@ var tests = [...]struct {
 	{name: "bits"},
 	{name: "ext"},
 	{name: "bool"},
+	{name: "nilcheck", want: 255}, // intentionally faults
 }
 
 func main() {

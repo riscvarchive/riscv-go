@@ -82,6 +82,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpGeq8(v, config)
 	case OpGeq8U:
 		return rewriteValueRISCV_OpGeq8U(v, config)
+	case OpGetClosurePtr:
+		return rewriteValueRISCV_OpGetClosurePtr(v, config)
 	case OpGreater16:
 		return rewriteValueRISCV_OpGreater16(v, config)
 	case OpGreater16U:
@@ -809,6 +811,17 @@ func rewriteValueRISCV_OpGeq8U(v *Value, config *Config) bool {
 		v0.AddArg(x)
 		v0.AddArg(y)
 		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpGetClosurePtr(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (GetClosurePtr)
+	// cond:
+	// result: (LoweredGetClosurePtr)
+	for {
+		v.reset(OpRISCVLoweredGetClosurePtr)
 		return true
 	}
 }
