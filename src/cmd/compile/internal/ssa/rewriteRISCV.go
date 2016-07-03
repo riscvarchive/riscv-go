@@ -98,6 +98,12 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpGreater8(v, config)
 	case OpGreater8U:
 		return rewriteValueRISCV_OpGreater8U(v, config)
+	case OpIsInBounds:
+		return rewriteValueRISCV_OpIsInBounds(v, config)
+	case OpIsNonNil:
+		return rewriteValueRISCV_OpIsNonNil(v, config)
+	case OpIsSliceInBounds:
+		return rewriteValueRISCV_OpIsSliceInBounds(v, config)
 	case OpLeq16:
 		return rewriteValueRISCV_OpLeq16(v, config)
 	case OpLeq16U:
@@ -194,6 +200,18 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpSub8(v, config)
 	case OpSubPtr:
 		return rewriteValueRISCV_OpSubPtr(v, config)
+	case OpTrunc16to8:
+		return rewriteValueRISCV_OpTrunc16to8(v, config)
+	case OpTrunc32to16:
+		return rewriteValueRISCV_OpTrunc32to16(v, config)
+	case OpTrunc32to8:
+		return rewriteValueRISCV_OpTrunc32to8(v, config)
+	case OpTrunc64to16:
+		return rewriteValueRISCV_OpTrunc64to16(v, config)
+	case OpTrunc64to32:
+		return rewriteValueRISCV_OpTrunc64to32(v, config)
+	case OpTrunc64to8:
+		return rewriteValueRISCV_OpTrunc64to8(v, config)
 	case OpXor16:
 		return rewriteValueRISCV_OpXor16(v, config)
 	case OpXor32:
@@ -911,6 +929,51 @@ func rewriteValueRISCV_OpGreater8U(v *Value, config *Config) bool {
 		v.reset(OpLess8U)
 		v.AddArg(y)
 		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpIsInBounds(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (IsInBounds idx len)
+	// cond:
+	// result: (Less64U idx len)
+	for {
+		idx := v.Args[0]
+		len := v.Args[1]
+		v.reset(OpLess64U)
+		v.AddArg(idx)
+		v.AddArg(len)
+		return true
+	}
+}
+func rewriteValueRISCV_OpIsNonNil(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (IsNonNil p)
+	// cond:
+	// result: (NeqPtr (MOVQconst) p)
+	for {
+		p := v.Args[0]
+		v.reset(OpNeqPtr)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
+		v.AddArg(v0)
+		v.AddArg(p)
+		return true
+	}
+}
+func rewriteValueRISCV_OpIsSliceInBounds(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (IsSliceInBounds idx len)
+	// cond:
+	// result: (Leq64U idx len)
+	for {
+		idx := v.Args[0]
+		len := v.Args[1]
+		v.reset(OpLeq64U)
+		v.AddArg(idx)
+		v.AddArg(len)
 		return true
 	}
 }
@@ -1893,6 +1956,90 @@ func rewriteValueRISCV_OpSubPtr(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpTrunc16to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc16to8  x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpTrunc32to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc32to16 x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpTrunc32to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc32to8  x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpTrunc64to16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to16 x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpTrunc64to32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to32 x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
+func rewriteValueRISCV_OpTrunc64to8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Trunc64to8  x)
+	// cond:
+	// result: x
+	for {
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+}
 func rewriteValueRISCV_OpXor16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -2351,6 +2498,30 @@ func rewriteBlockRISCV(b *Block) bool {
 			v0 := b.NewValue0(v.Line, OpRISCVBLTU, TypeFlags)
 			v0.AddArg(y)
 			v0.AddArg(x)
+			b.SetControl(v0)
+			_ = yes
+			_ = no
+			return true
+		}
+		// match: (If cond yes no)
+		// cond: cond.Type.IsBoolean()
+		// result: (BRANCH (BNE (MOVQconst <cond.Type>) (ANDI <cond.Type> [1] cond)) yes no)
+		for {
+			v := b.Control
+			cond := b.Control
+			yes := b.Succs[0]
+			no := b.Succs[1]
+			if !(cond.Type.IsBoolean()) {
+				break
+			}
+			b.Kind = BlockRISCVBRANCH
+			v0 := b.NewValue0(v.Line, OpRISCVBNE, TypeFlags)
+			v1 := b.NewValue0(v.Line, OpRISCVMOVQconst, cond.Type)
+			v0.AddArg(v1)
+			v2 := b.NewValue0(v.Line, OpRISCVANDI, cond.Type)
+			v2.AuxInt = 1
+			v2.AddArg(cond)
+			v0.AddArg(v2)
 			b.SetControl(v0)
 			_ = yes
 			_ = no
