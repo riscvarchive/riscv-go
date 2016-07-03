@@ -207,7 +207,23 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		// See the discussion in RISCVOps.
 		// The actual conditional branch instruction will be issued in ssaGenBlock.
 	case ssa.OpRISCVLoweredNilCheck:
-		log.Printf("TODO: LoweredNilCheck")
+		// Issue a load which will fault if arg is nil.
+		// TODO: optimizations. See arm and amd64 LoweredNilCheck.
+		p := gc.Prog(riscv.AMOVB)
+		p.From.Type = obj.TYPE_MEM
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		gc.AddAux(&p.From, v)
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_ZERO
+		if gc.Debug_checknil != 0 && v.Line > 1 { // v.Line == 1 in generated wrappers
+			gc.Warnl(v.Line, "generated nil check")
+		}
+	case ssa.OpRISCVLoweredGetClosurePtr:
+		// Closure pointer is S4 (riscv.REG_CTXT).
+		// TODO: replace this inline check with gc.CheckLoweredGetClosurePtr(v) once upstream dev.ssa is merged
+		if entry := v.Block.Func.Entry; entry != v.Block || entry.Values[0] != v {
+			gc.Fatalf("badly placed LoweredGetClosurePtr: %v %v", v.Block, v)
+		}
 	case ssa.OpRISCVLoweredExitProc:
 		// MOV rc, A0
 		p := gc.Prog(riscv.AMOV)

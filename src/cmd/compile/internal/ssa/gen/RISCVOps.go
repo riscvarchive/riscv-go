@@ -131,6 +131,7 @@ func init() {
 
 		// Lowering pass-throughs
 		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},                                                         // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regNamed["CTXT"]}}},                                                         // scheduler ensures only at beginning of entry block
 		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed["A0"] | regNamed["A7"]}}, // arg0=mem, auxint=return code
 	}
 

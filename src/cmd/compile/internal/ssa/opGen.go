@@ -567,6 +567,7 @@ const (
 	OpRISCVBGEU
 	OpRISCVMOVconvert
 	OpRISCVLoweredNilCheck
+	OpRISCVLoweredGetClosurePtr
 	OpRISCVLoweredExitProc
 
 	OpAdd8
@@ -6871,6 +6872,15 @@ var opcodeTable = [...]opInfo{
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 4294967268}, // SP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 RT1 RT2 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 T6
+			},
+		},
+	},
+	{
+		name:   "LoweredGetClosurePtr",
+		argLen: 0,
+		reg: regInfo{
+			outputs: []regMask{
+				1048576, // CTXT
 			},
 		},
 	},
