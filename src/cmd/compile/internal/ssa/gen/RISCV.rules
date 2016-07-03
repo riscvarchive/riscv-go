@@ -3,11 +3,13 @@
 // license that can be found in the LICENSE file.
 
 // Optimizations TODO:
-// * Somehow track when values are already zero/signed-extended, avoid re-extending
+// * Somehow track when values are already zero/signed-extended, avoid re-extending.
 // * Use SLTI and SLTIU for comparisons to constants, instead of SLT/SLTU with constants in registers
 // * Find a more efficient way to do zero/sign extension than left+right shift.
 //   There are many other options (store then load-extend, LUI+ANDI for zero extend, special case 32->64, ...),
 //   but left+right shift is simple and uniform, and we don't have real hardware to do perf testing on anyway.
+// * Use the zero register instead of moving 0 into a register.
+// * Add rules to avoid generating a temp bool value for (If (SLT[U] ...) ...).
 
 // Lowering arithmetic
 (Add64 x y) -> (ADD x y)
@@ -127,12 +129,14 @@
 //(Cvt32Fto64F x) ->
 //(Cvt64Fto32F x) ->
 
-//(Trunc16to8 x) ->
-//(Trunc32to8 x) ->
-//(Trunc32to16 x) ->
-//(Trunc64to8 x) ->
-//(Trunc64to16 x) ->
-//(Trunc64to32 x) ->
+// Truncations
+// We ignore the unused high parts of registers, so truncates are just copies.
+(Trunc16to8  x) -> x
+(Trunc32to8  x) -> x
+(Trunc32to16 x) -> x
+(Trunc64to8  x) -> x
+(Trunc64to16 x) -> x
+(Trunc64to32 x) -> x
 
 // Shifts
 //(Lsh8x8 x y) ->
@@ -287,9 +291,9 @@
 (Convert x mem) -> (MOVconvert x mem)
 
 // Checks
-//(IsNonNil p) ->
-//(IsInBounds idx len) ->
-//(IsSliceInBounds idx len) ->
+(IsNonNil p) -> (NeqPtr (MOVQconst) p)
+(IsInBounds idx len) -> (Less64U idx len)
+(IsSliceInBounds idx len) -> (Leq64U idx len)
 (NilCheck ptr mem) -> (LoweredNilCheck ptr mem)
 
 // Moves
@@ -319,8 +323,6 @@
 
 (Addr {sym} base) -> (MOVmem {sym} base)
 
-//(ITab) ->
-
 // Conditional branches
 (If (Eq64    x y) yes no) -> (BRANCH (BEQ  x y) yes no)
 (If (Neq64   x y) yes no) -> (BRANCH (BNE  x y) yes no)
@@ -334,6 +336,10 @@
 (If (Leq64U     x y) yes no) -> (BRANCH (BGEU y x) yes no)
 (If (Greater64  x y) yes no) -> (BRANCH (BLT  y x) yes no)
 (If (Greater64U x y) yes no) -> (BRANCH (BLTU y x) yes no)
+
+// Conditional branches on a boolean value
+// This must be last in the rules file, so that all specialized If block rewrites take higher priority.
+(If cond yes no) && cond.Type.IsBoolean() -> (BRANCH (BNE (MOVQconst <cond.Type>) (ANDI <cond.Type> [1] cond)) yes no)
 
 //(StaticCall [argwid] {target} _) ->
 //(ClosureCall entry _ mem) ->

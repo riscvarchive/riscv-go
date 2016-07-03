@@ -41,9 +41,12 @@ var progmap = map[obj.As]obj.ProgInfo{
 
 	// RISC-V register-immediate instructions
 	riscv.AADDI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AANDI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AORI:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.ASLLI: {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.ASRLI: {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.ASRAI: {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AXORI: {Flags: gc.LeftRead | gc.RightWrite},
 
 	// RISCV moves, loads, and stores
 	riscv.ALD:    {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
@@ -58,6 +61,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 
 	// Other RISC-V instructions
 	riscv.ASEQZ:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.ASNEZ:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AECALL: {Flags: gc.OK},
 
 	// RISCV conditional branches

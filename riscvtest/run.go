@@ -20,6 +20,7 @@ var tests = [...]struct {
 	{name: "cmp"},
 	{name: "bits"},
 	{name: "ext"},
+	{name: "bool"},
 }
 
 func main() {
