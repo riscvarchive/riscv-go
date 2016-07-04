@@ -5,8 +5,6 @@
 package riscv
 
 import (
-	"log"
-
 	"cmd/compile/internal/gc"
 	"cmd/compile/internal/ssa"
 	"cmd/internal/obj"
@@ -70,9 +68,8 @@ func loadByType(t ssa.Type) obj.As {
 }
 
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
-func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {
-	log.Printf("TODO: ssaMarkMoves")
-}
+// RISC-V has no flags, so this is a no-op.
+func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {}
 
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	s.SetLineno(v.Line)
