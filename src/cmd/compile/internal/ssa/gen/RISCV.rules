@@ -322,7 +322,13 @@
 (ConstBool [b]) -> (MOVBconst [b])
 
 // Convert 64 bit immediate to two 32 bit immediates, combine with add and shift.
-(MOVQconst <t> [c]) && !is32Bit(c) -> (ADD (SLLI <t> [32] (MOVQconst [int64(uint64(c)>>32)])) (MOVQconst [int64(int32(c))]))
+// The lower 32 bit immediate will be treated as signed,
+// so if it is negative, adjust for the borrow by incrementing the top half.
+// We don't have to worry about overflow from the increment,
+// because if the top half is all 1s, and int32(c) is negative,
+// then the overall constant fits in an int32.
+(MOVQconst <t> [c]) && !is32Bit(c) && int32(c) <  0 -> (ADD (SLLI <t> [32] (MOVQconst [c>>32+1])) (MOVQconst [int64(int32(c))]))
+(MOVQconst <t> [c]) && !is32Bit(c) && int32(c) >= 0 -> (ADD (SLLI <t> [32] (MOVQconst [c>>32+0])) (MOVQconst [int64(int32(c))]))
 
 (Addr {sym} base) -> (MOVmem {sym} base)
 

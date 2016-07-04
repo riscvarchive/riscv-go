@@ -1399,19 +1399,40 @@ func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
 	// match: (MOVQconst <t> [c])
-	// cond: !is32Bit(c)
-	// result: (ADD (SLLI <t> [32] (MOVQconst [int64(uint64(c)>>32)])) (MOVQconst [int64(int32(c))]))
+	// cond: !is32Bit(c) && int32(c) <  0
+	// result: (ADD (SLLI <t> [32] (MOVQconst [c>>32+1])) (MOVQconst [int64(int32(c))]))
 	for {
 		t := v.Type
 		c := v.AuxInt
-		if !(!is32Bit(c)) {
+		if !(!is32Bit(c) && int32(c) < 0) {
 			break
 		}
 		v.reset(OpRISCVADD)
 		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
 		v0.AuxInt = 32
 		v1 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
-		v1.AuxInt = int64(uint64(c) >> 32)
+		v1.AuxInt = c>>32 + 1
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v2 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
+		v2.AuxInt = int64(int32(c))
+		v.AddArg(v2)
+		return true
+	}
+	// match: (MOVQconst <t> [c])
+	// cond: !is32Bit(c) && int32(c) >= 0
+	// result: (ADD (SLLI <t> [32] (MOVQconst [c>>32+0])) (MOVQconst [int64(int32(c))]))
+	for {
+		t := v.Type
+		c := v.AuxInt
+		if !(!is32Bit(c) && int32(c) >= 0) {
+			break
+		}
+		v.reset(OpRISCVADD)
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = 32
+		v1 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
+		v1.AuxInt = c>>32 + 0
 		v0.AddArg(v1)
 		v.AddArg(v0)
 		v2 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
