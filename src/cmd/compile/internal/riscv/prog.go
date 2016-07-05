@@ -1,8 +1,6 @@
 package riscv
 
 import (
-	"log"
-
 	"cmd/compile/internal/gc"
 	"cmd/internal/obj"
 	"cmd/internal/obj/riscv"
@@ -59,7 +57,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 func proginfo(p *obj.Prog) {
 	info, ok := progmap[p.As]
 	if !ok {
-		log.Printf("proginfo missing prog %s", obj.Aconv(p.As))
+		p.Ctxt.Diag("proginfo missing prog %s", obj.Aconv(p.As))
 		return
 	}
 
