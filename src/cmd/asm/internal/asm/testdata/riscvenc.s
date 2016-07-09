@@ -90,10 +90,10 @@ start:
 	MOV	T0, (T1)			// 23305300
 	MOV	T0, 4(T1)			// 23325300
 
-	SLT	T0, T1, T2			// b3a36200
-	SLT	T0, $55, T2			// 93a37203
-	SLTU	T0, T1, T2			// b3b36200
-	SLTU	T0, $55, T2			// 93b37203
+	SLT	T1, T0, T2			// b3a36200
+	SLT	$55, T0, T2			// 93a37203
+	SLTU	T1, T0, T2			// b3b36200
+	SLTU	$55, T0, T2			// 93b37203
 
 	SEQZ	A5, A5				// 93b71700
 	SNEZ	A5, A5				// b337f000
