@@ -141,20 +141,16 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AORI
 		case ASLL:
 			p.As = ASLLI
+		case ASLT:
+			p.As = ASLTI
+		case ASLTU:
+			p.As = ASLTIU
 		case ASRA:
 			p.As = ASRAI
 		case ASRL:
 			p.As = ASRLI
 		case AXOR:
 			p.As = AXORI
-		}
-	}
-	if p.From3.Type == obj.TYPE_CONST {
-		switch p.As {
-		case ASLT:
-			p.As = ASLTI
-		case ASLTU:
-			p.As = ASLTIU
 		}
 	}
 
@@ -314,13 +310,6 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		default:
 			ctxt.Diag("progedit: unsupported MOV at %v", p)
 		}
-
-	// The semantics for SLT are designed to make sense when writing
-	// assembly from right to left--for instance, slt t2,t1,t0 sets t2 if
-	// t1 < t0.  Go assembly is written from left to right, though, so
-	// switch the operands around so you can write SLT T0, T1, T2 instead.
-	case ASLT, ASLTI, ASLTU, ASLTIU:
-		p.From, *p.From3 = *p.From3, p.From
 
 	case ASEQZ:
 		// SEQZ rs, rd -> SLTIU $1, rs, rd
