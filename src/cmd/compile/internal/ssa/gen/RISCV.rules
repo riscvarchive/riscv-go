@@ -10,6 +10,9 @@
 //   but left+right shift is simple and uniform, and we don't have real hardware to do perf testing on anyway.
 // * Use the zero register instead of moving 0 into a register.
 // * Add rules to avoid generating a temp bool value for (If (SLT[U] ...) ...).
+// * Arrange for non-trivial Zero and Move lowerings to use aligned loads and stores.
+// * Eliminate zero immediate shifts, adds, etc.
+// * Use a Duff's device for some moves and zeros.
 
 // Lowering arithmetic
 (Add64 x y) -> (ADD x y)
@@ -56,7 +59,8 @@
 //(Hmul8 x y) ->
 //(Hmul8u x y) ->
 
-//(Avg64u x y) ->
+// (x + y) / 2 -> (x / 2) + (y / 2) + (x & y & 1)
+(Avg64u <t> x y) -> (ADD (ADD <t> (SRLI <t> [1] x) (SRLI <t> [1] y)) (ANDI <t> [1] (AND <t> x y)))
 
 //(Mod64 x y) ->
 //(Mod64u x y) ->
@@ -190,10 +194,11 @@
 //(Rsh64Ux32 x y) ->
 //(Rsh64Ux64 x y) ->
 
-//(Lrot8 x [c]) ->
-//(Lrot16 x [c]) ->
-//(Lrot32 x [c]) ->
-//(Lrot64 x [c]) ->
+// x LROT c -> (x << c) | (x >> (N - c)) where N is the number of bits in the type
+(Lrot8  <t> x [c]) -> (OR (SLLI <t> [c& 7] x) (SRLI <t> x [ 8 - c& 7]))
+(Lrot16 <t> x [c]) -> (OR (SLLI <t> [c&15] x) (SRLI <t> x [16 - c&15]))
+(Lrot32 <t> x [c]) -> (OR (SLLI <t> [c&31] x) (SRLI <t> x [32 - c&31]))
+(Lrot64 <t> x [c]) -> (OR (SLLI <t> [c&63] x) (SRLI <t> x [64 - c&63]))
 
 (Less64  x y) -> (SLT  x y)
 (Less32  x y) -> (SLT  (SignExt32to64 x) (SignExt32to64 y))
@@ -279,8 +284,6 @@
 //(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
 // Zeroing
-// FIXME: check alignment?
-// TODO: Optimize, e.g. by storing from the zero register instead of writing 0 to a register
 // TODO: Implement larger and arbitrary zeroing
 (Zero [0] _ mem) -> mem
 (Zero [1] ptr mem) -> (SB_ ptr (MOVBconst) mem)
@@ -300,7 +303,12 @@
 (GetClosurePtr) -> (LoweredGetClosurePtr)
 
 // Moves
-//(Move dst src _) ->
+// TODO: Implement larger and arbitrary moves
+(Move [0]   _   _ mem) -> mem
+(Move [1] dst src mem) -> (SB_ dst (LB src mem) mem)
+(Move [2] dst src mem) -> (SH  dst (LH src mem) mem)
+(Move [4] dst src mem) -> (SW  dst (LW src mem) mem)
+(Move [8] dst src mem) -> (SD  dst (LD src mem) mem)
 
 // Boolean ops; 0=false, 1=true
 (AndB x y) -> (AND  x y)

@@ -30,6 +30,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpAnd8(v, config)
 	case OpAndB:
 		return rewriteValueRISCV_OpAndB(v, config)
+	case OpAvg64u:
+		return rewriteValueRISCV_OpAvg64u(v, config)
 	case OpCom16:
 		return rewriteValueRISCV_OpCom16(v, config)
 	case OpCom32:
@@ -140,8 +142,18 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpLess8U(v, config)
 	case OpLoad:
 		return rewriteValueRISCV_OpLoad(v, config)
+	case OpLrot16:
+		return rewriteValueRISCV_OpLrot16(v, config)
+	case OpLrot32:
+		return rewriteValueRISCV_OpLrot32(v, config)
+	case OpLrot64:
+		return rewriteValueRISCV_OpLrot64(v, config)
+	case OpLrot8:
+		return rewriteValueRISCV_OpLrot8(v, config)
 	case OpRISCVMOVQconst:
 		return rewriteValueRISCV_OpRISCVMOVQconst(v, config)
+	case OpMove:
+		return rewriteValueRISCV_OpMove(v, config)
 	case OpNeg16:
 		return rewriteValueRISCV_OpNeg16(v, config)
 	case OpNeg32:
@@ -401,6 +413,37 @@ func rewriteValueRISCV_OpAndB(v *Value, config *Config) bool {
 		v.reset(OpRISCVAND)
 		v.AddArg(x)
 		v.AddArg(y)
+		return true
+	}
+}
+func rewriteValueRISCV_OpAvg64u(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Avg64u <t> x y)
+	// cond:
+	// result: (ADD (ADD <t> (SRLI <t> [1] x) (SRLI <t> [1] y)) (ANDI <t> [1] (AND <t> x y)))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		y := v.Args[1]
+		v.reset(OpRISCVADD)
+		v0 := b.NewValue0(v.Line, OpRISCVADD, t)
+		v1 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v1.AuxInt = 1
+		v1.AddArg(x)
+		v0.AddArg(v1)
+		v2 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v2.AuxInt = 1
+		v2.AddArg(y)
+		v0.AddArg(v2)
+		v.AddArg(v0)
+		v3 := b.NewValue0(v.Line, OpRISCVANDI, t)
+		v3.AuxInt = 1
+		v4 := b.NewValue0(v.Line, OpRISCVAND, t)
+		v4.AddArg(x)
+		v4.AddArg(y)
+		v3.AddArg(v4)
+		v.AddArg(v3)
 		return true
 	}
 }
@@ -1395,6 +1438,94 @@ func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 	}
 	return false
 }
+func rewriteValueRISCV_OpLrot16(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot16 <t> x [c])
+	// cond:
+	// result: (OR (SLLI <t> [c&15] x) (SRLI <t> x [16 - c&15]))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVOR)
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = c & 15
+		v0.AddArg(x)
+		v.AddArg(v0)
+		v1 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v1.AddArg(x)
+		v1.AuxInt = 16 - c&15
+		v.AddArg(v1)
+		return true
+	}
+}
+func rewriteValueRISCV_OpLrot32(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot32 <t> x [c])
+	// cond:
+	// result: (OR (SLLI <t> [c&31] x) (SRLI <t> x [32 - c&31]))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVOR)
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = c & 31
+		v0.AddArg(x)
+		v.AddArg(v0)
+		v1 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v1.AddArg(x)
+		v1.AuxInt = 32 - c&31
+		v.AddArg(v1)
+		return true
+	}
+}
+func rewriteValueRISCV_OpLrot64(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot64 <t> x [c])
+	// cond:
+	// result: (OR (SLLI <t> [c&63] x) (SRLI <t> x [64 - c&63]))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVOR)
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = c & 63
+		v0.AddArg(x)
+		v.AddArg(v0)
+		v1 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v1.AddArg(x)
+		v1.AuxInt = 64 - c&63
+		v.AddArg(v1)
+		return true
+	}
+}
+func rewriteValueRISCV_OpLrot8(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Lrot8  <t> x [c])
+	// cond:
+	// result: (OR (SLLI <t> [c& 7] x) (SRLI <t> x [ 8 - c& 7]))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		c := v.AuxInt
+		v.reset(OpRISCVOR)
+		v0 := b.NewValue0(v.Line, OpRISCVSLLI, t)
+		v0.AuxInt = c & 7
+		v0.AddArg(x)
+		v.AddArg(v0)
+		v1 := b.NewValue0(v.Line, OpRISCVSRLI, t)
+		v1.AddArg(x)
+		v1.AuxInt = 8 - c&7
+		v.AddArg(v1)
+		return true
+	}
+}
 func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -1438,6 +1569,100 @@ func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 		v2 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
 		v2.AuxInt = int64(int32(c))
 		v.AddArg(v2)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Move [0]   _   _ mem)
+	// cond:
+	// result: mem
+	for {
+		if v.AuxInt != 0 {
+			break
+		}
+		mem := v.Args[2]
+		v.reset(OpCopy)
+		v.Type = mem.Type
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Move [1] dst src mem)
+	// cond:
+	// result: (SB_ dst (LB src mem) mem)
+	for {
+		if v.AuxInt != 1 {
+			break
+		}
+		dst := v.Args[0]
+		src := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSB_)
+		v.AddArg(dst)
+		v0 := b.NewValue0(v.Line, OpRISCVLB, config.fe.TypeInt8())
+		v0.AddArg(src)
+		v0.AddArg(mem)
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Move [2] dst src mem)
+	// cond:
+	// result: (SH  dst (LH src mem) mem)
+	for {
+		if v.AuxInt != 2 {
+			break
+		}
+		dst := v.Args[0]
+		src := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSH)
+		v.AddArg(dst)
+		v0 := b.NewValue0(v.Line, OpRISCVLH, config.fe.TypeInt16())
+		v0.AddArg(src)
+		v0.AddArg(mem)
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Move [4] dst src mem)
+	// cond:
+	// result: (SW  dst (LW src mem) mem)
+	for {
+		if v.AuxInt != 4 {
+			break
+		}
+		dst := v.Args[0]
+		src := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSW)
+		v.AddArg(dst)
+		v0 := b.NewValue0(v.Line, OpRISCVLW, config.fe.TypeInt32())
+		v0.AddArg(src)
+		v0.AddArg(mem)
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Move [8] dst src mem)
+	// cond:
+	// result: (SD  dst (LD src mem) mem)
+	for {
+		if v.AuxInt != 8 {
+			break
+		}
+		dst := v.Args[0]
+		src := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVSD)
+		v.AddArg(dst)
+		v0 := b.NewValue0(v.Line, OpRISCVLD, config.fe.TypeInt64())
+		v0.AddArg(src)
+		v0.AddArg(mem)
+		v.AddArg(v0)
+		v.AddArg(mem)
 		return true
 	}
 	return false

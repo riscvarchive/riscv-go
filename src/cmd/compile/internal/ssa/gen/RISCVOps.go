@@ -75,13 +75,13 @@ func init() {
 		{name: "MOVQconst", reg: gp01, asm: "MOV", typ: "UInt64", aux: "Int64", rematerializeable: true}, // auxint
 
 		// Loads: load <size> bits from arg0+auxint+aux and extend to 64 bits; arg1=mem
-		{name: "LB", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff"},   //  8 bits, sign extend
-		{name: "LH", argLength: 2, reg: gpload, asm: "MOVH", aux: "SymOff"},   // 16 bits, sign extend
-		{name: "LW", argLength: 2, reg: gpload, asm: "MOVW", aux: "SymOff"},   // 32 bits, sign extend
-		{name: "LD", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff"},    // 64 bits
-		{name: "LBU", argLength: 2, reg: gpload, asm: "MOVBU", aux: "SymOff"}, //  8 bits, zero extend
-		{name: "LHU", argLength: 2, reg: gpload, asm: "MOVHU", aux: "SymOff"}, // 16 bits, zero extend
-		{name: "LWU", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff"}, // 32 bits, zero extend
+		{name: "LB", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff", typ: "Int8"},     //  8 bits, sign extend
+		{name: "LH", argLength: 2, reg: gpload, asm: "MOVH", aux: "SymOff", typ: "Int16"},    // 16 bits, sign extend
+		{name: "LW", argLength: 2, reg: gpload, asm: "MOVW", aux: "SymOff", typ: "Int32"},    // 32 bits, sign extend
+		{name: "LD", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff", typ: "Int64"},     // 64 bits
+		{name: "LBU", argLength: 2, reg: gpload, asm: "MOVBU", aux: "SymOff", typ: "UInt8"},  //  8 bits, zero extend
+		{name: "LHU", argLength: 2, reg: gpload, asm: "MOVHU", aux: "SymOff", typ: "UInt16"}, // 16 bits, zero extend
+		{name: "LWU", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff", typ: "UInt32"}, // 32 bits, zero extend
 
 		// Stores: store <size> lowest bits in arg1 to arg0+auxint+aux; arg2=mem
 		// TODO: rename SB_ to SB when https://go-review.googlesource.com/24649 goes in.
