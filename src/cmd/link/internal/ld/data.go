@@ -328,6 +328,10 @@ func relocsym(s *LSym) {
 	var fl int32
 	var o int64
 
+	if SysArch.Family == sys.RISCV {
+		fmt.Printf("relocsym: %v, %+v\n", s, s.R)
+	}
+
 	Ctxt.Cursym = s
 	for ri := int32(0); ri < int32(len(s.R)); ri++ {
 		r = &s.R[ri]

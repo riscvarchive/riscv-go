@@ -1,8 +1,14 @@
 #define SYS_EXIT_GROUP	94
 #define SYS_WRITE	64
 
+TEXT hello(SB),0,$8
+	MOV	$42, T0
+	MOV	T0, 0(FP)
+	RET
+
 // _rt0_riscv_linux is the entry point.
 TEXT _rt0_riscv_linux(SB),0,$8
+	CALL	hello(SB)
 	// Write "H" to stdout...not quite to hello world, yet
 	MOV	$72, T0 // 'H'
 	MOVW	T0, 0(SP)
@@ -15,7 +21,7 @@ TEXT _rt0_riscv_linux(SB),0,$8
 	// put back in A0 for next syscall.
 	// Note that, as the spec observes, SLTIU rd, rs1, 1 == SEQZ rd, rs1
 	// TODO: Add SEQZ support directly
-	SLTIU	A0, $1, A0
+	SLTIU	$1, A0, A0
 	MOV	$SYS_EXIT_GROUP, A7
 	ECALL
 	RET

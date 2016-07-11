@@ -176,6 +176,29 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			panic(fmt.Sprintf("unhandled type %+v", p.To.Type))
 		}
 
+	case obj.ACALL:
+		// p.From is actually an _output_ for this instruction.
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_RA
+		p.To.Reg = REG_SB
+
+		switch p.To.Type {
+		case obj.TYPE_MEM:
+			p.As = AJALR
+		default:
+			panic(fmt.Sprintf("unhandled type %+v", p.To.Type))
+		}
+
+		switch p.To.Name {
+		case obj.NAME_NONE:
+			// The register and offset are fine.
+		case obj.NAME_EXTERN:
+		default:
+			panic(fmt.Sprintf("unhandled name %+v", p.To.Type))
+		}
+
+		lowerjalr(p)
+
 	case AJALR:
 		lowerjalr(p)
 
@@ -785,6 +808,19 @@ func encodingForP(p *obj.Prog) encoding {
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	var symcode []uint32 // machine code for this symbol
 	for p := cursym.Text; p != nil; p = p.Link {
+		switch p.As {
+		case AJALR:
+			//fmt.Printf("%v\n\n%+#v\n\n%+#v", p, p, p.From3)
+			if p.From.Sym != nil {
+				rel := obj.Addrel(cursym)
+				rel.Off = int32(p.Pc)
+				rel.Siz = 4
+				rel.Sym = p.To.Sym
+				rel.Add =  0
+				rel.Type = obj.R_CALL
+			}
+		}
+
 		symcode = append(symcode, encodingForP(p).encode(p))
 	}
 	cursym.Size = int64(4 * len(symcode))
