@@ -176,6 +176,29 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			panic(fmt.Sprintf("unhandled type %+v", p.To.Type))
 		}
 
+	case obj.ACALL:
+		// p.From is actually an _output_ for this instruction.
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_RA
+
+		switch p.To.Type {
+		case obj.TYPE_MEM:
+			p.As = AJAL
+			// We will emit a relocation for this. Until then,
+			// we'll encode this as a constant.
+			p.To.Type = obj.TYPE_CONST
+		default:
+			panic(fmt.Sprintf("unhandled type %+v", p.To.Type))
+		}
+
+		switch p.To.Name {
+		case obj.NAME_NONE:
+			// The register and offset are fine.
+		case obj.NAME_EXTERN:
+		default:
+			panic(fmt.Sprintf("unhandled name %+v", p.To.Type))
+		}
+
 	case AJALR:
 		lowerjalr(p)
 
@@ -662,19 +685,30 @@ func validateUJ(p *obj.Prog) {
 	wantIntReg(p, "from", p.From)
 }
 
+func encodeUJImmediate(imm uint32) uint32 {
+	return (imm>>20)<<31 |
+		((imm>>1)&0x3ff)<<21 |
+		((imm>>11)&0x1)<<20 |
+		((imm>>12)&0xff)<<12
+}
+
+// CheckAndEncodeUJImmediate ensures that imm will fit in an UJ-type immediate
+// and if so encodes it.
+func CheckAndEncodeUJImmediate(imm int64) (uint32, error) {
+	if !immFits(imm, 21) {
+		return 0, fmt.Errorf("immediate %#x does not fit in 21 bits", imm)
+	}
+	return encodeUJImmediate(uint32(imm)), nil
+}
+
 func encodeUJ(p *obj.Prog) uint32 {
-	imm := immi(p.To, 21)
+	imm := encodeUJImmediate(immi(p.To, 21))
 	rd := regi(p.From)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("encodeUJ: could not encode instruction")
 	}
-	return (imm>>20)<<31 |
-		((imm>>1)&0x3ff)<<21 |
-		((imm>>11)&0x1)<<20 |
-		((imm>>12)&0xff)<<12 |
-		rd<<7 |
-		i.opcode
+	return imm | rd<<7 | i.opcode
 }
 
 type encoding struct {
@@ -785,6 +819,18 @@ func encodingForP(p *obj.Prog) encoding {
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	var symcode []uint32 // machine code for this symbol
 	for p := cursym.Text; p != nil; p = p.Link {
+		switch p.As {
+		case AJAL:
+			if p.To.Sym != nil {
+				rel := obj.Addrel(cursym)
+				rel.Off = int32(p.Pc)
+				rel.Siz = 4
+				rel.Sym = p.To.Sym
+				rel.Add = p.To.Offset
+				rel.Type = obj.R_CALLRISCV
+			}
+		}
+
 		symcode = append(symcode, encodingForP(p).encode(p))
 	}
 	cursym.Size = int64(4 * len(symcode))
