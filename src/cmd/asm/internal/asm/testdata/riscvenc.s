@@ -55,6 +55,9 @@ start:
 	JALR	T1, (T0)			// 67830200
 	JALR	T1, 4(T0)			// 67834200
 
+	// Encoded as JAL $0, RA. The linker resolves the real address.
+	CALL	asmtest(SB)			// ef000000
+
 	RET					// 67800000
 
 	ECALL					// 73000000

@@ -438,3 +438,14 @@ const (
 	// The size of a TEXT section.
 	C_TEXTSIZE
 )
+
+// Instruction encoding masks
+const (
+	// UTypeImmMask is a mask including only the immediate portion of
+	// U-type instructions.
+	UTypeImmMask = 0xfffff000
+
+	// UJTypeImmMask is a mask including only the immediate portion of
+	// UJ-type instructions.
+	UJTypeImmMask = UTypeImmMask
+)
