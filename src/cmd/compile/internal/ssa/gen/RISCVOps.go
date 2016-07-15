@@ -10,7 +10,7 @@ import "cmd/internal/obj/riscv"
 
 func init() {
 	var regNamesRISCV []string
-	var gpMask, fpMask, gpspMask, gpspsbMask regMask
+	var gpMask, fpMask, gpspMask, gpspsbMask, gpallMask regMask
 	regNamed := make(map[string]regMask)
 
 	// Build the list of register names, creating an appropriately indexed
@@ -26,18 +26,21 @@ func init() {
 		mask := addreg(r)
 		// Add general purpose registers to gpMask.
 		switch r {
-		// Special registers that we must leave alone.
-		// TODO: Is this list right?
-		case riscv.REG_ZERO, riscv.REG_RA, riscv.REG_G:
+		case riscv.REG_ZERO:
+		case riscv.REG_RA, riscv.REG_G:
+			gpallMask |= mask
 		case riscv.REG_SB:
 			gpspsbMask |= mask
+			gpallMask |= mask
 		case riscv.REG_SP:
 			gpspMask |= mask
 			gpspsbMask |= mask
+			gpallMask |= mask
 		default:
 			gpMask |= mask
 			gpspMask |= mask
 			gpspsbMask |= mask
+			gpallMask |= mask
 		}
 	}
 	for r := riscv.REG_F0; r <= riscv.REG_F31; r++ {
@@ -60,6 +63,8 @@ func init() {
 		gp20   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{}}
 		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
 		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
+
+		callerSave = gpallMask | fpMask
 	)
 
 	RISCVops := []opData{
@@ -113,6 +118,9 @@ func init() {
 		{name: "SLTI", argLength: 1, reg: gp11, asm: "SLTI", aux: "Int64"},   // arg0 < auxint, result is 0 or 1
 		{name: "SLTU", argLength: 2, reg: gp21, asm: "SLTU"},                 // arg0 < arg1, unsigned, result is 0 or 1
 		{name: "SLTIU", argLength: 1, reg: gp11, asm: "SLTIU", aux: "Int64"}, // arg0 < auxint, unsigned, result is 0 or 1
+
+		// CALL variants
+		{name: "CALLstatic", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "SymOff"},  // call static function aux.(*gc.Sym).  arg0=mem, auxint=argsize, returns mem
 
 		// Flag pseudo-ops.
 		// RISC-V doesn't have flags, but SSA wants branches to be flag-based.

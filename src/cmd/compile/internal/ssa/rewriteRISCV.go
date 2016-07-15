@@ -286,6 +286,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpSignExt8to32(v, config)
 	case OpSignExt8to64:
 		return rewriteValueRISCV_OpSignExt8to64(v, config)
+	case OpStaticCall:
+		return rewriteValueRISCV_OpStaticCall(v, config)
 	case OpStore:
 		return rewriteValueRISCV_OpStore(v, config)
 	case OpSub16:
@@ -3189,6 +3191,23 @@ func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 		v0.AuxInt = 56
 		v0.AddArg(x)
 		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpStaticCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (StaticCall [argwid] {target} mem)
+	// cond:
+	// result: (CALLstatic [argwid] {target} mem)
+	for {
+		argwid := v.AuxInt
+		target := v.Aux
+		mem := v.Args[0]
+		v.reset(OpRISCVCALLstatic)
+		v.AuxInt = argwid
+		v.Aux = target
+		v.AddArg(mem)
 		return true
 	}
 }

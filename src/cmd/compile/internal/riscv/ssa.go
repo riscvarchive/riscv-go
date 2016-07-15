@@ -47,7 +47,7 @@ var ssaRegToReg = []int16{
 	riscv.REG_X31,
 }
 
-func loadByType(t ssa.Type) obj.As {
+func moveByType(t ssa.Type) obj.As {
 	width := t.Size()
 	if t.IsFloat() {
 		panic("float unsupported")
@@ -103,7 +103,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			v.Unimplementedf("load flags not implemented: %v", v.LongString())
 			return
 		}
-		p := gc.Prog(loadByType(v.Type))
+		p := gc.Prog(moveByType(v.Type))
 		n, off := gc.AutoVar(v.Args[0])
 		p.From.Type = obj.TYPE_MEM
 		p.From.Node = n
@@ -117,12 +117,43 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpStoreReg:
+		if v.Type.IsFlags() {
+			v.Unimplementedf("store flags not implemented: %v", v.LongString())
+			return
+		}
+		p := gc.Prog(moveByType(v.Type))
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		n, off := gc.AutoVar(v)
+		p.To.Type = obj.TYPE_MEM
+		p.To.Node = n
+		p.To.Sym = gc.Linksym(n.Sym)
+		p.To.Offset = off
+		if n.Class == gc.PPARAM || n.Class == gc.PPARAMOUT {
+			p.To.Name = obj.NAME_PARAM
+			p.To.Offset += n.Xoffset
+		} else {
+			p.To.Name = obj.NAME_AUTO
+		}
 	case ssa.OpVarDef:
 		gc.Gvardef(v.Aux.(*gc.Node))
 	case ssa.OpVarKill:
 		gc.Gvarkill(v.Aux.(*gc.Node))
 	case ssa.OpVarLive:
 		gc.Gvarlive(v.Aux.(*gc.Node))
+	case ssa.OpKeepAlive:
+		if !v.Args[0].Type.IsPtrShaped() {
+			v.Fatalf("keeping non-pointer alive %v", v.Args[0])
+		}
+		n, off := gc.AutoVar(v.Args[0])
+		if n == nil {
+			v.Fatalf("KeepLive with non-spilled value %s %s", v, v.Args[0])
+		}
+		if off != 0 {
+			v.Fatalf("KeepLive with non-zero offset spill location %s:%d", n, off)
+		}
+		gc.Gvarlive(n)
 	case ssa.OpSP, ssa.OpSB:
 		// nothing to do
 	case ssa.OpRISCVADD, ssa.OpRISCVSUB, ssa.OpRISCVXOR, ssa.OpRISCVOR, ssa.OpRISCVAND,
@@ -200,6 +231,29 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.From.Reg = gc.SSARegNum(v.Args[0])
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpRISCVCALLstatic:
+		if v.Aux.(*gc.Sym) == gc.Deferreturn.Sym {
+			// Deferred calls will appear to be returning to
+			// the CALL deferreturn(SB) that we are about to emit.
+			// However, the stack trace code will show the line
+			// of the instruction byte before the return PC.
+			// To avoid that being an unrelated instruction,
+			// insert an actual hardware NOP that will have the right line number.
+			// This is different from obj.ANOP, which is a virtual no-op
+			// that doesn't make it into the instruction stream.
+			p := gc.Prog(riscv.AADD)
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = riscv.REG_ZERO
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = riscv.REG_ZERO
+		}
+		p := gc.Prog(obj.ACALL)
+		p.To.Type = obj.TYPE_MEM
+		p.To.Name = obj.NAME_EXTERN
+		p.To.Sym = gc.Linksym(v.Aux.(*gc.Sym))
+		if gc.Maxarg < v.AuxInt {
+			gc.Maxarg = v.AuxInt
+		}
 	case ssa.OpRISCVBEQ, ssa.OpRISCVBNE, ssa.OpRISCVBLT, ssa.OpRISCVBLTU, ssa.OpRISCVBGE, ssa.OpRISCVBGEU:
 		// These are flag pseudo-ops used as control values for conditional branch blocks.
 		// See the discussion in RISCVOps.

@@ -26,6 +26,7 @@ var tests = [...]struct {
 	{name: "left_shift"},
 	{name: "right_shift"},
 	{name: "right_shift_unsigned"},
+	{name: "call"},
 }
 
 func main() {

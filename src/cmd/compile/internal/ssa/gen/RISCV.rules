@@ -375,7 +375,7 @@
 // This must be last in the rules file, so that all specialized If block rewrites take higher priority.
 (If cond yes no) && cond.Type.IsBoolean() -> (BRANCH (BNE (MOVQconst <cond.Type>) (ANDI <cond.Type> [1] cond)) yes no)
 
-//(StaticCall [argwid] {target} _) ->
+(StaticCall [argwid] {target} mem) -> (CALLstatic [argwid] {target} mem)
 //(ClosureCall entry _ mem) ->
 //(DeferCall [argwid] mem) ->
 //(GoCall [argwid] mem) ->
