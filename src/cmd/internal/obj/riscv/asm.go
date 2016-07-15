@@ -764,17 +764,17 @@ var encodingForAs = [...]encoding{
 // encodingForP returns the encoding (encode+validate funcs) for a Prog.
 func encodingForP(p *obj.Prog) encoding {
 	if p.As&^obj.AMask != obj.ABaseRISCV {
-		p.Ctxt.Diag("encodingForP: not a RISC-V instruction %s", p.As)
+		p.Ctxt.Diag("encodingForP: not a RISC-V instruction %s", obj.Aconv(p.As))
 		return badEncoding
 	}
 	as := p.As & obj.AMask
 	if int(as) >= len(encodingForAs) {
-		p.Ctxt.Diag("encodingForP: bad RISC-V instruction %s", p.As)
+		p.Ctxt.Diag("encodingForP: bad RISC-V instruction %s", obj.Aconv(p.As))
 		return badEncoding
 	}
 	enc := encodingForAs[as]
 	if enc.encode == nil {
-		p.Ctxt.Diag("encodingForP: no encoding for instruction %s", p.As)
+		p.Ctxt.Diag("encodingForP: no encoding for instruction %s", obj.Aconv(p.As))
 		return badEncoding
 	}
 	return enc
