@@ -417,10 +417,12 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 
 	// Delete unneeded instructions.
+	// TODO: I don't think we can actually delete these.
+	// They're needed for garbage collection, stack traces, etc.
 	var prev *obj.Prog
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
-		case obj.AFUNCDATA:
+		case obj.AFUNCDATA, obj.APCDATA:
 			if prev != nil {
 				prev.Link = p.Link
 			} else {

@@ -50,6 +50,9 @@ func init() {
 		panic("Too many RISCV registers")
 	}
 
+	regCtxt := regNamed["CTXT"]
+	callerSave := gpMask | fpMask | regNamed["g"]
+
 	var (
 		gpstore = regInfo{inputs: []regMask{gpspsbMask, gpspMask, 0}} // SB in first input so we can load from a global, but not in second to avoid using SB as a temporary register
 		gp01    = regInfo{outputs: []regMask{gpMask}}
@@ -60,6 +63,10 @@ func init() {
 		gp20   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{}}
 		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
 		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
+
+		call        = regInfo{clobbers: callerSave}
+		callClosure = regInfo{inputs: []regMask{gpspMask, regCtxt, 0}, clobbers: callerSave}
+		callInter   = regInfo{inputs: []regMask{gpMask}, clobbers: callerSave}
 	)
 
 	RISCVops := []opData{
@@ -134,9 +141,16 @@ func init() {
 		// gets correctly ordered with respect to GC safepoints.
 		{name: "MOVconvert", argLength: 2, reg: gp11, asm: "MOV"}, // arg0, but converted to int/ptr as appropriate; arg1=mem
 
+		// Calls
+		{name: "CALLstatic", argLength: 1, reg: call, aux: "SymOff"},        // call static function aux.(*gc.Sym). arg0=mem, auxint=argsize, returns mem
+		{name: "CALLclosure", argLength: 3, reg: callClosure, aux: "Int64"}, // call function via closure. arg0=codeptr, arg1=closure, arg2=mem, auxint=argsize, returns mem
+		{name: "CALLdefer", argLength: 1, reg: call, aux: "Int64"},          // call deferproc. arg0=mem, auxint=argsize, returns mem
+		{name: "CALLgo", argLength: 1, reg: call, aux: "Int64"},             // call newproc. arg0=mem, auxint=argsize, returns mem
+		{name: "CALLinter", argLength: 2, reg: callInter, aux: "Int64"},     // call fn by pointer. arg0=codeptr, arg1=mem, auxint=argsize, returns mem
+
 		// Lowering pass-throughs
 		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},                                                         // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
-		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regNamed["CTXT"]}}},                                                         // scheduler ensures only at beginning of entry block
+		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},                                                                  // scheduler ensures only at beginning of entry block
 		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed["A0"] | regNamed["A7"]}}, // arg0=mem, auxint=return code
 	}
 

@@ -256,6 +256,36 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		// These are flag pseudo-ops used as control values for conditional branch blocks.
 		// See the discussion in RISCVOps.
 		// The actual conditional branch instruction will be issued in ssaGenBlock.
+	case ssa.OpRISCVCALLstatic, ssa.OpRISCVCALLclosure, ssa.OpRISCVCALLdefer, ssa.OpRISCVCALLgo, ssa.OpRISCVCALLinter:
+		if v.Op == ssa.OpRISCVCALLstatic && v.Aux.(*gc.Sym) == gc.Deferreturn.Sym {
+			// Deferred calls will appear to be returning to
+			// the CALL deferreturn(SB) that we are about to emit.
+			// However, the stack trace code will show the line
+			// of the instruction byte before the return PC.
+			// To avoid that being an unrelated instruction,
+			// insert an actual hardware NOP that will have the right line number.
+			// This is different from obj.ANOP, which is a virtual no-op
+			// that doesn't make it into the instruction stream.
+			ginsnop()
+		}
+		p := gc.Prog(obj.ACALL)
+		p.To.Type = obj.TYPE_MEM
+		switch v.Op {
+		case ssa.OpRISCVCALLstatic:
+			p.To.Name = obj.NAME_EXTERN
+			p.To.Sym = gc.Linksym(v.Aux.(*gc.Sym))
+		case ssa.OpRISCVCALLdefer:
+			p.To.Name = obj.NAME_EXTERN
+			p.To.Sym = gc.Linksym(gc.Deferproc.Sym)
+		case ssa.OpRISCVCALLgo:
+			p.To.Name = obj.NAME_EXTERN
+			p.To.Sym = gc.Linksym(gc.Newproc.Sym)
+		case ssa.OpRISCVCALLclosure, ssa.OpRISCVCALLinter:
+			p.To.Reg = gc.SSARegNum(v.Args[0])
+		}
+		if gc.Maxarg < v.AuxInt {
+			gc.Maxarg = v.AuxInt
+		}
 	case ssa.OpRISCVLoweredNilCheck:
 		// Issue a load which will fault if arg is nil.
 		// TODO: optimizations. See arm and amd64 LoweredNilCheck.
