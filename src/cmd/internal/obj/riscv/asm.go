@@ -358,9 +358,7 @@ func follow(ctxt *obj.Link, s *obj.LSym) {}
 func setpcs(p *obj.Prog, pc int64) {
 	for ; p != nil; p = p.Link {
 		p.Pc = pc
-		if p.As != obj.ATEXT { // if this is a real instruction
-			pc += 4
-		}
+		pc += encodingForP(p).length
 	}
 }
 
@@ -384,10 +382,10 @@ func InvertBranch(i obj.As) obj.As {
 	}
 }
 
-// preprocess is called once for each linker symbol.  It generates prologue and
-// epilogue code and computes PC-relative branch and jump offsets.  By the time
-// preprocess finishes, all instructions in the symbol are concrete, real RISC-V
-// instructions.
+// preprocess generates prologue and epilogue code and computes PC-relative branch and jump offsets.
+// preprocess is called once for each linker symbol.
+// When preprocess finishes, all instructions in the symbol are either concrete, real RISC-V instructions
+// or directive pseudo-ops like TEXT, PCDATA, and FUNCDATA.
 func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	// Generate the prologue.
 	text := cursym.Text
@@ -397,8 +395,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 	stacksize := text.To.Offset
 	// Insert stack adjustment if necessary.
-	// Do not overwrite the TEXT directive itself;
-	// other parts of the assembler assume it's there.
 	if stacksize != 0 {
 		spadj := obj.Appendp(ctxt, text)
 		spadj.As = AADDI
@@ -408,29 +404,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		spadj.To.Type = obj.TYPE_REG
 		spadj.To.Reg = REG_SP
 		spadj.Spadj = int32(-stacksize)
-		// Do, however, skip over the TEXT directive when generating assembly.
-		// (It's not a valid RISC-V instruction, after all.)
-		cursym.Text = spadj
-	} else {
-		// Skip over TEXT.
-		cursym.Text = text.Link
-	}
-
-	// Delete unneeded instructions.
-	// TODO: I don't think we can actually delete these.
-	// They're needed for garbage collection, stack traces, etc.
-	var prev *obj.Prog
-	for p := cursym.Text; p != nil; p = p.Link {
-		switch p.As {
-		case obj.AFUNCDATA, obj.APCDATA:
-			if prev != nil {
-				prev.Link = p.Link
-			} else {
-				cursym.Text = p.Link
-			}
-		default:
-			prev = p
-		}
 	}
 
 	// Replace RET with epilogue.
@@ -716,16 +689,23 @@ func encodeUJ(p *obj.Prog) uint32 {
 type encoding struct {
 	encode   func(*obj.Prog) uint32 // encode returns the machine code for a Prog
 	validate func(*obj.Prog)        // validate validates a Prog, calling ctxt.Diag for any issues
+	length   int64                  // length of encoded instruction; 0 for pseudo-ops, 4 otherwise
 }
 
 var (
-	rEncoding   = encoding{encode: encodeR, validate: validateR}
-	iEncoding   = encoding{encode: encodeI, validate: validateI}
-	sEncoding   = encoding{encode: encodeS, validate: validateS}
-	sbEncoding  = encoding{encode: encodeSB, validate: validateSB}
-	uEncoding   = encoding{encode: encodeU, validate: validateU}
-	ujEncoding  = encoding{encode: encodeUJ, validate: validateUJ}
-	badEncoding = encoding{encode: func(*obj.Prog) uint32 { return 0 }, validate: func(*obj.Prog) {}}
+	rEncoding  = encoding{encode: encodeR, validate: validateR, length: 4}
+	iEncoding  = encoding{encode: encodeI, validate: validateI, length: 4}
+	sEncoding  = encoding{encode: encodeS, validate: validateS, length: 4}
+	sbEncoding = encoding{encode: encodeSB, validate: validateSB, length: 4}
+	uEncoding  = encoding{encode: encodeU, validate: validateU, length: 4}
+	ujEncoding = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
+
+	// pseudoOpEncoding panics if encoding is attempted, but does no validation.
+	pseudoOpEncoding = encoding{encode: nil, validate: func(*obj.Prog) {}, length: 0}
+
+	// badEncoding is used when an invalid op is encountered.
+	// An error has already been generated, so let anything else through.
+	badEncoding = encoding{encode: func(*obj.Prog) uint32 { return 0 }, validate: func(*obj.Prog) {}, length: 0}
 )
 
 // encodingForAs contains the encoding for a RISC-V instruction.
@@ -795,11 +775,15 @@ var encodingForAs = [...]encoding{
 	ALUI & obj.AMask:   uEncoding,
 
 	AJAL & obj.AMask: ujEncoding,
+
+	obj.AFUNCDATA: pseudoOpEncoding,
+	obj.APCDATA:   pseudoOpEncoding,
+	obj.ATEXT:     pseudoOpEncoding,
 }
 
 // encodingForP returns the encoding (encode+validate funcs) for a Prog.
 func encodingForP(p *obj.Prog) encoding {
-	if p.As&^obj.AMask != obj.ABaseRISCV {
+	if base := p.As &^ obj.AMask; base != obj.ABaseRISCV && base != 0 {
 		p.Ctxt.Diag("encodingForP: not a RISC-V instruction %s", p.As)
 		return badEncoding
 	}
@@ -809,15 +793,15 @@ func encodingForP(p *obj.Prog) encoding {
 		return badEncoding
 	}
 	enc := encodingForAs[as]
-	if enc.encode == nil {
+	if enc.validate == nil {
 		p.Ctxt.Diag("encodingForP: no encoding for instruction %s", p.As)
 		return badEncoding
 	}
 	return enc
 }
 
-// assemble is called at the very end of the assembly process.  It actually
-// emits machine code.
+// assemble emits machine code.
+// It is called at the very end of the assembly process.
 func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	var symcode []uint32 // machine code for this symbol
 	for p := cursym.Text; p != nil; p = p.Link {
@@ -834,7 +818,10 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 			}
 		}
 
-		symcode = append(symcode, encodingForP(p).encode(p))
+		enc := encodingForP(p)
+		if enc.length > 0 {
+			symcode = append(symcode, enc.encode(p))
+		}
 	}
 	cursym.Size = int64(4 * len(symcode))
 
