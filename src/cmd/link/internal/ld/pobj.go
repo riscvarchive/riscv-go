@@ -199,10 +199,7 @@ func Ldmain() {
 	loadlib()
 
 	checkstrdata()
-	if SysArch.Family != sys.RISCV {
-		// FIXME(prattmic): This eliminates our test code.
-		deadcode(Ctxt)
-	}
+	deadcode(Ctxt)
 	fieldtrack(Ctxt)
 	callgraph()
 

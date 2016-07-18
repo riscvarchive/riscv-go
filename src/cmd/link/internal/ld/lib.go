@@ -2087,6 +2087,12 @@ func genasmsym(put func(*LSym, string, int, int64, int64, int, *LSym)) {
 }
 
 func Symaddr(s *LSym) int64 {
+	// FIXME: we need this s == nil check temporarily for risc-v
+	// because we don't emit an algarray, because we don't link with the runtime.
+	// Once we link with the runtime, fix that and remove this check.
+	if s == nil {
+		return 0
+	}
 	if !s.Attr.Reachable() {
 		Diag("unreachable symbol in symaddr - %s", s.Name)
 	}
