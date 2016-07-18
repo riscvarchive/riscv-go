@@ -31,6 +31,7 @@ var tests = [...]struct {
 	{name: "right_shift_unsigned"},
 	// {name: "avg"}, // TODO: uncomment when Hmul64u is lowered
 	{name: "lrot"},
+	// {name: "call", want: 99}, // TODO: uncomment once it works
 }
 
 func main() {

@@ -32,6 +32,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpAndB(v, config)
 	case OpAvg64u:
 		return rewriteValueRISCV_OpAvg64u(v, config)
+	case OpClosureCall:
+		return rewriteValueRISCV_OpClosureCall(v, config)
 	case OpCom16:
 		return rewriteValueRISCV_OpCom16(v, config)
 	case OpCom32:
@@ -54,6 +56,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpConstNil(v, config)
 	case OpConvert:
 		return rewriteValueRISCV_OpConvert(v, config)
+	case OpDeferCall:
+		return rewriteValueRISCV_OpDeferCall(v, config)
 	case OpDiv16:
 		return rewriteValueRISCV_OpDiv16(v, config)
 	case OpDiv16u:
@@ -102,6 +106,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpGeq8U(v, config)
 	case OpGetClosurePtr:
 		return rewriteValueRISCV_OpGetClosurePtr(v, config)
+	case OpGoCall:
+		return rewriteValueRISCV_OpGoCall(v, config)
 	case OpGreater16:
 		return rewriteValueRISCV_OpGreater16(v, config)
 	case OpGreater16U:
@@ -134,6 +140,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpHmul8(v, config)
 	case OpHmul8u:
 		return rewriteValueRISCV_OpHmul8u(v, config)
+	case OpInterCall:
+		return rewriteValueRISCV_OpInterCall(v, config)
 	case OpIsInBounds:
 		return rewriteValueRISCV_OpIsInBounds(v, config)
 	case OpIsNonNil:
@@ -354,6 +362,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpSignExt8to32(v, config)
 	case OpSignExt8to64:
 		return rewriteValueRISCV_OpSignExt8to64(v, config)
+	case OpStaticCall:
+		return rewriteValueRISCV_OpStaticCall(v, config)
 	case OpStore:
 		return rewriteValueRISCV_OpStore(v, config)
 	case OpSub16:
@@ -599,6 +609,25 @@ func rewriteValueRISCV_OpAvg64u(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpClosureCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ClosureCall [argwid] entry closure mem)
+	// cond:
+	// result: (CALLclosure [argwid] entry closure mem)
+	for {
+		argwid := v.AuxInt
+		entry := v.Args[0]
+		closure := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVCALLclosure)
+		v.AuxInt = argwid
+		v.AddArg(entry)
+		v.AddArg(closure)
+		v.AddArg(mem)
+		return true
+	}
+}
 func rewriteValueRISCV_OpCom16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -743,6 +772,21 @@ func rewriteValueRISCV_OpConvert(v *Value, config *Config) bool {
 		mem := v.Args[1]
 		v.reset(OpRISCVMOVconvert)
 		v.AddArg(x)
+		v.AddArg(mem)
+		return true
+	}
+}
+func rewriteValueRISCV_OpDeferCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (DeferCall   [argwid]               mem)
+	// cond:
+	// result: (CALLdefer   [argwid]               mem)
+	for {
+		argwid := v.AuxInt
+		mem := v.Args[0]
+		v.reset(OpRISCVCALLdefer)
+		v.AuxInt = argwid
 		v.AddArg(mem)
 		return true
 	}
@@ -1156,6 +1200,21 @@ func rewriteValueRISCV_OpGetClosurePtr(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpGoCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (GoCall      [argwid]               mem)
+	// cond:
+	// result: (CALLgo      [argwid]               mem)
+	for {
+		argwid := v.AuxInt
+		mem := v.Args[0]
+		v.reset(OpRISCVCALLgo)
+		v.AuxInt = argwid
+		v.AddArg(mem)
+		return true
+	}
+}
 func rewriteValueRISCV_OpGreater16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -1435,6 +1494,23 @@ func rewriteValueRISCV_OpHmul8u(v *Value, config *Config) bool {
 		v2.AddArg(y)
 		v0.AddArg(v2)
 		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpInterCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (InterCall   [argwid] entry         mem)
+	// cond:
+	// result: (CALLinter   [argwid] entry         mem)
+	for {
+		argwid := v.AuxInt
+		entry := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVCALLinter)
+		v.AuxInt = argwid
+		v.AddArg(entry)
+		v.AddArg(mem)
 		return true
 	}
 }
@@ -3978,6 +4054,23 @@ func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 		v0.AuxInt = 56
 		v0.AddArg(x)
 		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpStaticCall(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (StaticCall  [argwid] {target}      mem)
+	// cond:
+	// result: (CALLstatic  [argwid] {target}      mem)
+	for {
+		argwid := v.AuxInt
+		target := v.Aux
+		mem := v.Args[0]
+		v.reset(OpRISCVCALLstatic)
+		v.AuxInt = argwid
+		v.Aux = target
+		v.AddArg(mem)
 		return true
 	}
 }
