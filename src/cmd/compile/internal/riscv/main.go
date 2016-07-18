@@ -5,16 +5,9 @@
 package riscv
 
 import (
-	"log"
-
 	"cmd/compile/internal/gc"
-	"cmd/internal/obj"
 	"cmd/internal/obj/riscv"
 )
-
-func defframe(ptxt *obj.Prog) {
-	log.Printf("TODO: defframe")
-}
 
 func betypeinit() {
 	gc.Widthptr = 8
