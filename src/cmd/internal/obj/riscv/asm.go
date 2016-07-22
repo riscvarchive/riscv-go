@@ -487,31 +487,46 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
-// regival validates an integer register.
-func regival(r int16) uint32 {
-	if r < REG_X0 || REG_X31 < r {
-		panic(fmt.Sprintf("register out of range, want %d < %d < %d", REG_X0, r, REG_X31))
+func regval(r int16, min int16, max int16) uint32 {
+	if r < min || max < r {
+		panic(fmt.Sprintf("register out of range, want %d < %d < %d", min, r, max))
 	}
-	return uint32(r - obj.RBaseRISCV)
+	return uint32(r - min)
 }
 
-// regi extracts the integer register from an Addr.
-func regi(a obj.Addr) uint32 {
+func reg(a obj.Addr, min int16, max int16) uint32 {
 	if a.Type != obj.TYPE_REG {
 		panic(fmt.Sprintf("ill typed: %+v", a))
 	}
-	return regival(a.Reg)
+	return regval(a.Reg, min, max)
+}
+
+// regi extracts the integer register from an Addr.
+func regi(a obj.Addr) uint32 { return reg(a, REG_X0, REG_X31) }
+
+// regf extracts the float register from an Addr.
+func regf(a obj.Addr) uint32 { return reg(a, REG_F0, REG_F31) }
+
+func wantReg(p *obj.Prog, pos string, a obj.Addr, descr string, min int16, max int16) {
+	if a.Type != obj.TYPE_REG {
+		p.Ctxt.Diag("%v\texpected register in %s position but got %s",
+			p, pos, p.Ctxt.Dconv(&a))
+		return
+	}
+	if a.Reg < min || max < a.Reg {
+		p.Ctxt.Diag("%v\texpected %s register in %s position but got non-%s register %s",
+			p, descr, pos, descr, p.Ctxt.Dconv(&a))
+	}
 }
 
 // wantIntReg checks that a contains an integer register.
 func wantIntReg(p *obj.Prog, pos string, a obj.Addr) {
-	if a.Type != obj.TYPE_REG {
-		p.Ctxt.Diag("%v\texpected register in %s position but got %s", p, pos, p.Ctxt.Dconv(&a))
-		return
-	}
-	if a.Reg < REG_X0 || REG_X31 < a.Reg {
-		p.Ctxt.Diag("%v\texpected integer register in %s position but got non-integer register %s", p, pos, p.Ctxt.Dconv(&a))
-	}
+	wantReg(p, pos, a, "integer", REG_X0, REG_X31)
+}
+
+// wantFloatReg checks that a contains a floating-point register.
+func wantFloatReg(p *obj.Prog, pos string, a obj.Addr) {
+	wantReg(p, pos, a, "float", REG_F0, REG_F31)
 }
 
 // immFits reports whether immediate value x fits in nbits bits.
@@ -549,22 +564,32 @@ func wantEvenJumpOffset(p *obj.Prog) {
 	}
 }
 
-func validateR(p *obj.Prog) {
+func validateIntR(p *obj.Prog) {
 	wantIntReg(p, "from", p.From)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func encodeR(p *obj.Prog) uint32 {
-	rs2 := regi(p.From)
-	rs1 := regi(*p.From3)
-	rd := regi(p.To)
+func validateFloatR(p *obj.Prog) {
+	wantFloatReg(p, "from", p.From)
+	wantFloatReg(p, "from3", *p.From3)
+	wantFloatReg(p, "to", p.To)
+}
+
+func encodeR(p *obj.Prog, regmin int16, regmax int16) uint32 {
+	rs2 := reg(p.From, regmin, regmax)
+	rs1 := reg(*p.From3, regmin, regmax)
+	rd := reg(p.To, regmin, regmax)
 	i, ok := encode(p.As)
 	if !ok {
 		panic("encodeR: could not encode instruction")
 	}
 	return i.funct7<<25 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
+
+func encodeIntR(p *obj.Prog) uint32 { return encodeR(p, REG_X0, REG_X31) }
+
+func encodeFloatR(p *obj.Prog) uint32 { return encodeR(p, REG_F0, REG_F31) }
 
 func validateI(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
@@ -617,7 +642,7 @@ func validateSB(p *obj.Prog) {
 
 func encodeSB(p *obj.Prog) uint32 {
 	imm := immi(p.To, 13)
-	rs2 := regival(p.Reg)
+	rs2 := regval(p.Reg, REG_X0, REG_X31)
 	rs1 := regi(p.From)
 	i, ok := encode(p.As)
 	if !ok {
@@ -693,12 +718,13 @@ type encoding struct {
 }
 
 var (
-	rEncoding  = encoding{encode: encodeR, validate: validateR, length: 4}
-	iEncoding  = encoding{encode: encodeI, validate: validateI, length: 4}
-	sEncoding  = encoding{encode: encodeS, validate: validateS, length: 4}
-	sbEncoding = encoding{encode: encodeSB, validate: validateSB, length: 4}
-	uEncoding  = encoding{encode: encodeU, validate: validateU, length: 4}
-	ujEncoding = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
+	rEncoding      = encoding{encode: encodeIntR, validate: validateIntR, length: 4}
+	rFloatEncoding = encoding{encode: encodeFloatR, validate: validateFloatR, length: 4}
+	iEncoding      = encoding{encode: encodeI, validate: validateI, length: 4}
+	sEncoding      = encoding{encode: encodeS, validate: validateS, length: 4}
+	sbEncoding     = encoding{encode: encodeSB, validate: validateSB, length: 4}
+	uEncoding      = encoding{encode: encodeU, validate: validateU, length: 4}
+	ujEncoding     = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
 
 	// pseudoOpEncoding panics if encoding is attempted, but does no validation.
 	pseudoOpEncoding = encoding{encode: nil, validate: func(*obj.Prog) {}, length: 0}
@@ -736,6 +762,10 @@ var encodingForAs = [...]encoding{
 	ADIVUW & obj.AMask:  rEncoding,
 	AREMW & obj.AMask:   rEncoding,
 	AREMUW & obj.AMask:  rEncoding,
+	AFADDS & obj.AMask:  rFloatEncoding,
+	AFSUBS & obj.AMask:  rFloatEncoding,
+	AFMULS & obj.AMask:  rFloatEncoding,
+	AFDIVS & obj.AMask:  rFloatEncoding,
 
 	AADDI & obj.AMask:      iEncoding,
 	ASLLI & obj.AMask:      iEncoding,
