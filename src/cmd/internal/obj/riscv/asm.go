@@ -406,26 +406,63 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		spadj.Spadj = int32(-stacksize)
 	}
 
-	// Replace RET with epilogue.
+	// Replace RET with epilogue and adjust stack offsets.
+	// pcsize := ctxt.Arch.PtrSize
+	pcsize := 0
 	for p := cursym.Text; p != nil; p = p.Link {
-		if p.As == obj.ARET {
-			if stacksize != 0 {
-				p.As = AADDI
-				p.From.Type = obj.TYPE_CONST
-				p.From.Offset = stacksize
-				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-				p.To.Type = obj.TYPE_REG
-				p.To.Reg = REG_SP
-				p.Spadj = int32(stacksize)
-				p = obj.Appendp(ctxt, p)
+		switch p.From.Name {
+		case obj.NAME_AUTO:
+			p.From.Offset += int64(stacksize)
+		case obj.NAME_PARAM:
+			p.From.Offset += int64(stacksize) + int64(pcsize)
+		}
+		if p.From3 != nil {
+			switch p.From3.Name {
+			case obj.NAME_AUTO:
+				p.From3.Offset += int64(stacksize)
+			case obj.NAME_PARAM:
+				p.From3.Offset += int64(stacksize) + int64(pcsize)
 			}
+		}
+		switch p.To.Name {
+		case obj.NAME_AUTO:
+			p.To.Offset += int64(stacksize)
+		case obj.NAME_PARAM:
+			p.To.Offset += int64(stacksize) + int64(pcsize)
+		}
 
-			p.As = AJALR
+		if p.As != obj.ARET {
+			continue
+		}
+
+		if stacksize != 0 {
+			p.As = AADDI
 			p.From.Type = obj.TYPE_CONST
-			p.From.Offset = 0
-			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
+			p.From.Offset = stacksize
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
 			p.To.Type = obj.TYPE_REG
-			p.To.Reg = REG_ZERO
+			p.To.Reg = REG_SP
+			p.Spadj = int32(stacksize)
+			p = obj.Appendp(ctxt, p)
+		}
+
+		p.As = AJALR
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = 0
+		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_ZERO
+
+		// If there are instructions following
+		// this ARET, they come from a branch
+		// with the same stackframe, so undo
+		// the cleanup.
+		// TODO: change this into an AADDI SP instruction,
+		// if/when we're convinced this is the right thing to do.
+		p.Spadj = -int32(stacksize)
+
+		if p.To.Sym != nil { // retjmp
+			p.As = obj.AJMP
 		}
 	}
 
