@@ -63,9 +63,25 @@ func init() {
 	)
 
 	RISCVops := []opData{
-		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true},  // arg0 + arg1
-		{name: "ADDI", argLength: 1, reg: gp11sb, asm: "ADDI", aux: "Int64"},   // arg0 + auxint
-		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB"},                     // arg0 - arg1
+		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true}, // arg0 + arg1
+		{name: "ADDI", argLength: 1, reg: gp11sb, asm: "ADDI", aux: "Int64"},  // arg0 + auxint
+		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB"},                    // arg0 - arg1
+
+		// M extension. H means high (i.e., it returns the top bits of
+		// the result). U means unsigned. W means word (i.e., 32-bit).
+		{name: "MUL", argLength: 2, reg: gp21, asm: "MUL", commutative: true, typ: "Int64"}, // arg0 * arg1
+		{name: "MULW", argLength: 2, reg: gp21, asm: "MULW", commutative: true, typ: "Int32"},
+		{name: "MULH", argLength: 2, reg: gp21, asm: "MULH", commutative: true, typ: "Int64"},
+		{name: "MULHU", argLength: 2, reg: gp21, asm: "MULHU", commutative: true, typ: "UInt64"},
+		{name: "DIV", argLength: 2, reg: gp21, asm: "DIV", typ: "Int64"}, // arg0 / arg1
+		{name: "DIVU", argLength: 2, reg: gp21, asm: "DIVU", typ: "UInt64"},
+		{name: "DIVW", argLength: 2, reg: gp21, asm: "DIVW", typ: "Int32"},
+		{name: "DIVUW", argLength: 2, reg: gp21, asm: "DIVUW", typ: "UInt32"},
+		{name: "REM", argLength: 2, reg: gp21, asm: "REM", typ: "Int64"}, // arg0 % arg1
+		{name: "REMU", argLength: 2, reg: gp21, asm: "REMU", typ: "UInt64"},
+		{name: "REMW", argLength: 2, reg: gp21, asm: "REMW", typ: "Int32"},
+		{name: "REMUW", argLength: 2, reg: gp21, asm: "REMUW", typ: "UInt32"},
+
 		{name: "MOVmem", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
 
