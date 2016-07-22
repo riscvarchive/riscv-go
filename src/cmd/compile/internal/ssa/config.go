@@ -30,6 +30,7 @@ type Config struct {
 	ctxt            *obj.Link                  // Generic arch information
 	optimize        bool                       // Do optimization
 	noDuffDevice    bool                       // Don't use Duff's device
+	nacl            bool                       // GOOS=nacl
 	sparsePhiCutoff uint64                     // Sparse phi location algorithm used above this #blocks*#variables score
 	curFunc         *Func
 
@@ -142,8 +143,14 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 	case "386":
 		c.IntSize = 4
 		c.PtrSize = 4
-		c.lowerBlock = rewriteBlockAMD64
-		c.lowerValue = rewriteValueAMD64 // TODO(khr): full 32-bit support
+		c.lowerBlock = rewriteBlock386
+		c.lowerValue = rewriteValue386
+		c.registers = registers386[:]
+		c.gpRegMask = gpRegMask386
+		c.fpRegMask = fpRegMask386
+		c.flagRegMask = flagRegMask386
+		c.FPReg = framepointerReg386
+		c.hasGReg = false
 	case "arm":
 		c.IntSize = 4
 		c.PtrSize = 4
@@ -180,11 +187,23 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 	}
 	c.ctxt = ctxt
 	c.optimize = optimize
+	c.nacl = obj.Getgoos() == "nacl"
 
-	// Don't use Duff's device on Plan 9, because floating
+	// Don't use Duff's device on Plan 9 AMD64, because floating
 	// point operations are not allowed in note handler.
-	if obj.Getgoos() == "plan9" {
+	if obj.Getgoos() == "plan9" && arch == "amd64" {
 		c.noDuffDevice = true
+	}
+
+	if c.nacl {
+		c.noDuffDevice = true // Don't use Duff's device on NaCl
+
+		// ARM assembler rewrites DIV/MOD to runtime calls, which
+		// clobber R12 on nacl
+		opcodeTable[OpARMDIV].reg.clobbers |= 1 << 12  // R12
+		opcodeTable[OpARMDIVU].reg.clobbers |= 1 << 12 // R12
+		opcodeTable[OpARMMOD].reg.clobbers |= 1 << 12  // R12
+		opcodeTable[OpARMMODU].reg.clobbers |= 1 << 12 // R12
 	}
 
 	// Assign IDs to preallocated values/blocks.

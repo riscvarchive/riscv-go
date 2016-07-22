@@ -37,9 +37,8 @@ func shouldssa(fn *Node) bool {
 		if os.Getenv("SSATEST") == "" {
 			return false
 		}
+	case "amd64", "arm", "riscv":
 		// Generally available.
-	case "amd64":
-	case "riscv":
 	}
 	if !ssaEnabled {
 		return false
@@ -385,6 +384,14 @@ func (s *state) endBlock() *ssa.Block {
 
 // pushLine pushes a line number on the line number stack.
 func (s *state) pushLine(line int32) {
+	if line == 0 {
+		// the frontend may emit node with line number missing,
+		// use the parent line number in this case.
+		line = s.peekLine()
+		if Debug['K'] != 0 {
+			Warn("buildssa: line 0")
+		}
+	}
 	s.line = append(s.line, line)
 }
 
@@ -1753,7 +1760,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 			addop := ssa.OpAdd64F
 			subop := ssa.OpSub64F
 			pt := floatForComplex(n.Type) // Could be Float32 or Float64
-			wt := Types[TFLOAT64]         // Compute in Float64 to minimize cancellation error
+			wt := Types[TFLOAT64]         // Compute in Float64 to minimize cancelation error
 
 			areal := s.newValue1(ssa.OpComplexReal, pt, a)
 			breal := s.newValue1(ssa.OpComplexReal, pt, b)
@@ -1791,7 +1798,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 			subop := ssa.OpSub64F
 			divop := ssa.OpDiv64F
 			pt := floatForComplex(n.Type) // Could be Float32 or Float64
-			wt := Types[TFLOAT64]         // Compute in Float64 to minimize cancellation error
+			wt := Types[TFLOAT64]         // Compute in Float64 to minimize cancelation error
 
 			areal := s.newValue1(ssa.OpComplexReal, pt, a)
 			breal := s.newValue1(ssa.OpComplexReal, pt, b)
@@ -2260,7 +2267,7 @@ func (s *state) append(n *Node, inplace bool) *ssa.Value {
 			if haspointers(et) {
 				s.insertWBmove(et, addr, arg.v, n.Lineno, arg.isVolatile)
 			} else {
-				s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, et.Size(), addr, arg.v, s.mem())
+				s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, SizeAlignAuxInt(et), addr, arg.v, s.mem())
 			}
 		}
 	}
@@ -2393,14 +2400,14 @@ func (s *state) assign(left *Node, right *ssa.Value, wb, deref bool, line int32,
 	if deref {
 		// Treat as a mem->mem move.
 		if right == nil {
-			s.vars[&memVar] = s.newValue2I(ssa.OpZero, ssa.TypeMem, t.Size(), addr, s.mem())
+			s.vars[&memVar] = s.newValue2I(ssa.OpZero, ssa.TypeMem, SizeAlignAuxInt(t), addr, s.mem())
 			return
 		}
 		if wb {
 			s.insertWBmove(t, addr, right, line, rightIsVolatile)
 			return
 		}
-		s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, t.Size(), addr, right, s.mem())
+		s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, SizeAlignAuxInt(t), addr, right, s.mem())
 		return
 	}
 	// Treat as a store.
@@ -3006,7 +3013,7 @@ func (s *state) rtcall(fn *Node, returns bool, results []*Type, args ...*ssa.Val
 	if !returns {
 		b.Kind = ssa.BlockExit
 		b.SetControl(call)
-		call.AuxInt = off
+		call.AuxInt = off - Ctxt.FixedFrameSize()
 		if len(results) > 0 {
 			Fatalf("panic call can't have results")
 		}
@@ -3086,7 +3093,7 @@ func (s *state) insertWBmove(t *Type, left, right *ssa.Value, line int32, rightI
 		tmp := temp(t)
 		s.vars[&memVar] = s.newValue1A(ssa.OpVarDef, ssa.TypeMem, tmp, s.mem())
 		tmpaddr, _ := s.addr(tmp, true)
-		s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, t.Size(), tmpaddr, right, s.mem())
+		s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, SizeAlignAuxInt(t), tmpaddr, right, s.mem())
 		// Issue typedmemmove call.
 		taddr := s.newValue1A(ssa.OpAddr, Types[TUINTPTR], &ssa.ExternSymbol{Typ: Types[TUINTPTR], Sym: typenamesym(t)}, s.sb)
 		s.rtcall(typedmemmove, true, nil, taddr, left, tmpaddr)
@@ -3096,7 +3103,7 @@ func (s *state) insertWBmove(t *Type, left, right *ssa.Value, line int32, rightI
 	s.endBlock().AddEdgeTo(bEnd)
 
 	s.startBlock(bElse)
-	s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, t.Size(), left, right, s.mem())
+	s.vars[&memVar] = s.newValue3I(ssa.OpMove, ssa.TypeMem, SizeAlignAuxInt(t), left, right, s.mem())
 	s.endBlock().AddEdgeTo(bEnd)
 
 	s.startBlock(bEnd)
@@ -4196,6 +4203,11 @@ func AddAux2(a *obj.Addr, v *ssa.Value, offset int64) {
 	}
 }
 
+// SizeAlignAuxInt returns an AuxInt encoding the size and alignment of type t.
+func SizeAlignAuxInt(t *Type) int64 {
+	return ssa.MakeSizeAndAlign(t.Size(), t.Alignment()).Int64()
+}
+
 // extendIndex extends v to a full int width.
 // panic using the given function if v does not fit in an int (only on 32-bit archs).
 func (s *state) extendIndex(v *ssa.Value, panicfn *Node) *ssa.Value {
@@ -4259,9 +4271,37 @@ func SSAReg(v *ssa.Value) *ssa.Register {
 	return reg.(*ssa.Register)
 }
 
+// SSAReg0 returns the register to which the first output of v has been allocated.
+func SSAReg0(v *ssa.Value) *ssa.Register {
+	reg := v.Block.Func.RegAlloc[v.ID].(ssa.LocPair)[0]
+	if reg == nil {
+		v.Fatalf("nil first register for value: %s\n%s\n", v.LongString(), v.Block.Func)
+	}
+	return reg.(*ssa.Register)
+}
+
+// SSAReg1 returns the register to which the second output of v has been allocated.
+func SSAReg1(v *ssa.Value) *ssa.Register {
+	reg := v.Block.Func.RegAlloc[v.ID].(ssa.LocPair)[1]
+	if reg == nil {
+		v.Fatalf("nil second register for value: %s\n%s\n", v.LongString(), v.Block.Func)
+	}
+	return reg.(*ssa.Register)
+}
+
 // SSARegNum returns the register number (in cmd/internal/obj numbering) to which v has been allocated.
 func SSARegNum(v *ssa.Value) int16 {
 	return Thearch.SSARegToReg[SSAReg(v).Num]
+}
+
+// SSARegNum0 returns the register number (in cmd/internal/obj numbering) to which the first output of v has been allocated.
+func SSARegNum0(v *ssa.Value) int16 {
+	return Thearch.SSARegToReg[SSAReg0(v).Num]
+}
+
+// SSARegNum1 returns the register number (in cmd/internal/obj numbering) to which the second output of v has been allocated.
+func SSARegNum1(v *ssa.Value) int16 {
+	return Thearch.SSARegToReg[SSAReg1(v).Num]
 }
 
 // CheckLoweredPhi checks that regalloc and stackalloc correctly handled phi values.
@@ -4279,6 +4319,16 @@ func CheckLoweredPhi(v *ssa.Value) {
 		if aloc := f.RegAlloc[a.ID]; aloc != loc { // TODO: .Equal() instead?
 			v.Fatalf("phi arg at different location than phi: %v @ %v, but arg %v @ %v\n%s\n", v, loc, a, aloc, v.Block.Func)
 		}
+	}
+}
+
+// CheckLoweredGetClosurePtr checks that v is the first instruction in the function's entry block.
+// The output of LoweredGetClosurePtr is generally hardwired to the correct register.
+// That register contains the closure pointer on closure entry.
+func CheckLoweredGetClosurePtr(v *ssa.Value) {
+	entry := v.Block.Func.Entry
+	if entry != v.Block || entry.Values[0] != v {
+		Fatalf("in %s, badly placed LoweredGetClosurePtr: %v %v", v.Block.Func.Name, v.Block, v)
 	}
 }
 

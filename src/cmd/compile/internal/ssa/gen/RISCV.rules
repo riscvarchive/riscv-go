@@ -311,11 +311,11 @@
 
 // Zeroing
 // TODO: Implement larger and arbitrary zeroing
-(Zero [0] _ mem) -> mem
-(Zero [1] ptr mem) -> (SB_ ptr (MOVBconst) mem)
-(Zero [2] ptr mem) -> (SH  ptr (MOVWconst) mem)
-(Zero [4] ptr mem) -> (SW  ptr (MOVLconst) mem)
-(Zero [8] ptr mem) -> (SD  ptr (MOVQconst) mem)
+(Zero [s]   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 1 -> (SB_ ptr (MOVBconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 2 -> (SH  ptr (MOVWconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 4 -> (SW  ptr (MOVLconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 8 -> (SD  ptr (MOVQconst) mem)
 
 (Convert x mem) -> (MOVconvert x mem)
 
@@ -330,11 +330,11 @@
 
 // Moves
 // TODO: Implement larger and arbitrary moves
-(Move [0]   _   _ mem) -> mem
-(Move [1] dst src mem) -> (SB_ dst (LB src mem) mem)
-(Move [2] dst src mem) -> (SH  dst (LH src mem) mem)
-(Move [4] dst src mem) -> (SW  dst (LW src mem) mem)
-(Move [8] dst src mem) -> (SD  dst (LD src mem) mem)
+(Move [s]   _   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 1 -> (SB_ dst (LB src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 2 -> (SH  dst (LH src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 4 -> (SW  dst (LW src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 8 -> (SD  dst (LD src mem) mem)
 
 // Boolean ops; 0=false, 1=true
 (AndB x y) -> (AND  x y)
