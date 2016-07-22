@@ -94,8 +94,8 @@ func anyinit(n []*Node) bool {
 
 func fninit(n []*Node) {
 	if Thearch.LinkArch.Family == sys.RISCV {
-		// FIXME: remove once we can compile function calls (and other components of init functions)
-		log.Println("TODO: init function needs function calls")
+		// FIXME: remove once we can link in the runtime (even if its not entirely working)
+		log.Println("TODO: init function needs runtime.throwinit")
 		return
 	}
 	if Debug['A'] != 0 {

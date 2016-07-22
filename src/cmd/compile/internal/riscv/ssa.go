@@ -50,7 +50,40 @@ var ssaRegToReg = []int16{
 func loadByType(t ssa.Type) obj.As {
 	width := t.Size()
 	if t.IsFloat() {
-		panic("float unsupported")
+		panic("load float unsupported")
+	}
+
+	switch width {
+	case 1:
+		if t.IsSigned() {
+			return riscv.AMOVB
+		} else {
+			return riscv.AMOVBU
+		}
+	case 2:
+		if t.IsSigned() {
+			return riscv.AMOVH
+		} else {
+			return riscv.AMOVHU
+		}
+	case 4:
+		if t.IsSigned() {
+			return riscv.AMOVW
+		} else {
+			return riscv.AMOVWU
+		}
+	case 8:
+		return riscv.AMOV
+	}
+
+	panic("bad load type")
+}
+
+// storeByType returns the store instruction of the given type.
+func storeByType(t ssa.Type) obj.As {
+	width := t.Size()
+	if t.IsFloat() {
+		panic("store float unsupported")
 	}
 
 	switch width {
@@ -117,6 +150,25 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpStoreReg:
+		if v.Type.IsFlags() {
+			v.Unimplementedf("store flags not implemented: %v", v.LongString())
+			return
+		}
+		p := gc.Prog(storeByType(v.Type))
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		n, off := gc.AutoVar(v)
+		p.To.Type = obj.TYPE_MEM
+		p.To.Node = n
+		p.To.Sym = gc.Linksym(n.Sym)
+		p.To.Offset = off
+		if n.Class == gc.PPARAM || n.Class == gc.PPARAMOUT {
+			p.To.Name = obj.NAME_PARAM
+			p.To.Offset += n.Xoffset
+		} else {
+			p.To.Name = obj.NAME_AUTO
+		}
 	case ssa.OpVarDef:
 		gc.Gvardef(v.Aux.(*gc.Node))
 	case ssa.OpVarKill:

@@ -37,9 +37,8 @@
 package riscv
 
 import (
-	"fmt"
-
 	"cmd/internal/obj"
+	"fmt"
 )
 
 // resolvepseudoreg concretizes pseudo-registers in an Addr.
@@ -107,6 +106,17 @@ func movtos(mnemonic obj.As) obj.As {
 	default:
 		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
 	}
+}
+
+// addrtoreg extracts the register from an addr, handling SB and SP.
+func addrtoreg(a obj.Addr) int16 {
+	switch a.Name {
+	case obj.NAME_EXTERN:
+		return REG_SB
+	case obj.NAME_PARAM, obj.NAME_AUTO:
+		return REG_SP
+	}
+	return a.Reg
 }
 
 // progedit is called individually for each Prog.  It normalizes instruction
@@ -224,9 +234,8 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				ctxt.Diag("progedit: unsupported load at %v", p)
 			}
 			p.As = movtol(p.As)
-			*p.From3 = p.From
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.From)}
 			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
-			p.From3.Type = obj.TYPE_REG
 		case obj.TYPE_REG:
 			switch p.To.Type {
 			case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
@@ -249,8 +258,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				p.From, *p.From3 = p.To, p.From
 				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
 				p.From3.Type = obj.TYPE_REG
-				p.To.Type = obj.TYPE_REG
-				p.To.Offset = 0
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.To)}
 			default:
 				ctxt.Diag("progedit: unsupported MOV at %v", p)
 			}
