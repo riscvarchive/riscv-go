@@ -33,45 +33,45 @@
 //(Sub32F x y) ->
 //(Sub64F x y) ->
 
-//(Mul64 x y) ->
-//(Mul32 x y) ->
-//(Mul16 x y) ->
-//(Mul8 x y) ->
+(Mul64 x y) -> (MUL  x y)
+(Mul32 x y) -> (MULW x y)
+(Mul16 x y) -> (MULW (SignExt16to32 x) (SignExt16to32 y))
+(Mul8 x y)  -> (MULW (SignExt8to32 x)  (SignExt8to32 y))
 //(Mul32F x y) ->
 //(Mul64F x y) ->
 
 //(Div32F x y) ->
 //(Div64F x y) ->
 
-//(Div64 x y) ->
-//(Div64u x y) ->
-//(Div32 x y) ->
-//(Div32u x y) ->
-//(Div16 x y) ->
-//(Div16u x y) ->
-//(Div8 x y) ->
-//(Div8u x y) ->
+(Div64 x y)  -> (DIV   x y)
+(Div64u x y) -> (DIVU  x y)
+(Div32 x y)  -> (DIVW  x y)
+(Div32u x y) -> (DIVUW x y)
+(Div16 x y)  -> (DIVW  (SignExt16to32 x) (SignExt16to32 y))
+(Div16u x y) -> (DIVUW (ZeroExt16to32 x) (ZeroExt16to32 y))
+(Div8 x y)   -> (DIVW  (SignExt8to32 x)  (SignExt8to32 y))
+(Div8u x y)  -> (DIVUW (ZeroExt8to32 x)  (ZeroExt8to32 y))
 
-//(Hmul64 x y) ->
-//(Hmul64u x y) ->
-//(Hmul32 x y) ->
-//(Hmul32u x y) ->
-//(Hmul16 x y) ->
-//(Hmul16u x y) ->
-//(Hmul8 x y) ->
-//(Hmul8u x y) ->
+(Hmul64 x y)  -> (MULH  x y)
+(Hmul64u x y) -> (MULHU x y)
+(Hmul32 x y)  -> (SRAI [32] (MUL  <i64> (SignExt32to64 x) (SignExt32to64 y)))
+(Hmul32u x y) -> (SRLI [32] (MUL  <u64> (ZeroExt32to64 x) (ZeroExt32to64 y)))
+(Hmul16 x y)  -> (SRAI [16] (MULW <i32> (SignExt16to32 x) (SignExt16to32 y)))
+(Hmul16u x y) -> (SRLI [16] (MULW <u32> (ZeroExt16to32 x) (ZeroExt16to32 y)))
+(Hmul8 x y)   -> (SRAI [8]  (MULW <i32> (SignExt8to32 x)  (SignExt8to32 y)))
+(Hmul8u x y)  -> (SRLI [8]  (MULW <u32> (ZeroExt8to32 x)  (ZeroExt8to32 y)))
 
 // (x + y) / 2 -> (x / 2) + (y / 2) + (x & y & 1)
 (Avg64u <t> x y) -> (ADD (ADD <t> (SRLI <t> [1] x) (SRLI <t> [1] y)) (ANDI <t> [1] (AND <t> x y)))
 
-//(Mod64 x y) ->
-//(Mod64u x y) ->
-//(Mod32 x y) ->
-//(Mod32u x y) ->
-//(Mod16 x y) ->
-//(Mod16u x y) ->
-//(Mod8 x y) ->
-//(Mod8u x y) ->
+(Mod64 x y)  -> (REM   x y)
+(Mod64u x y) -> (REMU  x y)
+(Mod32 x y)  -> (REMW  x y)
+(Mod32u x y) -> (REMUW x y)
+(Mod16 x y)  -> (REMW  (SignExt16to32 x) (SignExt16to32 y))
+(Mod16u x y) -> (REMUW (ZeroExt16to32 x) (ZeroExt16to32 y))
+(Mod8 x y)   -> (REMW  (SignExt8to32 x)  (SignExt8to32 y))
+(Mod8u x y)  -> (REMUW (ZeroExt8to32 x)  (ZeroExt8to32 y))
 
 (And64 x y) -> (AND x y)
 (And32 x y) -> (AND x y)
