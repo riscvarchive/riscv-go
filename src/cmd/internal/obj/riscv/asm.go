@@ -41,13 +41,12 @@ import (
 	"fmt"
 )
 
-// resolvepseudoreg concretizes pseudo-registers in an Addr.
-func resolvepseudoreg(a *obj.Addr) {
-	if a.Type == obj.TYPE_MEM {
-		switch a.Name {
-		case obj.NAME_PARAM:
-			a.Reg = REG_FP
-		}
+// stackOffset updates Addr offsets based on the current stack size, if
+// necessary.
+func stackOffset(a *obj.Addr, stacksize int64) {
+	switch a.Name {
+	case obj.NAME_AUTO, obj.NAME_PARAM:
+		a.Offset += stacksize
 	}
 }
 
@@ -108,11 +107,9 @@ func movtos(mnemonic obj.As) obj.As {
 	}
 }
 
-// addrtoreg extracts the register from an addr, handling SB and SP.
+// addrtoreg extracts the register from an addr, handling special Names.
 func addrtoreg(a obj.Addr) int16 {
 	switch a.Name {
-	case obj.NAME_EXTERN:
-		return REG_SB
 	case obj.NAME_PARAM, obj.NAME_AUTO:
 		return REG_SP
 	}
@@ -163,11 +160,6 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			p.As = AXORI
 		}
 	}
-
-	// Concretize pseudo-registers.
-	resolvepseudoreg(&p.From)
-	resolvepseudoreg(p.From3)
-	resolvepseudoreg(&p.To)
 
 	// Do additional single-instruction rewriting.
 	switch p.As {
@@ -272,10 +264,10 @@ func InvertBranch(i obj.As) obj.As {
 	}
 }
 
-// preprocess generates prologue and epilogue code and computes PC-relative
-// branch and jump offsets.
+// preprocess generates prologue and epilogue code, computes PC-relative branch
+// and jump offsets, and resolves psuedo-registers.
 //
-// preprocess is called once for each linker symbol.
+// preprocess is called once per symbol.
 //
 // When preprocess finishes, all instructions in the symbol are either
 // concrete, real RISC-V instructions or directive pseudo-ops like TEXT,
@@ -287,7 +279,12 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		ctxt.Diag("preprocess: found symbol that does not start with TEXT directive")
 		return
 	}
+
 	stacksize := text.To.Offset
+
+	cursym.Args = text.To.Val.(int32)
+	cursym.Locals = int32(stacksize)
+
 	// Insert stack adjustment if necessary.
 	if stacksize != 0 {
 		spadj := obj.Appendp(ctxt, text)
@@ -300,11 +297,25 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		spadj.Spadj = int32(-stacksize)
 	}
 
+	// Update stack-based offsets.
+	for p := cursym.Text; p != nil; p = p.Link {
+		stackOffset(&p.From, stacksize)
+		if p.From3 != nil {
+			stackOffset(p.From3, stacksize)
+		}
+		stackOffset(&p.To, stacksize)
+
+		// TODO: update stacksize when instructions that modify SP are
+		// found, or disallow it entirely.
+	}
+
 	// Additional instruction rewriting.
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
 
-		// Rewrite MOV.
+		// Rewrite MOV. This couldn't be done in progedit, as SP
+		// offsets needed to be applied before we split up some of the
+		// Addrs.
 		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU:
 			switch p.From.Type {
 			case obj.TYPE_MEM: // MOV c(Rs), Rd -> L $c, Rs, Rd
@@ -404,7 +415,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.From.Type = obj.TYPE_CONST
 				switch p.From.Name {
 				case obj.NAME_EXTERN:
-					p.From3.Reg = REG_SB
+					// Doesn't matter, we'll add a
+					// relocation later.
 				case obj.NAME_PARAM, obj.NAME_AUTO:
 					p.From3.Reg = REG_SP
 				default:
