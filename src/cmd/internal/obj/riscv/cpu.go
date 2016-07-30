@@ -116,7 +116,6 @@ const (
 	REG_T1   = REG_X6
 	REG_T2   = REG_X7
 	REG_S0   = REG_X8
-	REG_FP   = REG_X8 // S0 and FP are the same.
 	REG_S1   = REG_X9
 	REG_A0   = REG_X10
 	REG_A1   = REG_X11
@@ -142,7 +141,6 @@ const (
 	REG_T6   = REG_X31
 
 	// Go runtime register names.
-	REG_SB   = REG_X3 // Static base.
 	REG_G    = REG_X4 // G pointer.
 	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy).
 	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy).
