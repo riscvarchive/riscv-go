@@ -442,6 +442,11 @@ var riscvJumps = map[string]bool{
 }
 
 func archRiscv() *Arch {
+	// Pseudo-registers.
+	riscv.Registers["SB"] = RSB
+	riscv.Registers["FP"] = RFP
+	riscv.Registers["PC"] = RPC
+
 	return &Arch{
 		LinkArch:       &riscv.LinkRISCV,
 		Instructions:   riscv.Instructions,

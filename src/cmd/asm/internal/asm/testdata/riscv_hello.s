@@ -2,18 +2,15 @@
 #define SYS_WRITE	64
 
 // func helloChar() uint64
-TEXT helloChar(SB),0,$8
+TEXT helloChar(SB),0,$0
 	MOV	$72, T0
-	// FIXME(mpratt): this should use FP.
-	MOV	T0, 0(SP)
+	MOV	T0, ret+0(FP)
 	RET
 
 // _rt0_riscv_linux is the entry point.
-TEXT main·main(SB),0,$8
+TEXT main·main(SB),0,$8-0
 	// Write "H" to stdout...not quite to hello world, yet
 	CALL	helloChar(SB)
-	MOV	-8(SP), T0
-	MOVW	T0, 0(SP)
 	MOV	SP, A1 // ptr to data
 	MOV	$1, A0 // fd 1 for stdout
 	MOV	$1, A2 // len("H") == 1
