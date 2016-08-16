@@ -15,22 +15,29 @@ func init() {
 
 	// Build the list of register names, creating an appropriately indexed
 	// regMask for the gp and fp registers as we go.
-	addreg := func(r int) regMask {
+	//
+	// If name is specified, use it rather than the riscv reg number.
+	addreg := func(r int, name string) regMask {
 		mask := regMask(1) << uint(len(regNamesRISCV))
-		name := riscv.RegNames[int16(r)]
+		if name == "" {
+			name = riscv.RegNames[int16(r)]
+		}
 		regNamesRISCV = append(regNamesRISCV, name)
 		regNamed[name] = mask
 		return mask
 	}
-	for r := riscv.REG_X0; r <= riscv.REG_X31; r++ {
-		mask := addreg(r)
+
+	// General purpose registers.
+	//
+	// Skip X0 (ZERO) and X1 (RA), as they are unused by regalloc and we
+	// need to leave room for pseudo-register SB.
+	for r := riscv.REG_X2; r <= riscv.REG_X31; r++ {
+		mask := addreg(r, "")
+
 		// Add general purpose registers to gpMask.
 		switch r {
-		// Special registers that we must leave alone.
-		// TODO: Is this list right?
-		case riscv.REG_ZERO, riscv.REG_RA, riscv.REG_G:
-		case riscv.REG_SB:
-			gpspsbMask |= mask
+		// g is not in any gp mask.
+		case riscv.REG_G:
 		case riscv.REG_SP:
 			gpspMask |= mask
 			gpspsbMask |= mask
@@ -40,10 +47,16 @@ func init() {
 			gpspsbMask |= mask
 		}
 	}
+
+	// Floating pointer registers.
 	for r := riscv.REG_F0; r <= riscv.REG_F31; r++ {
-		mask := addreg(r)
+		mask := addreg(r, "")
 		fpMask |= mask
 	}
+
+	// Pseudo-register: SB
+	mask := addreg(-1, "SB")
+	gpspsbMask |= mask
 
 	if len(regNamesRISCV) > 64 {
 		// regMask is only 64 bits.

@@ -13,8 +13,8 @@ import (
 
 // ssaRegToReg maps ssa register numbers to obj register numbers.
 var ssaRegToReg = []int16{
-	riscv.REG_X0,
-	riscv.REG_X1,
+	// X0 (ZERO): unused
+	// X1 (RA): unused
 	riscv.REG_X2,
 	riscv.REG_X3,
 	riscv.REG_X4,
@@ -45,6 +45,39 @@ var ssaRegToReg = []int16{
 	riscv.REG_X29,
 	riscv.REG_X30,
 	riscv.REG_X31,
+	riscv.REG_F0,
+	riscv.REG_F1,
+	riscv.REG_F2,
+	riscv.REG_F3,
+	riscv.REG_F4,
+	riscv.REG_F5,
+	riscv.REG_F6,
+	riscv.REG_F7,
+	riscv.REG_F8,
+	riscv.REG_F9,
+	riscv.REG_F10,
+	riscv.REG_F11,
+	riscv.REG_F12,
+	riscv.REG_F13,
+	riscv.REG_F14,
+	riscv.REG_F15,
+	riscv.REG_F16,
+	riscv.REG_F17,
+	riscv.REG_F18,
+	riscv.REG_F19,
+	riscv.REG_F20,
+	riscv.REG_F21,
+	riscv.REG_F22,
+	riscv.REG_F23,
+	riscv.REG_F24,
+	riscv.REG_F25,
+	riscv.REG_F26,
+	riscv.REG_F27,
+	riscv.REG_F28,
+	riscv.REG_F29,
+	riscv.REG_F30,
+	riscv.REG_F31,
+	0, // SB isn't a real register.  We fill an Addr.Reg field with 0 in this case.
 }
 
 func loadByType(t ssa.Type) obj.As {
