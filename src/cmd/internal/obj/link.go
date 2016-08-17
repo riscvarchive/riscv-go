@@ -266,7 +266,7 @@ type ProgInfo struct {
 // that are common to all architectures.
 // However, the majority of opcodes are arch-specific
 // and are declared in their respective architecture's subpackage.
-type As int32
+type As int16
 
 // These are the portable opcodes.
 const (
