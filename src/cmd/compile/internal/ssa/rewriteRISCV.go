@@ -2621,7 +2621,7 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 	}
 	// match: (Move [s] dst src mem)
 	// cond: SizeAndAlign(s).Size() == 1
-	// result: (SB_ dst (LB src mem) mem)
+	// result: (SB dst (LB src mem) mem)
 	for {
 		s := v.AuxInt
 		dst := v.Args[0]
@@ -2630,7 +2630,7 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 		if !(SizeAndAlign(s).Size() == 1) {
 			break
 		}
-		v.reset(OpRISCVSB_)
+		v.reset(OpRISCVSB)
 		v.AddArg(dst)
 		v0 := b.NewValue0(v.Line, OpRISCVLB, config.fe.TypeInt8())
 		v0.AddArg(src)
@@ -2641,7 +2641,7 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 	}
 	// match: (Move [s] dst src mem)
 	// cond: SizeAndAlign(s).Size() == 2
-	// result: (SH  dst (LH src mem) mem)
+	// result: (SH dst (LH src mem) mem)
 	for {
 		s := v.AuxInt
 		dst := v.Args[0]
@@ -2661,7 +2661,7 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 	}
 	// match: (Move [s] dst src mem)
 	// cond: SizeAndAlign(s).Size() == 4
-	// result: (SW  dst (LW src mem) mem)
+	// result: (SW dst (LW src mem) mem)
 	for {
 		s := v.AuxInt
 		dst := v.Args[0]
@@ -2681,7 +2681,7 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 	}
 	// match: (Move [s] dst src mem)
 	// cond: SizeAndAlign(s).Size() == 8
-	// result: (SD  dst (LD src mem) mem)
+	// result: (SD dst (LD src mem) mem)
 	for {
 		s := v.AuxInt
 		dst := v.Args[0]
@@ -4084,7 +4084,7 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	_ = b
 	// match: (Store [1] ptr val mem)
 	// cond:
-	// result: (SB_ ptr val mem)
+	// result: (SB ptr val mem)
 	for {
 		if v.AuxInt != 1 {
 			break
@@ -4092,7 +4092,7 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 		ptr := v.Args[0]
 		val := v.Args[1]
 		mem := v.Args[2]
-		v.reset(OpRISCVSB_)
+		v.reset(OpRISCVSB)
 		v.AddArg(ptr)
 		v.AddArg(val)
 		v.AddArg(mem)
@@ -4100,7 +4100,7 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	}
 	// match: (Store [2] ptr val mem)
 	// cond:
-	// result: (SH  ptr val mem)
+	// result: (SH ptr val mem)
 	for {
 		if v.AuxInt != 2 {
 			break
@@ -4116,7 +4116,7 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	}
 	// match: (Store [4] ptr val mem)
 	// cond: !is32BitFloat(val.Type)
-	// result: (SW  ptr val mem)
+	// result: (SW ptr val mem)
 	for {
 		if v.AuxInt != 4 {
 			break
@@ -4135,7 +4135,7 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 	}
 	// match: (Store [8] ptr val mem)
 	// cond: !is64BitFloat(val.Type)
-	// result: (SD  ptr val mem)
+	// result: (SD ptr val mem)
 	for {
 		if v.AuxInt != 8 {
 			break
@@ -4392,7 +4392,7 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 	}
 	// match: (Zero [s] ptr mem)
 	// cond: SizeAndAlign(s).Size() == 1
-	// result: (SB_ ptr (MOVBconst) mem)
+	// result: (SB ptr (MOVBconst) mem)
 	for {
 		s := v.AuxInt
 		ptr := v.Args[0]
@@ -4400,7 +4400,7 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 		if !(SizeAndAlign(s).Size() == 1) {
 			break
 		}
-		v.reset(OpRISCVSB_)
+		v.reset(OpRISCVSB)
 		v.AddArg(ptr)
 		v0 := b.NewValue0(v.Line, OpRISCVMOVBconst, config.fe.TypeUInt8())
 		v.AddArg(v0)
@@ -4409,7 +4409,7 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 	}
 	// match: (Zero [s] ptr mem)
 	// cond: SizeAndAlign(s).Size() == 2
-	// result: (SH  ptr (MOVWconst) mem)
+	// result: (SH ptr (MOVWconst) mem)
 	for {
 		s := v.AuxInt
 		ptr := v.Args[0]
@@ -4426,7 +4426,7 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 	}
 	// match: (Zero [s] ptr mem)
 	// cond: SizeAndAlign(s).Size() == 4
-	// result: (SW  ptr (MOVLconst) mem)
+	// result: (SW ptr (MOVLconst) mem)
 	for {
 		s := v.AuxInt
 		ptr := v.Args[0]
@@ -4443,7 +4443,7 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 	}
 	// match: (Zero [s] ptr mem)
 	// cond: SizeAndAlign(s).Size() == 8
-	// result: (SD  ptr (MOVQconst) mem)
+	// result: (SD ptr (MOVQconst) mem)
 	for {
 		s := v.AuxInt
 		ptr := v.Args[0]

@@ -276,7 +276,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.AddAux(&p.From, v)
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpRISCVSB_, ssa.OpRISCVSH, ssa.OpRISCVSW, ssa.OpRISCVSD:
+	case ssa.OpRISCVSB, ssa.OpRISCVSH, ssa.OpRISCVSW, ssa.OpRISCVSD:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = gc.SSARegNum(v.Args[1])

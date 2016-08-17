@@ -302,20 +302,20 @@
 //(Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
 
 // Stores
-(Store [1] ptr val mem)                            -> (SB_ ptr val mem)
-(Store [2] ptr val mem)                            -> (SH  ptr val mem)
-(Store [4] ptr val mem) && !is32BitFloat(val.Type) -> (SW  ptr val mem)
-(Store [8] ptr val mem) && !is64BitFloat(val.Type) -> (SD  ptr val mem)
+(Store [1] ptr val mem)                            -> (SB ptr val mem)
+(Store [2] ptr val mem)                            -> (SH ptr val mem)
+(Store [4] ptr val mem) && !is32BitFloat(val.Type) -> (SW ptr val mem)
+(Store [8] ptr val mem) && !is64BitFloat(val.Type) -> (SD ptr val mem)
 //(Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
 //(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
 // Zeroing
 // TODO: Implement larger and arbitrary zeroing
 (Zero [s]   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
-(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 1 -> (SB_ ptr (MOVBconst) mem)
-(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 2 -> (SH  ptr (MOVWconst) mem)
-(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 4 -> (SW  ptr (MOVLconst) mem)
-(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 8 -> (SD  ptr (MOVQconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 1 -> (SB ptr (MOVBconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 2 -> (SH ptr (MOVWconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 4 -> (SW ptr (MOVLconst) mem)
+(Zero [s] ptr mem) && SizeAndAlign(s).Size() == 8 -> (SD ptr (MOVQconst) mem)
 
 (Convert x mem) -> (MOVconvert x mem)
 
@@ -331,10 +331,10 @@
 // Moves
 // TODO: Implement larger and arbitrary moves
 (Move [s]   _   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
-(Move [s] dst src mem) && SizeAndAlign(s).Size() == 1 -> (SB_ dst (LB src mem) mem)
-(Move [s] dst src mem) && SizeAndAlign(s).Size() == 2 -> (SH  dst (LH src mem) mem)
-(Move [s] dst src mem) && SizeAndAlign(s).Size() == 4 -> (SW  dst (LW src mem) mem)
-(Move [s] dst src mem) && SizeAndAlign(s).Size() == 8 -> (SD  dst (LD src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 1 -> (SB dst (LB src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 2 -> (SH dst (LH src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 4 -> (SW dst (LW src mem) mem)
+(Move [s] dst src mem) && SizeAndAlign(s).Size() == 8 -> (SD dst (LD src mem) mem)
 
 // Boolean ops; 0=false, 1=true
 (AndB x y) -> (AND  x y)

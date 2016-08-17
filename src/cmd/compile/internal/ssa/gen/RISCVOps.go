@@ -123,11 +123,10 @@ func init() {
 		{name: "LWU", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff", typ: "UInt32"}, // 32 bits, zero extend
 
 		// Stores: store <size> lowest bits in arg1 to arg0+auxint+aux; arg2=mem
-		// TODO: rename SB_ to SB when https://go-review.googlesource.com/24649 goes in.
-		{name: "SB_", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem"}, //  8 bits
-		{name: "SH", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem"},  // 16 bits
-		{name: "SW", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem"},  // 32 bits
-		{name: "SD", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},   // 64 bits
+		{name: "SB", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem"}, //  8 bits
+		{name: "SH", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem"}, // 16 bits
+		{name: "SW", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem"}, // 32 bits
+		{name: "SD", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},  // 64 bits
 
 		// Shift ops
 		{name: "SLL", argLength: 2, reg: gp21, asm: "SLL"},                 // arg0 << aux1

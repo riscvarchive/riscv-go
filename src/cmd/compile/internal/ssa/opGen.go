@@ -1109,7 +1109,7 @@ const (
 	OpRISCVLBU
 	OpRISCVLHU
 	OpRISCVLWU
-	OpRISCVSB_
+	OpRISCVSB
 	OpRISCVSH
 	OpRISCVSW
 	OpRISCVSD
@@ -13744,7 +13744,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SB_",
+		name:    "SB",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVB,
