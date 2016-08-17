@@ -21,9 +21,8 @@ import (
 // changes to bimport.go and bexport.go.
 
 type importer struct {
-	in      *bufio.Reader
-	buf     []byte // reused for reading strings
-	version string
+	in  *bufio.Reader
+	buf []byte // reused for reading strings
 
 	// object lists, in order of deserialization
 	strList       []string
@@ -68,9 +67,8 @@ func Import(in *bufio.Reader) {
 
 	// --- generic export data ---
 
-	p.version = p.string()
-	if p.version != exportVersion0 && p.version != exportVersion1 {
-		Fatalf("importer: unknown export data version: %s", p.version)
+	if v := p.string(); v != exportVersion {
+		Fatalf("importer: unknown export data version: %s", v)
 	}
 
 	// populate typList with predeclared "known" types
@@ -80,7 +78,6 @@ func Import(in *bufio.Reader) {
 	p.pkg()
 
 	// defer some type-checking until all types are read in completely
-	// (parser.go:import_package)
 	tcok := typecheckok
 	typecheckok = true
 	defercheckwidth()
@@ -106,9 +103,6 @@ func Import(in *bufio.Reader) {
 	// --- compiler-specific export data ---
 
 	// read compiler-specific flags
-
-	// read but ignore safemode bit (see issue #15772)
-	p.bool() // formerly: importpkg.Safe = p.bool()
 
 	// phase 2
 	objcount = 0
@@ -433,11 +427,7 @@ func (p *importer) typ() *Type {
 			recv := p.paramList() // TODO(gri) do we need a full param list for the receiver?
 			params := p.paramList()
 			result := p.paramList()
-
-			nointerface := false
-			if p.version == exportVersion1 {
-				nointerface = p.bool()
-			}
+			nointerface := p.bool()
 
 			n := methodname1(newname(sym), recv[0].Right)
 			n.Type = functype(recv[0], params, result)

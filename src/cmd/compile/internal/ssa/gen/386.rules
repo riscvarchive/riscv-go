@@ -70,8 +70,10 @@
 (Neg32  x) -> (NEGL x)
 (Neg16  x) -> (NEGL x)
 (Neg8   x) -> (NEGL x)
-(Neg32F x) -> (PXOR x (MOVSSconst <config.Frontend().TypeFloat32()> [f2i(math.Copysign(0, -1))]))
-(Neg64F x) -> (PXOR x (MOVSDconst <config.Frontend().TypeFloat64()> [f2i(math.Copysign(0, -1))]))
+(Neg32F x) && !config.use387 -> (PXOR x (MOVSSconst <config.Frontend().TypeFloat32()> [f2i(math.Copysign(0, -1))]))
+(Neg64F x) && !config.use387 -> (PXOR x (MOVSDconst <config.Frontend().TypeFloat64()> [f2i(math.Copysign(0, -1))]))
+(Neg32F x) && config.use387 -> (FCHS x)
+(Neg64F x) && config.use387 -> (FCHS x)
 
 (Com32 x) -> (NOTL x)
 (Com16 x) -> (NOTL x)
@@ -669,38 +671,59 @@
 
 // We need to fold LEAQ into the MOVx ops so that the live variable analysis knows
 // what variables are being read/written by the ops.
-(MOVLload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+// Note: we turn off this merging for operations on globals when building
+// position-independent code (when Flag_shared is set).
+// PIC needs a spare register to load the PC into.  Having the LEAL be
+// a separate instruction gives us that register.  Having the LEAL be
+// a separate instruction also allows it to be CSEd (which is good because
+// it compiles to a thunk call).
+(MOVLload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVLload  [off1+off2] {mergeSym(sym1,sym2)} base mem)
-(MOVWload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVWload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVWload  [off1+off2] {mergeSym(sym1,sym2)} base mem)
-(MOVBload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVBload  [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVBload  [off1+off2] {mergeSym(sym1,sym2)} base mem)
-(MOVSSload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVSSload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVSSload [off1+off2] {mergeSym(sym1,sym2)} base mem)
-(MOVSDload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVSDload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVSDload [off1+off2] {mergeSym(sym1,sym2)} base mem)
 
-(MOVBLSXload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVBLSXload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVBLSXload [off1+off2] {mergeSym(sym1,sym2)} base mem)
-(MOVWLSXload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVWLSXload [off1] {sym1} (LEAL [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVWLSXload [off1+off2] {mergeSym(sym1,sym2)} base mem)
 
-(MOVLstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVLstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVLstore  [off1+off2] {mergeSym(sym1,sym2)} base val mem)
-(MOVWstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVWstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVWstore  [off1+off2] {mergeSym(sym1,sym2)} base val mem)
-(MOVBstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVBstore  [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVBstore  [off1+off2] {mergeSym(sym1,sym2)} base val mem)
-(MOVSSstore [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVSSstore [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVSSstore [off1+off2] {mergeSym(sym1,sym2)} base val mem)
-(MOVSDstore [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+(MOVSDstore [off1] {sym1} (LEAL [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+  && (base.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVSDstore [off1+off2] {mergeSym(sym1,sym2)} base val mem)
 
-(MOVLstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off) ->
+(MOVLstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off)
+  && (ptr.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVLstoreconst [ValAndOff(sc).add(off)] {mergeSym(sym1, sym2)} ptr mem)
-(MOVWstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off) ->
+(MOVWstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off)
+  && (ptr.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVWstoreconst [ValAndOff(sc).add(off)] {mergeSym(sym1, sym2)} ptr mem)
-(MOVBstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off) ->
+(MOVBstoreconst [sc] {sym1} (LEAL [off] {sym2} ptr) mem) && canMergeSym(sym1, sym2) && ValAndOff(sc).canAdd(off)
+  && (ptr.Op != OpSB || !config.ctxt.Flag_shared) ->
 	(MOVBstoreconst [ValAndOff(sc).add(off)] {mergeSym(sym1, sym2)} ptr mem)
 
 // generating indexed loads and stores
@@ -1235,3 +1258,8 @@
   && x.Uses == 1
   && clobber(x)
   -> (MOVLstoreidx1 [i-2] {s} p (SHLLconst <idx.Type> [1] idx) w0 mem)
+
+// For PIC, break floating-point constant loading into two instructions so we have
+// a register to use for holding the address of the constant pool entry.
+(MOVSSconst [c]) && config.ctxt.Flag_shared -> (MOVSSconst2 (MOVSSconst1 [c]))
+(MOVSDconst [c]) && config.ctxt.Flag_shared -> (MOVSDconst2 (MOVSDconst1 [c]))

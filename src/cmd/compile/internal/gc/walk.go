@@ -507,7 +507,9 @@ func walkexpr(n *Node, init *Nodes) *Node {
 	if n.Op == ONAME && n.Class == PAUTOHEAP {
 		nn := Nod(OIND, n.Name.Heapaddr, nil)
 		nn = typecheck(nn, Erv)
-		return walkexpr(nn, init)
+		nn = walkexpr(nn, init)
+		nn.Left.NonNil = true
+		return nn
 	}
 
 opswitch:
@@ -554,7 +556,7 @@ opswitch:
 		n.Left = walkexpr(n.Left, init)
 		n.Right = walkexpr(n.Right, init)
 
-	case OSPTR, OITAB:
+	case OSPTR, OITAB, OIDATA:
 		n.Left = walkexpr(n.Left, init)
 
 	case OLEN, OCAP:
@@ -963,37 +965,63 @@ opswitch:
 		fromKind := from.Type.iet()
 		toKind := t.iet()
 
+		res := n.List.First()
+		scalar := !haspointers(res.Type)
+
 		// Avoid runtime calls in a few cases of the form _, ok := i.(T).
 		// This is faster and shorter and allows the corresponding assertX2X2
 		// routines to skip nil checks on their last argument.
-		if isblank(n.List.First()) {
+		// Also avoid runtime calls for converting interfaces to scalar concrete types.
+		if isblank(res) || (scalar && toKind == 'T') {
 			var fast *Node
-			switch {
-			case fromKind == 'E' && toKind == 'T':
-				tab := Nod(OITAB, from, nil) // type:eface::tab:iface
-				typ := Nod(OCONVNOP, typename(t), nil)
-				typ.Type = Ptrto(Types[TUINTPTR])
-				fast = Nod(OEQ, tab, typ)
-			case fromKind == 'I' && toKind == 'E',
-				fromKind == 'E' && toKind == 'E':
+			switch toKind {
+			case 'T':
+				tab := Nod(OITAB, from, nil)
+				if fromKind == 'E' {
+					typ := Nod(OCONVNOP, typename(t), nil)
+					typ.Type = Ptrto(Types[TUINTPTR])
+					fast = Nod(OEQ, tab, typ)
+					break
+				}
+				fast = Nod(OANDAND,
+					Nod(ONE, nodnil(), tab),
+					Nod(OEQ, itabType(tab), typename(t)),
+				)
+			case 'E':
 				tab := Nod(OITAB, from, nil)
 				fast = Nod(ONE, nodnil(), tab)
 			}
 			if fast != nil {
-				if Debug_typeassert > 0 {
-					Warn("type assertion (ok only) inlined")
+				if isblank(res) {
+					if Debug_typeassert > 0 {
+						Warn("type assertion (ok only) inlined")
+					}
+					n = Nod(OAS, ok, fast)
+					n = typecheck(n, Etop)
+				} else {
+					if Debug_typeassert > 0 {
+						Warn("type assertion (scalar result) inlined")
+					}
+					n = Nod(OIF, ok, nil)
+					n.Likely = 1
+					if isblank(ok) {
+						n.Left = fast
+					} else {
+						n.Ninit.Set1(Nod(OAS, ok, fast))
+					}
+					n.Nbody.Set1(Nod(OAS, res, ifaceData(from, res.Type)))
+					n.Rlist.Set1(Nod(OAS, res, nil))
+					n = typecheck(n, Etop)
 				}
-				n = Nod(OAS, ok, fast)
-				n = typecheck(n, Etop)
 				break
 			}
 		}
 
 		var resptr *Node // &res
-		if isblank(n.List.First()) {
+		if isblank(res) {
 			resptr = nodnil()
 		} else {
-			resptr = Nod(OADDR, n.List.First(), nil)
+			resptr = Nod(OADDR, res, nil)
 		}
 		resptr.Etype = 1 // addr does not escape
 
@@ -1121,7 +1149,7 @@ opswitch:
 					n = mkcall("float64touint64", n.Type, init, conv(n.Left, Types[TFLOAT64]))
 					break
 				}
-				if n.Type.Etype == TUINT32 || n.Type.Etype == TUINTPTR {
+				if n.Type.Etype == TUINT32 || n.Type.Etype == TUINT || n.Type.Etype == TUINTPTR {
 					n = mkcall("float64touint32", n.Type, init, conv(n.Left, Types[TFLOAT64]))
 					break
 				}
@@ -1136,7 +1164,7 @@ opswitch:
 					n = conv(mkcall("uint64tofloat64", Types[TFLOAT64], init, conv(n.Left, Types[TUINT64])), n.Type)
 					break
 				}
-				if n.Left.Type.Etype == TUINT32 || n.Left.Type.Etype == TUINTPTR {
+				if n.Left.Type.Etype == TUINT32 || n.Left.Type.Etype == TUINT || n.Left.Type.Etype == TUINTPTR {
 					n = conv(mkcall("uint32tofloat64", Types[TFLOAT64], init, conv(n.Left, Types[TUINT32])), n.Type)
 					break
 				}
@@ -3116,14 +3144,9 @@ func eqfor(t *Type, needsize *int) *Node {
 func walkcompare(n *Node, init *Nodes) *Node {
 	// Given interface value l and concrete value r, rewrite
 	//   l == r
-	// to
-	//   x, ok := l.(type(r)); ok && x == r
-	// Handle != similarly.
-	// This avoids the allocation that would be required
-	// to convert r to l for comparison.
-	var l *Node
-
-	var r *Node
+	// into types-equal && data-equal.
+	// This is efficient, avoids allocations, and avoids runtime calls.
+	var l, r *Node
 	if n.Left.Type.IsInterface() && !n.Right.Type.IsInterface() {
 		l = n.Left
 		r = n.Right
@@ -3133,35 +3156,36 @@ func walkcompare(n *Node, init *Nodes) *Node {
 	}
 
 	if l != nil {
-		x := temp(r.Type)
-		if haspointers(r.Type) {
-			a := Nod(OAS, x, nil)
-			a = typecheck(a, Etop)
-			init.Append(a)
-		}
-		ok := temp(Types[TBOOL])
-
-		// l.(type(r))
-		a := Nod(ODOTTYPE, l, nil)
-
-		a.Type = r.Type
-
-		// x, ok := l.(type(r))
-		expr := Nod(OAS2, nil, nil)
-
-		expr.List.Append(x)
-		expr.List.Append(ok)
-		expr.Rlist.Append(a)
-		expr = typecheck(expr, Etop)
-		expr = walkexpr(expr, init)
-
-		if n.Op == OEQ {
-			r = Nod(OANDAND, ok, Nod(OEQ, x, r))
+		// Handle both == and !=.
+		eq := n.Op
+		var andor Op
+		if eq == OEQ {
+			andor = OANDAND
 		} else {
-			r = Nod(OOROR, Nod(ONOT, ok, nil), Nod(ONE, x, r))
+			andor = OOROR
 		}
-		init.Append(expr)
-		n = finishcompare(n, r, init)
+		// Check for types equal.
+		// For empty interface, this is:
+		//   l.tab == type(r)
+		// For non-empty interface, this is:
+		//   l.tab != nil && l.tab._type == type(r)
+		var eqtype *Node
+		tab := Nod(OITAB, l, nil)
+		rtyp := typename(r.Type)
+		if l.Type.IsEmptyInterface() {
+			tab.Type = Ptrto(Types[TUINT8])
+			tab.Typecheck = 1
+			eqtype = Nod(eq, tab, rtyp)
+		} else {
+			nonnil := Nod(Brcom(eq), nodnil(), tab)
+			match := Nod(eq, itabType(tab), rtyp)
+			eqtype = Nod(andor, nonnil, match)
+		}
+		// Check for data equal.
+		eqdata := Nod(eq, ifaceData(l, r.Type), r)
+		// Put it all together.
+		expr := Nod(andor, eqtype, eqdata)
+		n = finishcompare(n, expr, init)
 		return n
 	}
 
@@ -3341,6 +3365,7 @@ func samecheap(a *Node, b *Node) bool {
 // The result of walkrotate MUST be assigned back to n, e.g.
 // 	n.Left = walkrotate(n.Left)
 func walkrotate(n *Node) *Node {
+	//TODO: enable LROT on ARM64 once the old backend is gone
 	if Thearch.LinkArch.InFamily(sys.MIPS64, sys.ARM64, sys.PPC64) {
 		return n
 	}
@@ -3532,16 +3557,6 @@ func walkdiv(n *Node, init *Nodes) *Node {
 			n2 := Nod(OMUL, n1, nr)
 			n = Nod(OSUB, nl, n2)
 			goto ret
-		}
-
-		// TODO(zhongwei) Test shows that TUINT8, TINT8, TUINT16 and TINT16's "quick division" method
-		// on current arm64 backend is slower than hardware div instruction on ARM64 due to unnecessary
-		// data movement between registers. It could be enabled when generated code is good enough.
-		if Thearch.LinkArch.Family == sys.ARM64 {
-			switch Simtype[nl.Type.Etype] {
-			case TUINT8, TINT8, TUINT16, TINT16:
-				return n
-			}
 		}
 
 		switch Simtype[nl.Type.Etype] {

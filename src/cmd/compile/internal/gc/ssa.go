@@ -26,6 +26,9 @@ func initssa() *ssa.Config {
 	ssaExp.mustImplement = true
 	if ssaConfig == nil {
 		ssaConfig = ssa.NewConfig(Thearch.LinkArch.Name, &ssaExp, Ctxt, Debug['N'] == 0)
+		if Thearch.LinkArch.Name == "386" {
+			ssaConfig.Set387(Thearch.Use387)
+		}
 	}
 	return ssaConfig
 }
@@ -37,7 +40,7 @@ func shouldssa(fn *Node) bool {
 		if os.Getenv("SSATEST") == "" {
 			return false
 		}
-	case "amd64", "arm", "riscv":
+	case "amd64", "amd64p32", "arm", "386", "arm64", "riscv":
 		// Generally available.
 	}
 	if !ssaEnabled {
@@ -1662,7 +1665,7 @@ func (s *state) expr(n *Node) *ssa.Value {
 
 		if ft.IsFloat() || tt.IsFloat() {
 			conv, ok := fpConvOpToSSA[twoTypes{s.concreteEtype(ft), s.concreteEtype(tt)}]
-			if s.config.IntSize == 4 {
+			if s.config.IntSize == 4 && Thearch.LinkArch.Name != "amd64p32" {
 				if conv1, ok1 := fpConvOpToSSA32[twoTypes{s.concreteEtype(ft), s.concreteEtype(tt)}]; ok1 {
 					conv = conv1
 				}
@@ -2027,6 +2030,10 @@ func (s *state) expr(n *Node) *ssa.Value {
 	case OITAB:
 		a := s.expr(n.Left)
 		return s.newValue1(ssa.OpITab, n.Type, a)
+
+	case OIDATA:
+		a := s.expr(n.Left)
+		return s.newValue1(ssa.OpIData, n.Type, a)
 
 	case OEFACE:
 		tab := s.expr(n.Left)
@@ -3003,6 +3010,10 @@ func (s *state) rtcall(fn *Node, returns bool, results []*Type, args ...*ssa.Val
 		off += size
 	}
 	off = Rnd(off, int64(Widthptr))
+	if Thearch.LinkArch.Name == "amd64p32" {
+		// amd64p32 wants 8-byte alignment of the start of the return values.
+		off = Rnd(off, 8)
+	}
 
 	// Issue call
 	call := s.newValue1A(ssa.OpStaticCall, ssa.TypeMem, fn.Sym, s.mem())
@@ -3949,6 +3960,11 @@ type SSAGenState struct {
 
 	// bstart remembers where each block starts (indexed by block ID)
 	bstart []*obj.Prog
+
+	// 387 port: maps from SSE registers (REG_X?) to 387 registers (REG_F?)
+	SSEto387 map[int16]int16
+	// Some architectures require a 64-bit temporary for FP-related register shuffling. Examples include x86-387, PPC, and Sparc V8.
+	ScratchFpMem *Node
 }
 
 // Pc returns the current Prog.
@@ -3983,6 +3999,13 @@ func genssa(f *ssa.Func, ptxt *obj.Prog, gcargs, gclocals *Sym) {
 		blockProgs = make(map[*obj.Prog]*ssa.Block, f.NumBlocks())
 		f.Logf("genssa %s\n", f.Name)
 		blockProgs[Pc] = f.Blocks[0]
+	}
+
+	if Thearch.Use387 {
+		s.SSEto387 = map[int16]int16{}
+	}
+	if f.Config.NeedsFpScratch {
+		s.ScratchFpMem = temp(Types[TUINT64])
 	}
 
 	// Emit basic blocks
@@ -4507,7 +4530,7 @@ func (e *ssaExport) SplitStruct(name ssa.LocalSlot, i int) ssa.LocalSlot {
 // namedAuto returns a new AUTO variable with the given name and type.
 func (e *ssaExport) namedAuto(name string, typ ssa.Type) ssa.GCNode {
 	t := typ.(*Type)
-	s := &Sym{Name: name, Pkg: autopkg}
+	s := &Sym{Name: name, Pkg: localpkg}
 	n := Nod(ONAME, nil, nil)
 	s.Def = n
 	s.Def.Used = true

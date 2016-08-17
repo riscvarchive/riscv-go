@@ -61,7 +61,6 @@ var regNamesARM = []string{
 	"F15", // tmp
 
 	// pseudo-registers
-	"FLAGS",
 	"SB",
 }
 
@@ -93,42 +92,40 @@ func init() {
 		gpsp       = gp | buildReg("SP")
 		gpspg      = gpg | buildReg("SP")
 		gpspsbg    = gpspg | buildReg("SB")
-		flags      = buildReg("FLAGS")
 		fp         = buildReg("F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15")
-		callerSave = gp | fp | flags | buildReg("g") // runtime.setg (and anything calling it) may clobber g
+		callerSave = gp | fp | buildReg("g") // runtime.setg (and anything calling it) may clobber g
 	)
 	// Common regInfo
 	var (
-		gp01      = regInfo{inputs: []regMask{}, outputs: []regMask{gp}}
+		gp01      = regInfo{inputs: nil, outputs: []regMask{gp}}
 		gp11      = regInfo{inputs: []regMask{gpg}, outputs: []regMask{gp}}
-		gp11carry = regInfo{inputs: []regMask{gpg}, outputs: []regMask{flags, gp}}
+		gp11carry = regInfo{inputs: []regMask{gpg}, outputs: []regMask{0, gp}}
 		gp11sp    = regInfo{inputs: []regMask{gpspg}, outputs: []regMask{gp}}
-		gp1flags  = regInfo{inputs: []regMask{gpg}, outputs: []regMask{flags}}
-		gp1flags1 = regInfo{inputs: []regMask{gp, flags}, outputs: []regMask{gp}}
+		gp1flags  = regInfo{inputs: []regMask{gpg}}
+		gp1flags1 = regInfo{inputs: []regMask{gp}, outputs: []regMask{gp}}
 		gp21      = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{gp}}
-		gp21cf    = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{gp}, clobbers: flags} // cf: clobbers flags
-		gp21carry = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{flags, gp}}
-		gp2flags  = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{flags}}
-		gp2flags1 = regInfo{inputs: []regMask{gp, gp, flags}, outputs: []regMask{gp}}
+		gp21carry = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{0, gp}}
+		gp2flags  = regInfo{inputs: []regMask{gpg, gpg}}
+		gp2flags1 = regInfo{inputs: []regMask{gp, gp}, outputs: []regMask{gp}}
 		gp22      = regInfo{inputs: []regMask{gpg, gpg}, outputs: []regMask{gp, gp}}
 		gp31      = regInfo{inputs: []regMask{gp, gp, gp}, outputs: []regMask{gp}}
-		gp31carry = regInfo{inputs: []regMask{gp, gp, gp}, outputs: []regMask{flags, gp}}
-		gp3flags  = regInfo{inputs: []regMask{gp, gp, gp}, outputs: []regMask{flags}}
-		gp3flags1 = regInfo{inputs: []regMask{gp, gp, gp, flags}, outputs: []regMask{gp}}
+		gp31carry = regInfo{inputs: []regMask{gp, gp, gp}, outputs: []regMask{0, gp}}
+		gp3flags  = regInfo{inputs: []regMask{gp, gp, gp}}
+		gp3flags1 = regInfo{inputs: []regMask{gp, gp, gp}, outputs: []regMask{gp}}
 		gpload    = regInfo{inputs: []regMask{gpspsbg}, outputs: []regMask{gp}}
-		gpstore   = regInfo{inputs: []regMask{gpspsbg, gpg}, outputs: []regMask{}}
+		gpstore   = regInfo{inputs: []regMask{gpspsbg, gpg}}
 		gp2load   = regInfo{inputs: []regMask{gpspsbg, gpg}, outputs: []regMask{gp}}
-		gp2store  = regInfo{inputs: []regMask{gpspsbg, gpg, gpg}, outputs: []regMask{}}
-		fp01      = regInfo{inputs: []regMask{}, outputs: []regMask{fp}}
+		gp2store  = regInfo{inputs: []regMask{gpspsbg, gpg, gpg}}
+		fp01      = regInfo{inputs: nil, outputs: []regMask{fp}}
 		fp11      = regInfo{inputs: []regMask{fp}, outputs: []regMask{fp}}
-		fp1flags  = regInfo{inputs: []regMask{fp}, outputs: []regMask{flags}}
+		fp1flags  = regInfo{inputs: []regMask{fp}}
 		fpgp      = regInfo{inputs: []regMask{fp}, outputs: []regMask{gp}}
 		gpfp      = regInfo{inputs: []regMask{gp}, outputs: []regMask{fp}}
 		fp21      = regInfo{inputs: []regMask{fp, fp}, outputs: []regMask{fp}}
-		fp2flags  = regInfo{inputs: []regMask{fp, fp}, outputs: []regMask{flags}}
+		fp2flags  = regInfo{inputs: []regMask{fp, fp}}
 		fpload    = regInfo{inputs: []regMask{gpspsbg}, outputs: []regMask{fp}}
-		fpstore   = regInfo{inputs: []regMask{gpspsbg, fp}, outputs: []regMask{}}
-		readflags = regInfo{inputs: []regMask{flags}, outputs: []regMask{gp}}
+		fpstore   = regInfo{inputs: []regMask{gpspsbg, fp}}
+		readflags = regInfo{inputs: nil, outputs: []regMask{gp}}
 	)
 	ops := []opData{
 		// binary ops
@@ -141,10 +138,10 @@ func init() {
 		{name: "MUL", argLength: 2, reg: gp21, asm: "MUL", commutative: true},     // arg0 * arg1
 		{name: "HMUL", argLength: 2, reg: gp21, asm: "MULL", commutative: true},   // (arg0 * arg1) >> 32, signed
 		{name: "HMULU", argLength: 2, reg: gp21, asm: "MULLU", commutative: true}, // (arg0 * arg1) >> 32, unsigned
-		{name: "DIV", argLength: 2, reg: gp21cf, asm: "DIV"},                      // arg0 / arg1, signed, soft div clobbers flags
-		{name: "DIVU", argLength: 2, reg: gp21cf, asm: "DIVU"},                    // arg0 / arg1, unsighed
-		{name: "MOD", argLength: 2, reg: gp21cf, asm: "MOD"},                      // arg0 % arg1, signed
-		{name: "MODU", argLength: 2, reg: gp21cf, asm: "MODU"},                    // arg0 % arg1, unsigned
+		{name: "DIV", argLength: 2, reg: gp21, asm: "DIV", clobberFlags: true},    // arg0 / arg1, signed, soft div clobbers flags
+		{name: "DIVU", argLength: 2, reg: gp21, asm: "DIVU", clobberFlags: true},  // arg0 / arg1, unsighed
+		{name: "MOD", argLength: 2, reg: gp21, asm: "MOD", clobberFlags: true},    // arg0 % arg1, signed
+		{name: "MODU", argLength: 2, reg: gp21, asm: "MODU", clobberFlags: true},  // arg0 % arg1, unsigned
 
 		{name: "ADDS", argLength: 2, reg: gp21carry, asm: "ADD", commutative: true}, // arg0 + arg1, set carry flag
 		{name: "ADDSconst", argLength: 1, reg: gp11carry, asm: "ADD", aux: "Int32"}, // arg0 + auxInt, set carry flag
@@ -190,7 +187,7 @@ func init() {
 		{name: "SLLconst", argLength: 1, reg: gp11, asm: "SLL", aux: "Int32"}, // arg0 << auxInt
 		{name: "SRL", argLength: 2, reg: gp21, asm: "SRL"},                    // arg0 >> arg1, unsigned, shift amount is mod 256
 		{name: "SRLconst", argLength: 1, reg: gp11, asm: "SRL", aux: "Int32"}, // arg0 >> auxInt, unsigned
-		{name: "SRA", argLength: 2, reg: gp21cf, asm: "SRA"},                  // arg0 >> arg1, signed, shift amount is mod 256
+		{name: "SRA", argLength: 2, reg: gp21, asm: "SRA"},                    // arg0 >> arg1, signed, shift amount is mod 256
 		{name: "SRAconst", argLength: 1, reg: gp11, asm: "SRA", aux: "Int32"}, // arg0 >> auxInt, signed
 		{name: "SRRconst", argLength: 1, reg: gp11, aux: "Int32"},             // arg0 right rotate by auxInt bits
 
@@ -363,11 +360,11 @@ func init() {
 		{name: "SRAcond", argLength: 3, reg: gp2flags1, asm: "SRA"},                                         // arg0 >> 31 if flags indicates HS, arg0 >> arg1 otherwise, signed shift, arg2=flags
 
 		// function calls
-		{name: "CALLstatic", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "SymOff"},                                             // call static function aux.(*gc.Sym).  arg0=mem, auxint=argsize, returns mem
-		{name: "CALLclosure", argLength: 3, reg: regInfo{inputs: []regMask{gpsp, buildReg("R7"), 0}, clobbers: callerSave}, aux: "Int64"}, // call function via closure.  arg0=codeptr, arg1=closure, arg2=mem, auxint=argsize, returns mem
-		{name: "CALLdefer", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "Int64"},                                               // call deferproc.  arg0=mem, auxint=argsize, returns mem
-		{name: "CALLgo", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "Int64"},                                                  // call newproc.  arg0=mem, auxint=argsize, returns mem
-		{name: "CALLinter", argLength: 2, reg: regInfo{inputs: []regMask{gp}, clobbers: callerSave}, aux: "Int64"},                        // call fn by pointer.  arg0=codeptr, arg1=mem, auxint=argsize, returns mem
+		{name: "CALLstatic", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "SymOff", clobberFlags: true},                                             // call static function aux.(*gc.Sym).  arg0=mem, auxint=argsize, returns mem
+		{name: "CALLclosure", argLength: 3, reg: regInfo{inputs: []regMask{gpsp, buildReg("R7"), 0}, clobbers: callerSave}, aux: "Int64", clobberFlags: true}, // call function via closure.  arg0=codeptr, arg1=closure, arg2=mem, auxint=argsize, returns mem
+		{name: "CALLdefer", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "Int64", clobberFlags: true},                                               // call deferproc.  arg0=mem, auxint=argsize, returns mem
+		{name: "CALLgo", argLength: 1, reg: regInfo{clobbers: callerSave}, aux: "Int64", clobberFlags: true},                                                  // call newproc.  arg0=mem, auxint=argsize, returns mem
+		{name: "CALLinter", argLength: 2, reg: regInfo{inputs: []regMask{gp}, clobbers: callerSave}, aux: "Int64", clobberFlags: true},                        // call fn by pointer.  arg0=codeptr, arg1=mem, auxint=argsize, returns mem
 
 		// pseudo-ops
 		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpg}}}, // panic if arg0 is nil.  arg1=mem.
@@ -415,78 +412,45 @@ func init() {
 			},
 		},
 
-		// large zeroing (must be 4-byte aligned)
+		// large or unaligned zeroing
 		// arg0 = address of memory to zero (in R1, changed as side effect)
-		// arg1 = address of the end of the memory to zero
+		// arg1 = address of the last element to zero
 		// arg2 = value to store (always zero)
 		// arg3 = mem
 		// returns mem
 		//	MOVW.P	Rarg2, 4(R1)
 		//	CMP	R1, Rarg1
-		//	BLT	-2(PC)
+		//	BLE	-2(PC)
 		{
 			name:      "LoweredZero",
+			aux:       "Int64",
 			argLength: 4,
 			reg: regInfo{
 				inputs:   []regMask{buildReg("R1"), gp, gp},
-				clobbers: buildReg("R1 FLAGS"),
+				clobbers: buildReg("R1"),
 			},
+			clobberFlags: true,
 		},
 
-		// large move (must be 4-byte aligned)
+		// large or unaligned move
 		// arg0 = address of dst memory (in R2, changed as side effect)
 		// arg1 = address of src memory (in R1, changed as side effect)
-		// arg2 = address of the end of src memory
+		// arg2 = address of the last element of src
 		// arg3 = mem
 		// returns mem
 		//	MOVW.P	4(R1), Rtmp
 		//	MOVW.P	Rtmp, 4(R2)
 		//	CMP	R1, Rarg2
-		//	BLT	-3(PC)
+		//	BLE	-3(PC)
 		{
 			name:      "LoweredMove",
+			aux:       "Int64",
 			argLength: 4,
 			reg: regInfo{
 				inputs:   []regMask{buildReg("R2"), buildReg("R1"), gp},
-				clobbers: buildReg("R1 R2 FLAGS"),
+				clobbers: buildReg("R1 R2"),
 			},
-		},
-
-		// unaligned zeroing
-		// arg0 = address of memory to zero (in R1, changed as side effect)
-		// arg1 = address of the end of the memory to zero
-		// arg2 = value to store (always zero)
-		// arg3 = mem
-		// returns mem
-		//	MOVB.P	Rarg2, 1(R1)
-		//	CMP	R1, Rarg1
-		//	BLT	-2(PC)
-		{
-			name:      "LoweredZeroU",
-			argLength: 4,
-			reg: regInfo{
-				inputs:   []regMask{buildReg("R1"), gp, gp},
-				clobbers: buildReg("R1 FLAGS"),
-			},
-		},
-
-		// unaligned move
-		// arg0 = address of dst memory (in R2, changed as side effect)
-		// arg1 = address of src memory (in R1, changed as side effect)
-		// arg2 = address of the end of src memory
-		// arg3 = mem
-		// returns mem
-		//	MOVB.P	1(R1), Rtmp
-		//	MOVB.P	Rtmp, 1(R2)
-		//	CMP	R1, Rarg2
-		//	BLT	-3(PC)
-		{
-			name:      "LoweredMoveU",
-			argLength: 4,
-			reg: regInfo{
-				inputs:   []regMask{buildReg("R2"), buildReg("R1"), gp},
-				clobbers: buildReg("R1 R2 FLAGS"),
-			},
+			clobberFlags: true,
 		},
 
 		// Scheduler ensures LoweredGetClosurePtr occurs only in entry block,
@@ -541,7 +505,6 @@ func init() {
 		regnames:        regNamesARM,
 		gpregmask:       gp,
 		fpregmask:       fp,
-		flagmask:        flags,
 		framepointerreg: -1, // not used
 	})
 }

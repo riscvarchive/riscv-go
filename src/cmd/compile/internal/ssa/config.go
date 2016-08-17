@@ -22,7 +22,6 @@ type Config struct {
 	registers       []Register                 // machine registers
 	gpRegMask       regMask                    // general purpose integer register mask
 	fpRegMask       regMask                    // floating point register mask
-	flagRegMask     regMask                    // flag register mask
 	FPReg           int8                       // register number of frame pointer, -1 if not used
 	hasGReg         bool                       // has hardware g register
 	fe              Frontend                   // callbacks into compiler frontend
@@ -31,6 +30,8 @@ type Config struct {
 	optimize        bool                       // Do optimization
 	noDuffDevice    bool                       // Don't use Duff's device
 	nacl            bool                       // GOOS=nacl
+	use387          bool                       // GO386=387
+	NeedsFpScratch  bool                       // No direct move between GP and FP register sets
 	sparsePhiCutoff uint64                     // Sparse phi location algorithm used above this #blocks*#variables score
 	curFunc         *Func
 
@@ -137,9 +138,19 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.registers = registersAMD64[:]
 		c.gpRegMask = gpRegMaskAMD64
 		c.fpRegMask = fpRegMaskAMD64
-		c.flagRegMask = flagRegMaskAMD64
 		c.FPReg = framepointerRegAMD64
 		c.hasGReg = false
+	case "amd64p32":
+		c.IntSize = 4
+		c.PtrSize = 4
+		c.lowerBlock = rewriteBlockAMD64
+		c.lowerValue = rewriteValueAMD64
+		c.registers = registersAMD64[:]
+		c.gpRegMask = gpRegMaskAMD64
+		c.fpRegMask = fpRegMaskAMD64
+		c.FPReg = framepointerRegAMD64
+		c.hasGReg = false
+		c.noDuffDevice = true
 	case "386":
 		c.IntSize = 4
 		c.PtrSize = 4
@@ -148,7 +159,6 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.registers = registers386[:]
 		c.gpRegMask = gpRegMask386
 		c.fpRegMask = fpRegMask386
-		c.flagRegMask = flagRegMask386
 		c.FPReg = framepointerReg386
 		c.hasGReg = false
 	case "arm":
@@ -159,9 +169,19 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.registers = registersARM[:]
 		c.gpRegMask = gpRegMaskARM
 		c.fpRegMask = fpRegMaskARM
-		c.flagRegMask = flagRegMaskARM
 		c.FPReg = framepointerRegARM
 		c.hasGReg = true
+	case "arm64":
+		c.IntSize = 8
+		c.PtrSize = 8
+		c.lowerBlock = rewriteBlockARM64
+		c.lowerValue = rewriteValueARM64
+		c.registers = registersARM64[:]
+		c.gpRegMask = gpRegMaskARM64
+		c.fpRegMask = fpRegMaskARM64
+		c.FPReg = framepointerRegARM64
+		c.hasGReg = true
+		c.noDuffDevice = obj.Getgoos() == "darwin" // darwin linker cannot handle BR26 reloc with non-zero addend
 	case "ppc64le":
 		c.IntSize = 8
 		c.PtrSize = 8
@@ -171,6 +191,9 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.gpRegMask = gpRegMaskPPC64
 		c.fpRegMask = fpRegMaskPPC64
 		c.FPReg = framepointerRegPPC64
+		c.noDuffDevice = true // TODO: Resolve PPC64 DuffDevice (has zero, but not copy)
+		c.NeedsFpScratch = true
+		c.hasGReg = true
 	case "riscv":
 		c.IntSize = 8
 		c.PtrSize = 8
@@ -179,7 +202,6 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.registers = registersRISCV[:]
 		c.gpRegMask = gpRegMaskRISCV
 		c.fpRegMask = fpRegMaskRISCV
-		c.flagRegMask = flagRegMaskRISCV
 		c.FPReg = framepointerRegRISCV
 		c.hasGReg = true
 	default:
@@ -233,6 +255,11 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 	}
 
 	return c
+}
+
+func (c *Config) Set387(b bool) {
+	c.NeedsFpScratch = b
+	c.use387 = b
 }
 
 func (c *Config) Frontend() Frontend      { return c.fe }

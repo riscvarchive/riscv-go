@@ -156,6 +156,36 @@ func opregreg(op obj.As, dest, src int16) *obj.Prog {
 	return p
 }
 
+// DUFFZERO consists of repeated blocks of 4 MOVUPSs + ADD,
+// See runtime/mkduff.go.
+func duffStart(size int64) int64 {
+	x, _ := duff(size)
+	return x
+}
+func duffAdj(size int64) int64 {
+	_, x := duff(size)
+	return x
+}
+
+// duff returns the offset (from duffzero, in bytes) and pointer adjust (in bytes)
+// required to use the duffzero mechanism for a block of the given size.
+func duff(size int64) (int64, int64) {
+	if size < 32 || size > 1024 || size%dzClearStep != 0 {
+		panic("bad duffzero size")
+	}
+	steps := size / dzClearStep
+	blocks := steps / dzBlockLen
+	steps %= dzBlockLen
+	off := dzBlockSize * (dzBlocks - blocks)
+	var adj int64
+	if steps != 0 {
+		off -= dzAddSize
+		off -= dzMovSize * steps
+		adj -= dzClearStep * (dzBlockLen - steps)
+	}
+	return off, adj
+}
+
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	s.SetLineno(v.Line)
 	switch v.Op {
@@ -468,8 +498,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.AddAux(&p.From, v)
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpAMD64LEAQ:
-		p := gc.Prog(x86.ALEAQ)
+	case ssa.OpAMD64LEAQ, ssa.OpAMD64LEAL:
+		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
 		p.From.Reg = gc.SSARegNum(v.Args[0])
 		gc.AddAux(&p.From, v)
@@ -647,10 +677,20 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		ssa.OpAMD64CVTSS2SD, ssa.OpAMD64CVTSD2SS:
 		opregreg(v.Op.Asm(), gc.SSARegNum(v), gc.SSARegNum(v.Args[0]))
 	case ssa.OpAMD64DUFFZERO:
-		p := gc.Prog(obj.ADUFFZERO)
+		off := duffStart(v.AuxInt)
+		adj := duffAdj(v.AuxInt)
+		var p *obj.Prog
+		if adj != 0 {
+			p = gc.Prog(x86.AADDQ)
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = adj
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = x86.REG_DI
+		}
+		p = gc.Prog(obj.ADUFFZERO)
 		p.To.Type = obj.TYPE_ADDR
 		p.To.Sym = gc.Linksym(gc.Pkglookup("duffzero", gc.Runtimepkg))
-		p.To.Offset = v.AuxInt
+		p.To.Offset = off
 	case ssa.OpAMD64MOVOconst:
 		if v.AuxInt != 0 {
 			v.Unimplementedf("MOVOconst can only do constant=0")
@@ -663,7 +703,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Sym = gc.Linksym(gc.Pkglookup("duffcopy", gc.Runtimepkg))
 		p.To.Offset = v.AuxInt
 
-	case ssa.OpCopy, ssa.OpAMD64MOVQconvert: // TODO: use MOVQreg for reg->reg copies instead of OpCopy?
+	case ssa.OpCopy, ssa.OpAMD64MOVQconvert, ssa.OpAMD64MOVLconvert: // TODO: use MOVQreg for reg->reg copies instead of OpCopy?
 		if v.Type.IsMemory() {
 			return
 		}

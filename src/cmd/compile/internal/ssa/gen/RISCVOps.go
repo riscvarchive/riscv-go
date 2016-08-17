@@ -199,7 +199,6 @@ func init() {
 		regnames:        regNamesRISCV,
 		gpregmask:       gpMask,
 		fpregmask:       fpMask,
-		flagmask:        0,  // no flags
 		framepointerreg: -1, // not used
 	})
 }

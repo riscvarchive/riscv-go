@@ -46,15 +46,20 @@ func TestTransportPersistConnReadLoopEOF(t *testing.T) {
 	conn.Close() // simulate the server hanging up on the client
 
 	_, err = pc.roundTrip(treq)
-	if err != errServerClosedConn && err != errServerClosedIdle {
+	if !isTransportReadFromServerError(err) && err != errServerClosedIdle {
 		t.Fatalf("roundTrip = %#v, %v; want errServerClosedConn or errServerClosedIdle", err, err)
 	}
 
 	<-pc.closech
 	err = pc.closed
-	if err != errServerClosedConn && err != errServerClosedIdle {
+	if !isTransportReadFromServerError(err) && err != errServerClosedIdle {
 		t.Fatalf("pc.closed = %#v, %v; want errServerClosedConn or errServerClosedIdle", err, err)
 	}
+}
+
+func isTransportReadFromServerError(err error) bool {
+	_, ok := err.(transportReadFromServerError)
+	return ok
 }
 
 func newLocalListener(t *testing.T) net.Listener {
@@ -66,4 +71,71 @@ func newLocalListener(t *testing.T) net.Listener {
 		t.Fatal(err)
 	}
 	return ln
+}
+
+func dummyRequest(method string) *Request {
+	req, err := NewRequest(method, "http://fake.tld/", nil)
+	if err != nil {
+		panic(err)
+	}
+	return req
+}
+
+func TestTransportShouldRetryRequest(t *testing.T) {
+	tests := []struct {
+		pc  *persistConn
+		req *Request
+
+		err  error
+		want bool
+	}{
+		0: {
+			pc:   &persistConn{reused: false},
+			req:  dummyRequest("POST"),
+			err:  nothingWrittenError{},
+			want: false,
+		},
+		1: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("POST"),
+			err:  nothingWrittenError{},
+			want: true,
+		},
+		2: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("POST"),
+			err:  http2ErrNoCachedConn,
+			want: true,
+		},
+		3: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("POST"),
+			err:  errMissingHost,
+			want: false,
+		},
+		4: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("POST"),
+			err:  transportReadFromServerError{},
+			want: false,
+		},
+		5: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("GET"),
+			err:  transportReadFromServerError{},
+			want: true,
+		},
+		6: {
+			pc:   &persistConn{reused: true},
+			req:  dummyRequest("GET"),
+			err:  errServerClosedIdle,
+			want: true,
+		},
+	}
+	for i, tt := range tests {
+		got := tt.pc.shouldRetryRequest(tt.req, tt.err)
+		if got != tt.want {
+			t.Errorf("%d. shouldRetryRequest = %v; want %v", i, got, tt.want)
+		}
+	}
 }

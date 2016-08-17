@@ -153,13 +153,9 @@ const debugFormat = false // default: false
 // TODO(gri) disable and remove once there is only one export format again
 const forceObjFileStability = true
 
-// Supported export format versions.
+// Current export format version.
 // TODO(gri) Make this more systematic (issue #16244).
-const (
-	exportVersion0 = "v0"
-	exportVersion1 = "v1"
-	exportVersion  = exportVersion1
-)
+const exportVersion = "v1"
 
 // exportInlined enables the export of inlined function bodies and related
 // dependencies. The compiler should work w/o any loss of functionality with
@@ -174,8 +170,8 @@ const exportInlined = true // default: true
 // errors.
 // If disabled, only named types are tracked, possibly leading to slightly
 // less efficient encoding in rare cases. It also prevents the export of
-// some corner-case type declarations (but those are not handled correctly
-// with with the textual export format either).
+// some corner-case type declarations (but those were not handled correctly
+// with the former textual export format either).
 // TODO(gri) enable and remove once issues caused by it are fixed
 const trackAllTypes = false
 
@@ -197,6 +193,9 @@ type exporter struct {
 	written int // bytes written
 	indent  int // for p.trace
 	trace   bool
+
+	// work-around for issue #16369 only
+	nesting int // amount of "nesting" of interface types
 }
 
 // export writes the exportlist for localpkg to out and returns the number of bytes written.
@@ -343,7 +342,6 @@ func export(out *bufio.Writer, trace bool) int {
 	}
 
 	// write compiler-specific flags
-	p.bool(safemode)
 	if p.trace {
 		p.tracef("\n")
 	}
@@ -732,14 +730,7 @@ func (p *exporter) typ(t *Type) {
 			p.paramList(sig.Recvs(), inlineable)
 			p.paramList(sig.Params(), inlineable)
 			p.paramList(sig.Results(), inlineable)
-
-			// for issue #16243
-			// We make this conditional for 1.7 to avoid consistency problems
-			// with installed packages compiled with an older version.
-			// TODO(gri) Clean up after 1.7 is out (issue #16244)
-			if exportVersion == exportVersion1 {
-				p.bool(m.Nointerface)
-			}
+			p.bool(m.Nointerface) // record go:nointerface pragma value (see also #16243)
 
 			var f *Func
 			if inlineable {
@@ -790,11 +781,39 @@ func (p *exporter) typ(t *Type) {
 
 	case TINTER:
 		p.tag(interfaceTag)
-
 		// gc doesn't separate between embedded interfaces
 		// and methods declared explicitly with an interface
 		p.int(0) // no embedded interfaces
+
+		// Because the compiler flattens interfaces containing
+		// embedded interfaces, it is possible to create interface
+		// types that recur through an unnamed type.
+		// If trackAllTypes is disabled, such recursion is not
+		// detected, leading to a stack overflow during export
+		// (issue #16369).
+		// As a crude work-around we terminate deep recursion
+		// through interface types with an empty interface and
+		// report an error.
+		// This will catch endless recursion, but is unlikely
+		// to trigger for valid, deeply nested types given the
+		// high threshold.
+		// It would be ok to continue without reporting an error
+		// since the export format is valid. But a subsequent
+		// import would import an incorrect type. The textual
+		// exporter does not report an error but importing the
+		// resulting package will lead to a syntax error during
+		// import.
+		// TODO(gri) remove this once we have a permanent fix
+		// for the issue.
+		if p.nesting > 100 {
+			p.int(0) // 0 methods to indicate empty interface
+			yyerrorl(t.Lineno, "cannot export unnamed recursive interface")
+			break
+		}
+
+		p.nesting++
 		p.methodList(t)
+		p.nesting--
 
 	case TMAP:
 		p.tag(mapTag)

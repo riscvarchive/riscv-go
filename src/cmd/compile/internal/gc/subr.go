@@ -246,6 +246,25 @@ func LookupN(prefix string, n int) *Sym {
 	return LookupBytes(b)
 }
 
+// autolabel generates a new Name node for use with
+// an automatically generated label.
+// prefix is a short mnemonic (e.g. ".s" for switch)
+// to help with debugging.
+// It should begin with "." to avoid conflicts with
+// user labels.
+func autolabel(prefix string) *Node {
+	if prefix[0] != '.' {
+		Fatalf("autolabel prefix must start with '.', have %q", prefix)
+	}
+	fn := Curfn
+	if Curfn == nil {
+		Fatalf("autolabel outside function")
+	}
+	n := fn.Func.Label
+	fn.Func.Label++
+	return newname(LookupN(prefix, int(n)))
+}
+
 var initSyms []*Sym
 
 var nopkg = &Pkg{
@@ -2296,6 +2315,35 @@ func isdirectiface(t *Type) bool {
 	}
 
 	return false
+}
+
+// itabType loads the _type field from a runtime.itab struct.
+func itabType(itab *Node) *Node {
+	typ := NodSym(ODOTPTR, itab, nil)
+	typ.Type = Ptrto(Types[TUINT8])
+	typ.Typecheck = 1
+	typ.Xoffset = int64(Widthptr) // offset of _type in runtime.itab
+	typ.Bounded = true            // guaranteed not to fault
+	return typ
+}
+
+// ifaceData loads the data field from an interface.
+// The concrete type must be known to have type t.
+// It follows the pointer if !isdirectiface(t).
+func ifaceData(n *Node, t *Type) *Node {
+	ptr := NodSym(OIDATA, n, nil)
+	if isdirectiface(t) {
+		ptr.Type = t
+		ptr.Typecheck = 1
+		return ptr
+	}
+	ptr.Type = Ptrto(t)
+	ptr.Bounded = true
+	ptr.Typecheck = 1
+	ind := Nod(OIND, ptr, nil)
+	ind.Type = t
+	ind.Typecheck = 1
+	return ind
 }
 
 // iet returns 'T' if t is a concrete type,

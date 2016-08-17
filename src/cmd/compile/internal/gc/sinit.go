@@ -866,7 +866,7 @@ func maplit(ctxt int, n *Node, var_ *Node, init *Nodes) {
 	nerr := nerrors
 
 	a := Nod(OMAKE, nil, nil)
-	a.List.Set1(typenod(n.Type))
+	a.List.Set2(typenod(n.Type), Nodintconst(int64(len(n.List.Slice()))))
 	litas(var_, a, init)
 
 	// count the initializers
@@ -1435,7 +1435,7 @@ func genAsInitNoCheck(n *Node, reportOnly bool) bool {
 
 	case TBOOL, TINT8, TUINT8, TINT16, TUINT16,
 		TINT32, TUINT32, TINT64, TUINT64,
-		TINT, TUINT, TUINTPTR,
+		TINT, TUINT, TUINTPTR, TUNSAFEPTR,
 		TPTR32, TPTR64,
 		TFLOAT32, TFLOAT64:
 		if !reportOnly {

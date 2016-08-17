@@ -53,7 +53,7 @@ type Optab struct {
 	a2    uint8
 	a3    uint8
 	a4    uint8
-	type_ int8
+	type_ int8 // cases in asmout below. E.g., 44 = st r,(ra+rb); 45 = ld (ra+rb), r
 	size  int8
 	param int16
 }
@@ -310,6 +310,12 @@ var optab = []Optab{
 	{AFMOVD, C_FREG, C_NONE, C_NONE, C_LAUTO, 35, 8, REGSP},
 	{AFMOVD, C_FREG, C_NONE, C_NONE, C_LOREG, 35, 8, REGZERO},
 	{AFMOVD, C_FREG, C_NONE, C_NONE, C_ADDR, 74, 8, 0},
+	{AFMOVSX, C_ZOREG, C_REG, C_NONE, C_FREG, 45, 4, 0},
+	{AFMOVSX, C_ZOREG, C_NONE, C_NONE, C_FREG, 45, 4, 0},
+	{AFMOVSX, C_FREG, C_REG, C_NONE, C_ZOREG, 44, 4, 0},
+	{AFMOVSX, C_FREG, C_NONE, C_NONE, C_ZOREG, 44, 4, 0},
+	{AFMOVSZ, C_ZOREG, C_REG, C_NONE, C_FREG, 45, 4, 0},
+	{AFMOVSZ, C_ZOREG, C_NONE, C_NONE, C_FREG, 45, 4, 0},
 	{ASYNC, C_NONE, C_NONE, C_NONE, C_NONE, 46, 4, 0},
 	{AWORD, C_LCON, C_NONE, C_NONE, C_NONE, 40, 4, 0},
 	{ADWORD, C_LCON, C_NONE, C_NONE, C_NONE, 31, 8, 0},
@@ -770,7 +776,7 @@ func oplook(ctxt *obj.Link, p *obj.Prog) *Optab {
 		}
 	}
 
-	ctxt.Diag("illegal combination %v %v %v %v %v", obj.Aconv(p.As), DRconv(a1), DRconv(a2), DRconv(a3), DRconv(a4))
+	ctxt.Diag("illegal combination %v %v %v %v %v", p.As, DRconv(a1), DRconv(a2), DRconv(a3), DRconv(a4))
 	prasm(p)
 	if ops == nil {
 		ops = optab
@@ -919,8 +925,8 @@ func buildop(ctxt *obj.Link) {
 
 		switch r {
 		default:
-			ctxt.Diag("unknown op in build: %v", obj.Aconv(r))
-			log.Fatalf("bad code")
+			ctxt.Diag("unknown op in build: %v", r)
+			log.Fatalf("instruction missing from switch in asm9.go:buildop: %v", r)
 
 		case ADCBF: /* unary indexed: op (b+a); op (b) */
 			opset(ADCBI, r0)
@@ -1265,6 +1271,8 @@ func buildop(ctxt *obj.Link) {
 
 		case AADD,
 			AANDCC, /* and. Rb,Rs,Ra; andi. $uimm,Rs,Ra; andis. $uimm,Rs,Ra */
+			AFMOVSX,
+			AFMOVSZ,
 			ALSW,
 			AMOVW,
 			/* load/store/move word with sign extension; special 32-bit move; move 32-bit literals */
@@ -3038,7 +3046,7 @@ func oprrr(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(31, 316, 0, 1)
 	}
 
-	ctxt.Diag("bad r/r opcode %v", obj.Aconv(a))
+	ctxt.Diag("bad r/r opcode %v", a)
 	return 0
 }
 
@@ -3160,7 +3168,7 @@ func opirr(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(27, 0, 0, 0) /* XORIU */
 	}
 
-	ctxt.Diag("bad opcode i/r %v", obj.Aconv(a))
+	ctxt.Diag("bad opcode i/r %v", a)
 	return 0
 }
 
@@ -3207,7 +3215,7 @@ func opload(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(46, 0, 0, 0) /* lmw */
 	}
 
-	ctxt.Diag("bad load opcode %v", obj.Aconv(a))
+	ctxt.Diag("bad load opcode %v", a)
 	return 0
 }
 
@@ -3238,6 +3246,10 @@ func oploadx(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(31, 535, 0, 0) /* lfsx */
 	case AFMOVSU:
 		return OPVCC(31, 567, 0, 0) /* lfsux */
+	case AFMOVSX:
+		return OPVCC(31, 855, 0, 0) /* lfiwax - power6, isa 2.05 */
+	case AFMOVSZ:
+		return OPVCC(31, 887, 0, 0) /* lfiwzx - power7, isa 2.06 */
 	case AMOVH:
 		return OPVCC(31, 343, 0, 0) /* lhax */
 	case AMOVHU:
@@ -3266,7 +3278,7 @@ func oploadx(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(31, 53, 0, 0) /* ldux */
 	}
 
-	ctxt.Diag("bad loadx opcode %v", obj.Aconv(a))
+	ctxt.Diag("bad loadx opcode %v", a)
 	return 0
 }
 
@@ -3310,7 +3322,7 @@ func opstore(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(62, 0, 0, 1) /* stdu */
 	}
 
-	ctxt.Diag("unknown store opcode %v", obj.Aconv(a))
+	ctxt.Diag("unknown store opcode %v", a)
 	return 0
 }
 
@@ -3332,6 +3344,8 @@ func opstorex(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(31, 663, 0, 0) /* stfsx */
 	case AFMOVSU:
 		return OPVCC(31, 695, 0, 0) /* stfsux */
+	case AFMOVSX:
+		return OPVCC(31, 983, 0, 0) /* stfiwx */
 
 	case AMOVHZ, AMOVH:
 		return OPVCC(31, 407, 0, 0) /* sthx */
@@ -3364,6 +3378,6 @@ func opstorex(ctxt *obj.Link, a obj.As) uint32 {
 		return OPVCC(31, 181, 0, 0) /* stdux */
 	}
 
-	ctxt.Diag("unknown storex opcode %v", obj.Aconv(a))
+	ctxt.Diag("unknown storex opcode %v", a)
 	return 0
 }

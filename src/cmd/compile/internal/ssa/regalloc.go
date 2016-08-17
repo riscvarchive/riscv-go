@@ -336,11 +336,11 @@ func (s *regAllocState) assignReg(r register, v *Value, c *Value) {
 // allocReg chooses a register from the set of registers in mask.
 // If there is no unused register, a Value will be kicked out of
 // a register to make room.
-func (s *regAllocState) allocReg(mask regMask) register {
+func (s *regAllocState) allocReg(mask regMask, v *Value) register {
 	mask &= s.allocatable
 	mask &^= s.nospill
 	if mask == 0 {
-		s.f.Fatalf("no register available")
+		s.f.Fatalf("no register available for %s", v)
 	}
 
 	// Pick an unused register if one is available.
@@ -401,7 +401,7 @@ func (s *regAllocState) allocValToReg(v *Value, mask regMask, nospill bool, line
 	}
 
 	// Allocate a register.
-	r := s.allocReg(mask)
+	r := s.allocReg(mask, v)
 
 	// Allocate v to the new register.
 	var c *Value
@@ -486,12 +486,29 @@ func (s *regAllocState) init(f *Func) {
 			s.allocatable &^= 1 << 15 // R15
 		case "arm":
 			s.allocatable &^= 1 << 9 // R9
+		case "arm64":
+			// nothing to do?
+		case "386":
+			// nothing to do.
+			// Note that for Flag_shared (position independent code)
+			// we do need to be careful, but that carefulness is hidden
+			// in the rewrite rules so we always have a free register
+			// available for global load/stores. See gen/386.rules (search for Flag_shared).
 		default:
 			s.f.Config.fe.Unimplementedf(0, "arch %s not implemented", s.f.Config.arch)
 		}
 	}
-	if s.f.Config.nacl && s.f.Config.arch == "arm" {
-		s.allocatable &^= 1 << 9 // R9 is "thread pointer" on nacl/arm
+	if s.f.Config.nacl {
+		switch s.f.Config.arch {
+		case "arm":
+			s.allocatable &^= 1 << 9 // R9 is "thread pointer" on nacl/arm
+		case "amd64p32":
+			s.allocatable &^= 1 << 5  // BP - reserved for nacl
+			s.allocatable &^= 1 << 15 // R15 - reserved for nacl
+		}
+	}
+	if s.f.Config.use387 {
+		s.allocatable &^= 1 << 15 // X7 disallowed (one 387 register is used as scratch space during SSE->387 generation in ../x86/387.go)
 	}
 
 	s.regs = make([]regState, s.numRegs)
@@ -820,6 +837,9 @@ func (s *regAllocState) regalloc(f *Func) {
 				if phiRegs[i] != noRegister {
 					continue
 				}
+				if s.f.Config.use387 && v.Type.IsFloat() {
+					continue // 387 can't handle floats in registers between blocks
+				}
 				m := s.compatRegs(v.Type) &^ phiUsed &^ s.used
 				if m != 0 {
 					r := pickReg(m)
@@ -1058,10 +1078,6 @@ func (s *regAllocState) regalloc(f *Func) {
 			args = append(args[:0], v.Args...)
 			for _, i := range regspec.inputs {
 				mask := i.regs
-				if mask == f.Config.flagRegMask {
-					// TODO: remove flag input from regspec.inputs.
-					continue
-				}
 				if mask&s.values[args[i.idx].ID].regs == 0 {
 					// Need a new register for the input.
 					mask &= s.allocatable
@@ -1218,7 +1234,7 @@ func (s *regAllocState) regalloc(f *Func) {
 					if mask&^desired.avoid != 0 {
 						mask &^= desired.avoid
 					}
-					r := s.allocReg(mask)
+					r := s.allocReg(mask, v)
 					outRegs[out.idx] = r
 					used |= regMask(1) << r
 				}
@@ -1290,6 +1306,11 @@ func (s *regAllocState) regalloc(f *Func) {
 			s.freeUseRecords = u
 		}
 
+		// Spill any values that can't live across basic block boundaries.
+		if s.f.Config.use387 {
+			s.freeRegs(s.f.Config.fpRegMask)
+		}
+
 		// If we are approaching a merge point and we are the primary
 		// predecessor of it, find live values that we use soon after
 		// the merge point and promote them to registers now.
@@ -1313,6 +1334,9 @@ func (s *regAllocState) regalloc(f *Func) {
 					continue
 				}
 				v := s.orig[vid]
+				if s.f.Config.use387 && v.Type.IsFloat() {
+					continue // 387 can't handle floats in registers between blocks
+				}
 				m := s.compatRegs(v.Type) &^ s.used
 				if m&^desired.avoid != 0 {
 					m &^= desired.avoid

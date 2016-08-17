@@ -94,7 +94,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 func proginfo(p *obj.Prog) {
 	info, ok := progmap[p.As]
 	if !ok {
-		p.Ctxt.Diag("proginfo missing prog %s", obj.Aconv(p.As))
+		p.Ctxt.Diag("proginfo missing prog %v", p.As)
 		return
 	}
 

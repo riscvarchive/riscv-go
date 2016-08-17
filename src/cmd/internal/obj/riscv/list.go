@@ -246,7 +246,7 @@ func init() {
 func PrettyPrintReg(r int) string {
 	name, ok := RegNames[int16(r)]
 	if !ok {
-		name = fmt.Sprintf("R???%d", r) // Similar format to Aconv.
+		name = fmt.Sprintf("R???%d", r) // Similar format to As.
 	}
 
 	return name
