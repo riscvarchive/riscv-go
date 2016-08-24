@@ -45,6 +45,38 @@ var ssaRegToReg = []int16{
 	riscv.REG_X29,
 	riscv.REG_X30,
 	riscv.REG_X31,
+	riscv.REG_F0,
+	riscv.REG_F1,
+	riscv.REG_F2,
+	riscv.REG_F3,
+	riscv.REG_F4,
+	riscv.REG_F5,
+	riscv.REG_F6,
+	riscv.REG_F7,
+	riscv.REG_F8,
+	riscv.REG_F9,
+	riscv.REG_F10,
+	riscv.REG_F11,
+	riscv.REG_F12,
+	riscv.REG_F13,
+	riscv.REG_F14,
+	riscv.REG_F15,
+	riscv.REG_F16,
+	riscv.REG_F17,
+	riscv.REG_F18,
+	riscv.REG_F19,
+	riscv.REG_F20,
+	riscv.REG_F21,
+	riscv.REG_F22,
+	riscv.REG_F23,
+	riscv.REG_F24,
+	riscv.REG_F25,
+	riscv.REG_F26,
+	riscv.REG_F27,
+	riscv.REG_F28,
+	riscv.REG_F29,
+	riscv.REG_F30,
+	riscv.REG_F31,
 }
 
 func loadByType(t ssa.Type) obj.As {
@@ -182,7 +214,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		ssa.OpRISCVSLT, ssa.OpRISCVSLTU, ssa.OpRISCVMUL, ssa.OpRISCVMULW, ssa.OpRISCVMULH,
 		ssa.OpRISCVMULHU, ssa.OpRISCVDIV, ssa.OpRISCVDIVU, ssa.OpRISCVDIVW,
 		ssa.OpRISCVDIVUW, ssa.OpRISCVREM, ssa.OpRISCVREMU, ssa.OpRISCVREMW,
-		ssa.OpRISCVREMUW:
+		ssa.OpRISCVREMUW,
+		ssa.OpRISCVFADDS, ssa.OpRISCVFSUBS, ssa.OpRISCVFMULS, ssa.OpRISCVFDIVS:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
 		r2 := gc.SSARegNum(v.Args[1])
@@ -195,6 +228,13 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r
+	case ssa.OpRISCVFSQRTS, ssa.OpRISCVFNEGS,
+		ssa.OpRISCVFCVTSW, ssa.OpRISCVFCVTSL, ssa.OpRISCVFCVTWS, ssa.OpRISCVFCVTLS:
+		p := gc.Prog(v.Op.Asm())
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = gc.SSARegNum(v.Args[0])
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVADDI, ssa.OpRISCVXORI, ssa.OpRISCVORI, ssa.OpRISCVANDI,
 		ssa.OpRISCVSLLI, ssa.OpRISCVSRAI, ssa.OpRISCVSRLI, ssa.OpRISCVSLTI,
 		ssa.OpRISCVSLTIU:
