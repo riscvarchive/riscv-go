@@ -22,7 +22,7 @@
 (Add32 x y) -> (ADD x y)
 (Add16 x y) -> (ADD x y)
 (Add8 x y) -> (ADD x y)
-//(Add32F x y) ->
+(Add32F x y) -> (FADDS x y)
 //(Add64F x y) ->
 
 (Sub64 x y) -> (SUB x y)
@@ -30,17 +30,17 @@
 (Sub32 x y) -> (SUB x y)
 (Sub16 x y) -> (SUB x y)
 (Sub8 x y) -> (SUB x y)
-//(Sub32F x y) ->
+(Sub32F x y) -> (FSUBS x y)
 //(Sub64F x y) ->
 
 (Mul64 x y) -> (MUL  x y)
 (Mul32 x y) -> (MULW x y)
 (Mul16 x y) -> (MULW (SignExt16to32 x) (SignExt16to32 y))
 (Mul8 x y)  -> (MULW (SignExt8to32 x)  (SignExt8to32 y))
-//(Mul32F x y) ->
+(Mul32F x y) -> (FMULS x y)
 //(Mul64F x y) ->
 
-//(Div32F x y) ->
+(Div32F x y) -> (FDIVS x y)
 //(Div64F x y) ->
 
 (Div64 x y)  -> (DIV   x y)
@@ -92,7 +92,7 @@
 (Neg32 x) -> (SUB (MOVLconst) x)
 (Neg16 x) -> (SUB (MOVWconst) x)
 (Neg8  x) -> (SUB (MOVBconst) x)
-//(Neg32F x) ->
+(Neg32F x) -> (FNEGS x)
 //(Neg64F x) ->
 
 (Com64 x) -> (XORI [int64(-1)] x)
@@ -122,13 +122,13 @@
 (ZeroExt16to64 <t> x) -> (SRLI [48] (SLLI <t> [48] x))
 (ZeroExt32to64 <t> x) -> (SRLI [32] (SLLI <t> [32] x))
 
-//(Cvt32to32F x) ->
+(Cvt32to32F x) -> (FCVTSW x)
 //(Cvt32to64F x) ->
-//(Cvt64to32F x) ->
+(Cvt64to32F x) -> (FCVTSL x)
 //(Cvt64to64F x) ->
 
-//(Cvt32Fto32 x) ->
-//(Cvt32Fto64 x) ->
+(Cvt32Fto32 x) -> (FCVTWS x)
+(Cvt32Fto64 x) -> (FCVTLS x)
 //(Cvt64Fto32 x) ->
 //(Cvt64Fto64 x) ->
 

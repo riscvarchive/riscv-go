@@ -227,6 +227,19 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// SNEZ rs, rd -> SLTU rs, x0, rd
 		p.As = ASLTU
 		*p.From3 = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+
+	// For binary float instructions, use From3 and To, not From and
+	// To. This helps simplify encoding.
+	case AFNEGS:
+		// FNEGS rs, rd -> FSGNJNS rs, rs, rd
+		p.As = AFSGNJNS
+		*p.From3 = p.From
+	case AFSQRTS:
+		*p.From3 = p.From
+
+		// This instruction expects a zero (i.e., float register 0) to
+		// be the second input operand.
+		p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_F0}
 	}
 }
 
@@ -594,20 +607,50 @@ func validateFloatR(p *obj.Prog) {
 	wantFloatReg(p, "to", p.To)
 }
 
+func validateFloatIntR(p *obj.Prog) {
+	wantFloatReg(p, "from", p.From)
+	wantIntReg(p, "to", p.To)
+}
+
+func validateIntFloatR(p *obj.Prog) {
+	wantIntReg(p, "from", p.From)
+	wantFloatReg(p, "to", p.To)
+}
+
+func encodeRawR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
+	i, ok := encode(p.As)
+	if !ok {
+		panic("encodeRawR: could not encode instruction")
+	}
+	if i.rs2 != 0 && rs2 != 0 {
+		panic("encodeRawR: instruction uses rs2, but rs2 was nonzero")
+	}
+
+	return i.funct7<<25 | i.rs2<<20 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
+}
+
 func encodeR(p *obj.Prog, regmin int16, regmax int16) uint32 {
 	rs2 := reg(p.From, regmin, regmax)
 	rs1 := reg(*p.From3, regmin, regmax)
 	rd := reg(p.To, regmin, regmax)
-	i, ok := encode(p.As)
-	if !ok {
-		panic("encodeR: could not encode instruction")
-	}
-	return i.funct7<<25 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
+	return encodeRawR(p, rs1, rs2, rd)
 }
 
 func encodeIntR(p *obj.Prog) uint32 { return encodeR(p, REG_X0, REG_X31) }
 
 func encodeFloatR(p *obj.Prog) uint32 { return encodeR(p, REG_F0, REG_F31) }
+
+func encodeFloatIntR(p *obj.Prog) uint32 {
+	rs1 := reg(p.From, REG_F0, REG_F31)
+	rd := reg(p.To, REG_X0, REG_X31)
+	return encodeRawR(p, rs1, 0, rd)
+}
+
+func encodeIntFloatR(p *obj.Prog) uint32 {
+	rs1 := reg(p.From, REG_X0, REG_X31)
+	rd := reg(p.To, REG_F0, REG_F31)
+	return encodeRawR(p, rs1, 0, rd)
+}
 
 func validateI(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
@@ -736,13 +779,15 @@ type encoding struct {
 }
 
 var (
-	rEncoding      = encoding{encode: encodeIntR, validate: validateIntR, length: 4}
-	rFloatEncoding = encoding{encode: encodeFloatR, validate: validateFloatR, length: 4}
-	iEncoding      = encoding{encode: encodeI, validate: validateI, length: 4}
-	sEncoding      = encoding{encode: encodeS, validate: validateS, length: 4}
-	sbEncoding     = encoding{encode: encodeSB, validate: validateSB, length: 4}
-	uEncoding      = encoding{encode: encodeU, validate: validateU, length: 4}
-	ujEncoding     = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
+	rEncoding         = encoding{encode: encodeIntR, validate: validateIntR, length: 4}
+	rFloatEncoding    = encoding{encode: encodeFloatR, validate: validateFloatR, length: 4}
+	rFloatIntEncoding = encoding{encode: encodeFloatIntR, validate: validateFloatIntR, length: 4}
+	rIntFloatEncoding = encoding{encode: encodeIntFloatR, validate: validateIntFloatR, length: 4}
+	iEncoding         = encoding{encode: encodeI, validate: validateI, length: 4}
+	sEncoding         = encoding{encode: encodeS, validate: validateS, length: 4}
+	sbEncoding        = encoding{encode: encodeSB, validate: validateSB, length: 4}
+	uEncoding         = encoding{encode: encodeU, validate: validateU, length: 4}
+	ujEncoding        = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
 
 	// pseudoOpEncoding panics if encoding is attempted, but does no validation.
 	pseudoOpEncoding = encoding{encode: nil, validate: func(*obj.Prog) {}, length: 0}
@@ -780,10 +825,20 @@ var encodingForAs = [...]encoding{
 	ADIVUW & obj.AMask:  rEncoding,
 	AREMW & obj.AMask:   rEncoding,
 	AREMUW & obj.AMask:  rEncoding,
-	AFADDS & obj.AMask:  rFloatEncoding,
-	AFSUBS & obj.AMask:  rFloatEncoding,
-	AFMULS & obj.AMask:  rFloatEncoding,
-	AFDIVS & obj.AMask:  rFloatEncoding,
+
+	AFADDS & obj.AMask:   rFloatEncoding,
+	AFSUBS & obj.AMask:   rFloatEncoding,
+	AFMULS & obj.AMask:   rFloatEncoding,
+	AFDIVS & obj.AMask:   rFloatEncoding,
+	AFSQRTS & obj.AMask:  rFloatEncoding,
+	AFSGNJS & obj.AMask:  rFloatEncoding,
+	AFSGNJNS & obj.AMask: rFloatEncoding,
+	AFSGNJXS & obj.AMask: rFloatEncoding,
+
+	AFCVTWS & obj.AMask: rFloatIntEncoding,
+	AFCVTLS & obj.AMask: rFloatIntEncoding,
+	AFCVTSW & obj.AMask: rIntFloatEncoding,
+	AFCVTSL & obj.AMask: rIntFloatEncoding,
 
 	AADDI & obj.AMask:      iEncoding,
 	ASLLI & obj.AMask:      iEncoding,
