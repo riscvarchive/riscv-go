@@ -42,10 +42,32 @@ import (
 )
 
 // stackOffset updates Addr offsets based on the current stack size.
+//
+// The stack (to be best of my knowledge) looks like:
+// -------------------
+// |                 |
+// |      PARAMs     |
+// |                 |
+// |                 |
+// -------------------
+// |        RA       |   Reserved by FixedFrameSize.
+// -------------------
+// |                 |
+// |                 |
+// |       AUTOs     |
+// |                 |
+// |                 |
+// -------------------
+// |  Anything else  |
+// -------------------
 func stackOffset(a *obj.Addr, stacksize int64) {
 	switch a.Name {
-	case obj.NAME_AUTO, obj.NAME_PARAM:
+	case obj.NAME_AUTO:
+		// Adjust to the top of AUTOs.
 		a.Offset += stacksize
+	case obj.NAME_PARAM:
+		// Adjust to the bottom of PARAMs.
+		a.Offset += stacksize + 8
 	}
 }
 
@@ -309,6 +331,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		spadj.Spadj = int32(-stacksize)
 	}
 
+	// TODO(prattmic): Save RA if necessary
+
 	// Update stack-based offsets.
 	for p := cursym.Text; p != nil; p = p.Link {
 		stackOffset(&p.From, stacksize)
@@ -450,6 +474,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.Spadj = int32(stacksize)
 				p = obj.Appendp(ctxt, p)
 			}
+
+			// TODO(prattmic): Restore RA if necessary
 
 			p.As = AJALR
 			p.From.Type = obj.TYPE_CONST
