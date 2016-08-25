@@ -89,6 +89,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.ASNEZ:   {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFSQRTS: {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFNEGS:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFMVSX:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFCVTSW: {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFCVTSL: {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFCVTWS: {Flags: gc.LeftRead | gc.RightWrite},

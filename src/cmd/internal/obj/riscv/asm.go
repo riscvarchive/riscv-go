@@ -835,6 +835,8 @@ var encodingForAs = [...]encoding{
 	AFSGNJNS & obj.AMask: rFloatEncoding,
 	AFSGNJXS & obj.AMask: rFloatEncoding,
 
+	AFMVSX & obj.AMask: rIntFloatEncoding,
+
 	AFCVTWS & obj.AMask: rFloatIntEncoding,
 	AFCVTLS & obj.AMask: rFloatIntEncoding,
 	AFCVTSW & obj.AMask: rIntFloatEncoding,

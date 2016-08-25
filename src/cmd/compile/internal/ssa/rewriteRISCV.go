@@ -48,6 +48,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpConst16(v, config)
 	case OpConst32:
 		return rewriteValueRISCV_OpConst32(v, config)
+	case OpConst32F:
+		return rewriteValueRISCV_OpConst32F(v, config)
 	case OpConst64:
 		return rewriteValueRISCV_OpConst64(v, config)
 	case OpConst8:
@@ -740,6 +742,21 @@ func rewriteValueRISCV_OpConst32(v *Value, config *Config) bool {
 		val := v.AuxInt
 		v.reset(OpRISCVMOVLconst)
 		v.AuxInt = val
+		return true
+	}
+}
+func rewriteValueRISCV_OpConst32F(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Const32F [val])
+	// cond:
+	// result: (FMVSX (MOVSconst [val]))
+	for {
+		val := v.AuxInt
+		v.reset(OpRISCVFMVSX)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVSconst, config.fe.TypeFloat32())
+		v0.AuxInt = val
+		v.AddArg(v0)
 		return true
 	}
 }
