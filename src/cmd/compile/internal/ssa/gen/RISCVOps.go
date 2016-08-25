@@ -117,6 +117,7 @@ func init() {
 		{name: "MOVWconst", reg: gp01, asm: "MOV", typ: "UInt16", aux: "Int16", rematerializeable: true}, // 16 low bits of auxint
 		{name: "MOVLconst", reg: gp01, asm: "MOV", typ: "UInt32", aux: "Int32", rematerializeable: true}, // 32 low bits of auxint
 		{name: "MOVQconst", reg: gp01, asm: "MOV", typ: "UInt64", aux: "Int64", rematerializeable: true}, // auxint
+		{name: "MOVSconst", reg: gp01, asm: "MOV", typ: "Float32", aux: "Int32", rematerializeable: true},
 
 		// Loads: load <size> bits from arg0+auxint+aux and extend to 64 bits; arg1=mem
 		{name: "LB", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff", typ: "Int8"},     //  8 bits, sign extend
@@ -196,6 +197,7 @@ func init() {
 		{name: "FDIVS", argLength: 2, reg: fp21, asm: "FDIVS", commutative: false, typ: "Float32"}, // arg0 / arg1
 		{name: "FSQRTS", argLength: 1, reg: fp11, asm: "FDIVS", typ: "Float32"},                    // sqrt(arg0)
 		{name: "FNEGS", argLength: 1, reg: fp11, asm: "FNEGS", typ: "Float32"},                     // -arg0
+		{name: "FMVSX", argLength: 1, reg: gpfp, asm: "FMVSX", typ: "Float32"},                     // reinterpret arg0 as float
 		{name: "FCVTSW", argLength: 1, reg: gpfp, asm: "FCVTSW", typ: "Float32"},                   // float32(arg0)
 		{name: "FCVTSL", argLength: 1, reg: gpfp, asm: "FCVTSL", typ: "Float32"},                   // float32(arg0)
 		{name: "FCVTWS", argLength: 1, reg: fpgp, asm: "FCVTWS", typ: "Int32"},                     // int32(arg0)

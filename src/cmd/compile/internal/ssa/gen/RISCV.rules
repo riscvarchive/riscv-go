@@ -350,7 +350,7 @@
 (Const16 [val]) -> (MOVWconst [val])
 (Const32 [val]) -> (MOVLconst [val])
 (Const64 [val]) -> (MOVQconst [val])
-//(Const32F [val]) ->
+(Const32F [val]) -> (FMVSX (MOVSconst [val]))
 //(Const64F [val]) ->
 (ConstNil) -> (MOVQconst [0])
 (ConstBool [b]) -> (MOVBconst [b])

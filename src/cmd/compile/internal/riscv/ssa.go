@@ -5,6 +5,8 @@
 package riscv
 
 import (
+	"math"
+
 	"cmd/compile/internal/gc"
 	"cmd/compile/internal/ssa"
 	"cmd/internal/obj"
@@ -230,6 +232,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r
 	case ssa.OpRISCVFSQRTS, ssa.OpRISCVFNEGS,
+		ssa.OpRISCVFMVSX,
 		ssa.OpRISCVFCVTSW, ssa.OpRISCVFCVTSL, ssa.OpRISCVFCVTWS, ssa.OpRISCVFCVTLS:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
@@ -249,6 +252,14 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST
 		p.From.Offset = v.AuxInt
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = gc.SSARegNum(v)
+	case ssa.OpRISCVMOVSconst:
+		p := gc.Prog(v.Op.Asm())
+		// Convert the float to the equivalent integer literal so we can
+		// move it using existing infrastructure.
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = int64(math.Float32bits(float32(math.Float64frombits(uint64(v.AuxInt)))))
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVMOVmem:
