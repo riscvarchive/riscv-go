@@ -33,7 +33,7 @@ var tests = [...]struct {
 	{name: "right_shift_unsigned"},
 	{name: "avg"},
 	{name: "lrot"},
-	{name: "call", want: 99},
+	{name: "call"},
 }
 
 func main() {
