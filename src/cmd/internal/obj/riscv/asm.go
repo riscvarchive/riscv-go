@@ -43,14 +43,14 @@ import (
 
 // stackOffset updates Addr offsets based on the current stack size.
 //
-// The stack (to be best of my knowledge) looks like:
+// The stack looks like:
 // -------------------
 // |                 |
 // |      PARAMs     |
 // |                 |
 // |                 |
 // -------------------
-// |        RA       |   Reserved by FixedFrameSize.
+// |    Parent RA    |   SP on function entry
 // -------------------
 // |                 |
 // |                 |
@@ -58,8 +58,12 @@ import (
 // |                 |
 // |                 |
 // -------------------
-// |  Anything else  |
+// |        RA       |   SP during function execution
 // -------------------
+//
+// Slide 21 on the presention attached to
+// https://golang.org/issue/16922#issuecomment-243748180 has a nicer version
+// of this diagram.
 func stackOffset(a *obj.Addr, stacksize int64) {
 	switch a.Name {
 	case obj.NAME_AUTO:
@@ -300,6 +304,19 @@ func InvertBranch(i obj.As) obj.As {
 	}
 }
 
+// containsCall returns true if the symbol contains a CALL (or equivalent)
+// function.
+func containsCall(sym *obj.LSym) bool {
+	for p := sym.Text; p != nil; p = p.Link {
+		switch p.As {
+		case obj.ACALL, AJAL, AJALR:
+			return true
+		}
+	}
+
+	return false
+}
+
 // preprocess generates prologue and epilogue code, computes PC-relative branch
 // and jump offsets, and resolves psuedo-registers.
 //
@@ -318,22 +335,40 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 	stacksize := text.To.Offset
 
+	// We must save RA if there is a CALL.
+	saveRA := containsCall(cursym)
+	if saveRA {
+		stacksize += 8
+	}
+
 	cursym.Args = text.To.Val.(int32)
 	cursym.Locals = int32(stacksize)
 
+	prologue := text
+
 	// Insert stack adjustment if necessary.
 	if stacksize != 0 {
-		spadj := obj.Appendp(ctxt, text)
-		spadj.As = AADDI
-		spadj.From.Type = obj.TYPE_CONST
-		spadj.From.Offset = -stacksize
-		spadj.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
-		spadj.To.Type = obj.TYPE_REG
-		spadj.To.Reg = REG_SP
-		spadj.Spadj = int32(-stacksize)
+		prologue = obj.Appendp(ctxt, prologue)
+		prologue.As = AADDI
+		prologue.From.Type = obj.TYPE_CONST
+		prologue.From.Offset = -stacksize
+		prologue.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+		prologue.To.Type = obj.TYPE_REG
+		prologue.To.Reg = REG_SP
+		prologue.Spadj = int32(-stacksize)
 	}
 
-	// TODO(prattmic): Save RA if necessary
+	// Actually save RA.
+	if saveRA {
+		// Source register in From3, destination base register in To,
+		// destination offset in From. See MOV TYPE_REG, TYPE_MEM below
+		// for details.
+		prologue = obj.Appendp(ctxt, prologue)
+		prologue.As = ASD
+		prologue.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
+		prologue.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+		prologue.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+	}
 
 	// Update stack-based offsets.
 	for p := cursym.Text; p != nil; p = p.Link {
@@ -380,7 +415,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					p.As = movtos(p.As)
 					// The destination address goes in p.From and
 					// p.To here, with the offset in p.From and the
-					// register in p.To.  The data register goes in
+					// register in p.To. The source register goes in
 					// p.From3.
 					p.From, *p.From3 = p.To, p.From
 					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
@@ -466,6 +501,15 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 		// Replace RET with epilogue.
 		case obj.ARET:
+			if saveRA {
+				// Restore RA.
+				p.As = ALD
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
+				p = obj.Appendp(ctxt, p)
+			}
+
 			if stacksize != 0 {
 				p.As = AADDI
 				p.From.Type = obj.TYPE_CONST
@@ -476,8 +520,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.Spadj = int32(stacksize)
 				p = obj.Appendp(ctxt, p)
 			}
-
-			// TODO(prattmic): Restore RA if necessary
 
 			p.As = AJALR
 			p.From.Type = obj.TYPE_CONST
