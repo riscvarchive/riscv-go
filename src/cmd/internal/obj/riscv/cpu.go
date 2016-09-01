@@ -202,201 +202,253 @@ const (
 //
 // If you modify this table, you MUST run 'go generate' to regenerate anames.go!
 const (
-	ABEQ = obj.ABaseRISCV + obj.A_ARCHSPECIFIC + iota
+	// User ISA
+
+	// 2.4: Integer Computational Instructions
+	ASLLIRV32 = obj.ABaseRISCV + obj.A_ARCHSPECIFIC + iota
+	ASRLIRV32
+	ASRAIRV32
+
+	// 2.5: Control Transfer Instructions
+	AJAL
+	AJALR
+	ABEQ
 	ABNE
 	ABLT
-	ABGE
 	ABLTU
+	ABGE
 	ABGEU
-	AJALR
-	AJAL
-	ALUI
-	AAUIPC
+
+	// 2.7: Memory Model
+	AFENCE
+	AFENCEI
+
+	// 4.2: Integer Computational Instructions
 	AADDI
-	ASLLI
 	ASLTI
 	ASLTIU
+	AANDI
+	AORI
 	AXORI
+	ASLLI
 	ASRLI
 	ASRAI
-	AORI
-	AANDI
+	ALUI
+	AAUIPC
 	AADD
-	ASUB
-	ASLL
 	ASLT
 	ASLTU
-	AXOR
-	ASRL
-	ASRA
-	AOR
 	AAND
+	AOR
+	AXOR
+	ASLL
+	ASRL
+	ASUB
+	ASRA
 	AADDIW
 	ASLLIW
 	ASRLIW
 	ASRAIW
 	AADDW
-	ASUBW
 	ASLLW
 	ASRLW
+	ASUBW
 	ASRAW
-	ALB
-	ALH
-	ALW
+
+	// 4.3: Load and Store Instructions
 	ALD
-	ALBU
-	ALHU
+	ALW
 	ALWU
-	ASB
-	ASH
-	ASW
+	ALH
+	ALHU
+	ALB
+	ALBU
 	ASD
-	AFENCE
-	AFENCEI
+	ASW
+	ASH
+	ASB
+
+	// 4.4: System Instructions
+	ARDCYCLE
+	ARDCYCLEH
+	ARDTIME
+	ARDTIMEH
+	ARDINSTRET
+	ARDINSTRETH
+
+	// 5.1: Multiplication Operations
 	AMUL
 	AMULH
-	AMULHSU
 	AMULHU
+	AMULHSU
+	AMULW
 	ADIV
 	ADIVU
 	AREM
 	AREMU
-	AMULW
 	ADIVW
 	ADIVUW
 	AREMW
 	AREMUW
-	AAMOADDW
-	AAMOXORW
-	AAMOORW
-	AAMOANDW
-	AAMOMINW
-	AAMOMAXW
-	AAMOMINUW
-	AAMOMAXUW
-	AAMOSWAPW
-	ALRW
-	ASCW
-	AAMOADDD
-	AAMOXORD
-	AAMOORD
-	AAMOANDD
-	AAMOMIND
-	AAMOMAXD
-	AAMOMINUD
-	AAMOMAXUD
-	AAMOSWAPD
+
+	// 6.2: Load-Reserved/Store-Conditional Instructions
 	ALRD
 	ASCD
-	ASCALL
-	ASBREAK
-	ASRET
-	ASFENCEVM
-	AWFI
-	AMRTH
-	AMRTS
-	AHRTS
+	ALRW
+	ASCW
+
+	// 6.3: Atomic Memory Operations
+	AAMOSWAPD
+	AAMOADDD
+	AAMOANDD
+	AAMOORD
+	AAMOXORD
+	AAMOMAXD
+	AAMOMAXUD
+	AAMOMIND
+	AAMOMINUD
+	AAMOSWAPW
+	AAMOADDW
+	AAMOANDW
+	AAMOORW
+	AAMOXORW
+	AAMOMAXW
+	AAMOMAXUW
+	AAMOMINW
+	AAMOMINUW
+
+	// 7.2: Floating-Point Control and Status Register
+	AFRCSR
+	AFSCSR
+	AFRRM
+	AFSRM
+	AFRFLAGS
+	AFSFLAGS
+	AFSRMI
+	AFSFLAGSI
+
+	// 7.5: Single-Precision Load and Store Instructions
+	AFLW
+	AFSW
+
+	// 7.6: Single-Precision Floating-Point Computational Instructions
+	AFADDS
+	AFSUBS
+	AFMULS
+	AFDIVS
+	AFMINS
+	AFMAXS
+	AFSQRTS
+	AFMADDS
+	AFMSUBS
+	AFNMADDS
+	AFNMSUBS
+
+	// 7.7: Single-Precision Floating-Point Conversion and Move Instructions
+	AFCVTWS
+	AFCVTLS
+	AFCVTSW
+	AFCVTSL
+	AFCVTWUS
+	AFCVTLUS
+	AFCVTSWU
+	AFCVTSLU
+	AFSGNJS
+	AFSGNJNS
+	AFSGNJXS
+	AFMVSX
+	AFMVXS
+
+	// 7.8: Single-Precision Floating-Point Compare Instructions
+	AFEQS
+	AFLTS
+	AFLES
+
+	// 7.9: Single-Precision Floating-Point Classify Instruction
+	AFCLASSS
+
+	// 8.2: Double-Precision Load and Store Instructions
+	AFLD
+	AFSD
+
+	// 8.3: Double-Precision Floating-Point Computational Instructions
+	AFADDD
+	AFSUBD
+	AFMULD
+	AFDIVD
+	AFMIND
+	AFMAXD
+	AFSQRTD
+	AFMADDD
+	AFMSUBD
+	AFNMADDD
+	AFNMSUBD
+
+	// 8.4: Double-Precision Floating-Point Conversion and Move Instructions
+	AFCVTWD
+	AFCVTLD
+	AFCVTDW
+	AFCVTDL
+	AFCVTWUD
+	AFCVTLUD
+	AFCVTDWU
+	AFCVTDLU
+	AFCVTSD
+	AFCVTDS
+	AFSGNJD
+	AFSGNJND
+	AFSGNJXD
+	AFMVXD
+	AFMVDX
+
+	// 8.5: Double-Precision Floating-Point Compare Instructions
+	AFEQD
+	AFLTD
+	AFLED
+
+	// 8.6: Double-Precision Floating-Point Classify Instruction
+	AFCLASSD
+
+	// Privileged ISA
+
+	// 2.1: Instructions to Access CSRs
 	ACSRRW
 	ACSRRS
 	ACSRRC
 	ACSRRWI
 	ACSRRSI
 	ACSRRCI
-	AFADDS
-	AFSUBS
-	AFMULS
-	AFDIVS
-	AFNEGS
-	AFSGNJS
-	AFSGNJNS
-	AFSGNJXS
-	AFMINS
-	AFMAXS
-	AFSQRTS
-	AFADDD
-	AFSUBD
-	AFMULD
-	AFDIVD
-	AFSGNJD
-	AFSGNJND
-	AFSGNJXD
-	AFMIND
-	AFMAXD
-	AFCVTSD
-	AFCVTDS
-	AFSQRTD
-	AFLES
-	AFLTS
-	AFEQS
-	AFLED
-	AFLTD
-	AFEQD
-	AFCVTWS
-	AFCVTWUS
-	AFCVTLS
-	AFCVTLUS
-	AFMVXS
-	AFCLASSS
-	AFCVTWD
-	AFCVTWUD
-	AFCVTLD
-	AFCVTLUD
-	AFMVXD
-	AFCLASSD
-	AFCVTSW
-	AFCVTSWU
-	AFCVTSL
-	AFCVTSLU
-	AFMVSX
-	AFCVTDW
-	AFCVTDWU
-	AFCVTDL
-	AFCVTDLU
-	AFMVDX
-	AFLW
-	AFLD
-	AFSW
-	AFSD
-	AFMADDS
-	AFMSUBS
-	AFNMSUBS
-	AFNMADDS
-	AFMADDD
-	AFMSUBD
-	AFNMSUBD
-	AFNMADDD
-	ASLLIRV32
-	ASRLIRV32
-	ASRAIRV32
-	AFRFLAGS
-	AFSFLAGS
-	AFSFLAGSI
-	AFRRM
-	AFSRM
-	AFSRMI
-	AFSCSR
-	AFRCSR
-	ARDCYCLE
-	ARDTIME
-	ARDINSTRET
-	ARDCYCLEH
-	ARDTIMEH
-	ARDINSTRETH
+
+	// 3.2.1: Instructions to Change Privilege Level
 	AECALL
+	ASCALL
 	AEBREAK
+	ASBREAK
 	AERET
+	ASRET
+
+	// 3.2.2: Trap Redirection Instructions
+	AMRTS
+	AMRTH
+	AHRTS
+
+	// 3.2.3: Wait for Interrupt
+	AWFI
+
+	// 4.2.1: Supervisor Memory-Management Fence Instruction
+	ASFENCEVM
 
 	// Fake instructions.  These get translated by the assembler into other
 	// instructions, based on their operands.
+	AFNEGS
 	AMOV
 	AMOVB
-	AMOVH
-	AMOVW
 	AMOVBU
-	AMOVHU
-	AMOVWU
 	AMOVF
-
+	AMOVH
+	AMOVHU
+	AMOVW
+	AMOVWU
 	ASEQZ
 	ASNEZ
 )
