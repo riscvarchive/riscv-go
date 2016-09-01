@@ -1,9 +1,11 @@
 package main
 
 func main() {
-	a := int(5)
-	b := int(7)
-	c := float32(a)
-	d := float32(b)
-	riscvexit(int(c + d))
+	a := new(float32)
+	*a = 5.0
+	b := new(float32)
+	*b = 7.0
+	c := new(float32)
+	*c = *a + *b
+	riscvexit(int(*c))
 }

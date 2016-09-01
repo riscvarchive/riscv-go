@@ -83,6 +83,7 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.AMOVHU: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOVW:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 	riscv.AMOVWU: {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
+	riscv.AMOVF:  {Flags: gc.LeftRead | gc.RightWrite | gc.Move},
 
 	// Other RISC-V instructions
 	riscv.ASEQZ:   {Flags: gc.LeftRead | gc.RightWrite},

@@ -298,7 +298,7 @@
 (Load <t> ptr mem) && (is32BitInt(t) &&  isSigned(t)) -> (LW  ptr mem)
 (Load <t> ptr mem) && (is32BitInt(t) && !isSigned(t)) -> (LWU ptr mem)
 (Load <t> ptr mem) &&  is64BitInt(t)                  -> (LD  ptr mem)
-//(Load <t> ptr mem) &&  is32BitFloat(t)                -> (FLW ptr mem)
+(Load <t> ptr mem) &&  is32BitFloat(t)                -> (FLW ptr mem)
 //(Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
 
 // Stores
@@ -306,7 +306,7 @@
 (Store [2] ptr val mem)                            -> (SH ptr val mem)
 (Store [4] ptr val mem) && !is32BitFloat(val.Type) -> (SW ptr val mem)
 (Store [8] ptr val mem) && !is64BitFloat(val.Type) -> (SD ptr val mem)
-//(Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
+(Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
 //(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
 // Zeroing

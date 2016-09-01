@@ -2079,6 +2079,21 @@ func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
+	// match: (Load <t> ptr mem)
+	// cond: is32BitFloat(t)
+	// result: (FLW ptr mem)
+	for {
+		t := v.Type
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		if !(is32BitFloat(t)) {
+			break
+		}
+		v.reset(OpRISCVFLW)
+		v.AddArg(ptr)
+		v.AddArg(mem)
+		return true
+	}
 	return false
 }
 func rewriteValueRISCV_OpLrot16(v *Value, config *Config) bool {
@@ -4292,6 +4307,25 @@ func rewriteValueRISCV_OpStore(v *Value, config *Config) bool {
 			break
 		}
 		v.reset(OpRISCVSD)
+		v.AddArg(ptr)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	// match: (Store [4] ptr val mem)
+	// cond: is32BitFloat(val.Type)
+	// result: (FSW ptr val mem)
+	for {
+		if v.AuxInt != 4 {
+			break
+		}
+		ptr := v.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(is32BitFloat(val.Type)) {
+			break
+		}
+		v.reset(OpRISCVFSW)
 		v.AddArg(ptr)
 		v.AddArg(val)
 		v.AddArg(mem)

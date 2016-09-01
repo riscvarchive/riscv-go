@@ -88,8 +88,7 @@ func lowerjalr(p *obj.Prog) {
 	p.From3.Type = obj.TYPE_REG
 }
 
-// movtol converts a MOV[BHW]?U? mnemonic into the corresponding L[BHWD]
-// instruction.
+// movtol converts a MOV mnemonic into the corresponding load instruction.
 func movtol(mnemonic obj.As) obj.As {
 	switch mnemonic {
 	case AMOV:
@@ -106,13 +105,14 @@ func movtol(mnemonic obj.As) obj.As {
 		return ALHU
 	case AMOVWU:
 		return ALWU
+	case AMOVF:
+		return AFLW
 	default:
 		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
 	}
 }
 
-// movtos converts a MOV[BHW]? mnemonic into the corresponding S[BHWD]
-// instruction.
+// movtos converts a MOV mnemonic into the corresponding store instruction.
 func movtos(mnemonic obj.As) obj.As {
 	switch mnemonic {
 	case AMOV:
@@ -123,6 +123,8 @@ func movtos(mnemonic obj.As) obj.As {
 		return ASH
 	case AMOVW:
 		return ASW
+	case AMOVF:
+		return AFSW
 	default:
 		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
 	}
@@ -352,7 +354,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		// Rewrite MOV. This couldn't be done in progedit, as SP
 		// offsets needed to be applied before we split up some of the
 		// Addrs.
-		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU:
+		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU, AMOVF:
 			switch p.From.Type {
 			case obj.TYPE_MEM: // MOV c(Rs), Rd -> L $c, Rs, Rd
 				if p.To.Type != obj.TYPE_REG {
@@ -678,33 +680,51 @@ func encodeIntFloatR(p *obj.Prog) uint32 {
 	return encodeRawR(p, rs1, 0, rd)
 }
 
-func validateI(p *obj.Prog) {
+func validateIntI(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func encodeI(p *obj.Prog) uint32 {
+func validateFloatI(p *obj.Prog) {
+	wantImm(p, "from", p.From, 12)
+	wantIntReg(p, "from3", *p.From3)
+	wantFloatReg(p, "to", p.To)
+}
+
+func encodeRawI(p *obj.Prog, rd uint32) uint32 {
 	imm := immi(p.From, 12)
 	rs1 := regi(*p.From3)
-	rd := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("encodeI: could not encode instruction")
+		panic("encodeRawI: could not encode instruction")
 	}
 	imm |= uint32(i.csr)
 	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func validateS(p *obj.Prog) {
+func encodeIntI(p *obj.Prog) uint32 {
+	return encodeRawI(p, regi(p.To))
+}
+
+func encodeFloatI(p *obj.Prog) uint32 {
+	return encodeRawI(p, regf(p.To))
+}
+
+func validateIntS(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func encodeS(p *obj.Prog) uint32 {
+func validateFloatS(p *obj.Prog) {
+	wantImm(p, "from", p.From, 12)
+	wantFloatReg(p, "from3", *p.From3)
+	wantIntReg(p, "to", p.To)
+}
+
+func encodeRawS(p *obj.Prog, rs2 uint32) uint32 {
 	imm := immi(p.From, 12)
-	rs2 := regi(*p.From3)
 	rs1 := regi(p.To)
 	i, ok := encode(p.As)
 	if !ok {
@@ -716,6 +736,14 @@ func encodeS(p *obj.Prog) uint32 {
 		i.funct3<<12 |
 		(imm&0x1f)<<7 |
 		i.opcode
+}
+
+func encodeIntS(p *obj.Prog) uint32 {
+	return encodeRawS(p, regi(*p.From3))
+}
+
+func encodeFloatS(p *obj.Prog) uint32 {
+	return encodeRawS(p, regf(*p.From3))
 }
 
 func validateSB(p *obj.Prog) {
@@ -809,8 +837,10 @@ var (
 	rFloatEncoding    = encoding{encode: encodeFloatR, validate: validateFloatR, length: 4}
 	rFloatIntEncoding = encoding{encode: encodeFloatIntR, validate: validateFloatIntR, length: 4}
 	rIntFloatEncoding = encoding{encode: encodeIntFloatR, validate: validateIntFloatR, length: 4}
-	iEncoding         = encoding{encode: encodeI, validate: validateI, length: 4}
-	sEncoding         = encoding{encode: encodeS, validate: validateS, length: 4}
+	iEncoding         = encoding{encode: encodeIntI, validate: validateIntI, length: 4}
+	iFloatEncoding    = encoding{encode: encodeFloatI, validate: validateFloatI, length: 4}
+	sEncoding         = encoding{encode: encodeIntS, validate: validateIntS, length: 4}
+	sFloatEncoding    = encoding{encode: encodeFloatS, validate: validateFloatS, length: 4}
 	sbEncoding        = encoding{encode: encodeSB, validate: validateSB, length: 4}
 	uEncoding         = encoding{encode: encodeU, validate: validateU, length: 4}
 	ujEncoding        = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
@@ -894,6 +924,10 @@ var encodingForAs = [...]encoding{
 	ASH & obj.AMask: sEncoding,
 	ASW & obj.AMask: sEncoding,
 	ASD & obj.AMask: sEncoding,
+
+	AFLW & obj.AMask: iFloatEncoding,
+
+	AFSW & obj.AMask: sFloatEncoding,
 
 	ABEQ & obj.AMask:  sbEncoding,
 	ABNE & obj.AMask:  sbEncoding,

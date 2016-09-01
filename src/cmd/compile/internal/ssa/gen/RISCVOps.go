@@ -80,10 +80,12 @@ func init() {
 		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
 		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
 
-		fp11 = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{fpMask}}
-		fp21 = regInfo{inputs: []regMask{fpMask, fpMask}, outputs: []regMask{fpMask}}
-		gpfp = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{fpMask}}
-		fpgp = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{gpMask}}
+		fp11    = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{fpMask}}
+		fp21    = regInfo{inputs: []regMask{fpMask, fpMask}, outputs: []regMask{fpMask}}
+		gpfp    = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{fpMask}}
+		fpgp    = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{gpMask}}
+		fpstore = regInfo{inputs: []regMask{gpspsbMask, fpMask, 0}}
+		fpload  = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{fpMask}}
 
 		call        = regInfo{clobbers: callerSave}
 		callClosure = regInfo{inputs: []regMask{gpspMask, regCtxt, 0}, clobbers: callerSave}
@@ -202,6 +204,8 @@ func init() {
 		{name: "FCVTSL", argLength: 1, reg: gpfp, asm: "FCVTSL", typ: "Float32"},                   // float32(arg0)
 		{name: "FCVTWS", argLength: 1, reg: fpgp, asm: "FCVTWS", typ: "Int32"},                     // int32(arg0)
 		{name: "FCVTLS", argLength: 1, reg: fpgp, asm: "FCVTLS", typ: "Int64"},                     // int64(arg0)
+		{name: "FLW", argLength: 2, reg: fpload, asm: "MOVF", aux: "SymOff", typ: "Float32"},       // load float32 from arg0+auxint+aux
+		{name: "FSW", argLength: 3, reg: fpstore, asm: "MOVF", aux: "SymOff", typ: "Mem"},          // store float32 to arg0+auxint+aux
 	}
 
 	RISCVblocks := []blockData{
