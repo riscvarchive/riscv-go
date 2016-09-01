@@ -856,16 +856,61 @@ var (
 // TODO: merge this with the encoding table in inst.go.
 // TODO: add other useful per-As info, like whether it is a branch (used in preprocess).
 var encodingForAs = [...]encoding{
-	AADD & obj.AMask:    rIIEncoding,
-	ASUB & obj.AMask:    rIIEncoding,
-	ASLL & obj.AMask:    rIIEncoding,
-	AXOR & obj.AMask:    rIIEncoding,
-	ASRL & obj.AMask:    rIIEncoding,
-	ASRA & obj.AMask:    rIIEncoding,
-	AOR & obj.AMask:     rIIEncoding,
-	AAND & obj.AMask:    rIIEncoding,
-	ASLT & obj.AMask:    rIIEncoding,
-	ASLTU & obj.AMask:   rIIEncoding,
+	// 2.5: Control Transfer Instructions
+	AJAL & obj.AMask:  ujEncoding,
+	AJALR & obj.AMask: iIEncoding,
+	ABEQ & obj.AMask:  sbEncoding,
+	ABNE & obj.AMask:  sbEncoding,
+	ABLT & obj.AMask:  sbEncoding,
+	ABLTU & obj.AMask: sbEncoding,
+	ABGE & obj.AMask:  sbEncoding,
+	ABGEU & obj.AMask: sbEncoding,
+
+	// 2.9: Environment Call and Breakpoints
+	AECALL & obj.AMask: iIEncoding,
+
+	// 4.2: Integer Computational Instructions
+	AADDI & obj.AMask:  iIEncoding,
+	ASLTI & obj.AMask:  iIEncoding,
+	ASLTIU & obj.AMask: iIEncoding,
+	AANDI & obj.AMask:  iIEncoding,
+	AORI & obj.AMask:   iIEncoding,
+	AXORI & obj.AMask:  iIEncoding,
+	ASLLI & obj.AMask:  iIEncoding,
+	ASRLI & obj.AMask:  iIEncoding,
+	ASRAI & obj.AMask:  iIEncoding,
+	ALUI & obj.AMask:   uEncoding,
+	AAUIPC & obj.AMask: uEncoding,
+	AADD & obj.AMask:   rIIEncoding,
+	ASLT & obj.AMask:   rIIEncoding,
+	ASLTU & obj.AMask:  rIIEncoding,
+	AAND & obj.AMask:   rIIEncoding,
+	AOR & obj.AMask:    rIIEncoding,
+	AXOR & obj.AMask:   rIIEncoding,
+	ASLL & obj.AMask:   rIIEncoding,
+	ASRL & obj.AMask:   rIIEncoding,
+	ASUB & obj.AMask:   rIIEncoding,
+	ASRA & obj.AMask:   rIIEncoding,
+
+	// 4.3: Load and Store Instructions
+	ALD & obj.AMask:  iIEncoding,
+	ALW & obj.AMask:  iIEncoding,
+	ALWU & obj.AMask: iIEncoding,
+	ALH & obj.AMask:  iIEncoding,
+	ALHU & obj.AMask: iIEncoding,
+	ALB & obj.AMask:  iIEncoding,
+	ALBU & obj.AMask: iIEncoding,
+	ASD & obj.AMask:  sIEncoding,
+	ASW & obj.AMask:  sIEncoding,
+	ASH & obj.AMask:  sIEncoding,
+	ASB & obj.AMask:  sIEncoding,
+
+	// 4.4: System Instructions
+	ARDCYCLE & obj.AMask:   iIEncoding,
+	ARDTIME & obj.AMask:    iIEncoding,
+	ARDINSTRET & obj.AMask: iIEncoding,
+
+	// 5.1: Multiplication Operations
 	AMUL & obj.AMask:    rIIEncoding,
 	AMULH & obj.AMask:   rIIEncoding,
 	AMULHU & obj.AMask:  rIIEncoding,
@@ -880,65 +925,28 @@ var encodingForAs = [...]encoding{
 	AREMW & obj.AMask:   rIIEncoding,
 	AREMUW & obj.AMask:  rIIEncoding,
 
-	AFADDS & obj.AMask:   rFFEncoding,
-	AFSUBS & obj.AMask:   rFFEncoding,
-	AFMULS & obj.AMask:   rFFEncoding,
-	AFDIVS & obj.AMask:   rFFEncoding,
-	AFSQRTS & obj.AMask:  rFFEncoding,
+	// 7.5: Single-Precision Load and Store Instructions
+	AFLW & obj.AMask: iFEncoding,
+	AFSW & obj.AMask: sFEncoding,
+
+	// 7.6: Single-Precision Floating-Point Computational Instructions
+	AFADDS & obj.AMask:  rFFEncoding,
+	AFSUBS & obj.AMask:  rFFEncoding,
+	AFMULS & obj.AMask:  rFFEncoding,
+	AFDIVS & obj.AMask:  rFFEncoding,
+	AFSQRTS & obj.AMask: rFFEncoding,
+
+	// 7.7: Single-Precision Floating-Point Conversion and Move Instructions
+	AFCVTWS & obj.AMask:  rFIEncoding,
+	AFCVTLS & obj.AMask:  rFIEncoding,
+	AFCVTSW & obj.AMask:  rIFEncoding,
+	AFCVTSL & obj.AMask:  rIFEncoding,
 	AFSGNJS & obj.AMask:  rFFEncoding,
 	AFSGNJNS & obj.AMask: rFFEncoding,
 	AFSGNJXS & obj.AMask: rFFEncoding,
+	AFMVSX & obj.AMask:   rIFEncoding,
 
-	AFMVSX & obj.AMask: rIFEncoding,
-
-	AFCVTWS & obj.AMask: rFIEncoding,
-	AFCVTLS & obj.AMask: rFIEncoding,
-	AFCVTSW & obj.AMask: rIFEncoding,
-	AFCVTSL & obj.AMask: rIFEncoding,
-
-	AADDI & obj.AMask:      iIEncoding,
-	ASLLI & obj.AMask:      iIEncoding,
-	AXORI & obj.AMask:      iIEncoding,
-	ASRLI & obj.AMask:      iIEncoding,
-	ASRAI & obj.AMask:      iIEncoding,
-	AORI & obj.AMask:       iIEncoding,
-	AANDI & obj.AMask:      iIEncoding,
-	AJALR & obj.AMask:      iIEncoding,
-	AECALL & obj.AMask:     iIEncoding,
-	ARDCYCLE & obj.AMask:   iIEncoding,
-	ARDTIME & obj.AMask:    iIEncoding,
-	ARDINSTRET & obj.AMask: iIEncoding,
-	ALB & obj.AMask:        iIEncoding,
-	ALH & obj.AMask:        iIEncoding,
-	ALW & obj.AMask:        iIEncoding,
-	ALD & obj.AMask:        iIEncoding,
-	ALBU & obj.AMask:       iIEncoding,
-	ALHU & obj.AMask:       iIEncoding,
-	ALWU & obj.AMask:       iIEncoding,
-	ASLTI & obj.AMask:      iIEncoding,
-	ASLTIU & obj.AMask:     iIEncoding,
-
-	ASB & obj.AMask: sIEncoding,
-	ASH & obj.AMask: sIEncoding,
-	ASW & obj.AMask: sIEncoding,
-	ASD & obj.AMask: sIEncoding,
-
-	AFLW & obj.AMask: iFEncoding,
-
-	AFSW & obj.AMask: sFEncoding,
-
-	ABEQ & obj.AMask:  sbEncoding,
-	ABNE & obj.AMask:  sbEncoding,
-	ABLT & obj.AMask:  sbEncoding,
-	ABGE & obj.AMask:  sbEncoding,
-	ABLTU & obj.AMask: sbEncoding,
-	ABGEU & obj.AMask: sbEncoding,
-
-	AAUIPC & obj.AMask: uEncoding,
-	ALUI & obj.AMask:   uEncoding,
-
-	AJAL & obj.AMask: ujEncoding,
-
+	// Pseudo-operations
 	obj.AFUNCDATA: pseudoOpEncoding,
 	obj.APCDATA:   pseudoOpEncoding,
 	obj.ATEXT:     pseudoOpEncoding,
