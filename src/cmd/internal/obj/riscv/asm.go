@@ -623,107 +623,100 @@ func wantEvenJumpOffset(p *obj.Prog) {
 	}
 }
 
-func validateIntR(p *obj.Prog) {
+func validateRII(p *obj.Prog) {
 	wantIntReg(p, "from", p.From)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func validateFloatR(p *obj.Prog) {
+func validateRFF(p *obj.Prog) {
 	wantFloatReg(p, "from", p.From)
 	wantFloatReg(p, "from3", *p.From3)
 	wantFloatReg(p, "to", p.To)
 }
 
-func validateFloatIntR(p *obj.Prog) {
+func validateRFI(p *obj.Prog) {
 	wantFloatReg(p, "from", p.From)
 	wantIntReg(p, "to", p.To)
 }
 
-func validateIntFloatR(p *obj.Prog) {
+func validateRIF(p *obj.Prog) {
 	wantIntReg(p, "from", p.From)
 	wantFloatReg(p, "to", p.To)
 }
 
-func encodeRawR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
+func encodeR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
 	i, ok := encode(p.As)
 	if !ok {
-		panic("encodeRawR: could not encode instruction")
+		panic("encodeR: could not encode instruction")
 	}
 	if i.rs2 != 0 && rs2 != 0 {
-		panic("encodeRawR: instruction uses rs2, but rs2 was nonzero")
+		panic("encodeR: instruction uses rs2, but rs2 was nonzero")
 	}
 
 	return i.funct7<<25 | i.rs2<<20 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func encodeR(p *obj.Prog, regmin int16, regmax int16) uint32 {
-	rs2 := reg(p.From, regmin, regmax)
-	rs1 := reg(*p.From3, regmin, regmax)
-	rd := reg(p.To, regmin, regmax)
-	return encodeRawR(p, rs1, rs2, rd)
+func encodeRII(p *obj.Prog) uint32 {
+	return encodeR(p, regi(*p.From3), regi(p.From), regi(p.To))
 }
 
-func encodeIntR(p *obj.Prog) uint32 { return encodeR(p, REG_X0, REG_X31) }
-
-func encodeFloatR(p *obj.Prog) uint32 { return encodeR(p, REG_F0, REG_F31) }
-
-func encodeFloatIntR(p *obj.Prog) uint32 {
-	rs1 := reg(p.From, REG_F0, REG_F31)
-	rd := reg(p.To, REG_X0, REG_X31)
-	return encodeRawR(p, rs1, 0, rd)
+func encodeRFF(p *obj.Prog) uint32 {
+	return encodeR(p, regf(*p.From3), regf(p.From), regf(p.To))
 }
 
-func encodeIntFloatR(p *obj.Prog) uint32 {
-	rs1 := reg(p.From, REG_X0, REG_X31)
-	rd := reg(p.To, REG_F0, REG_F31)
-	return encodeRawR(p, rs1, 0, rd)
+func encodeRFI(p *obj.Prog) uint32 {
+	return encodeR(p, regf(p.From), 0, regi(p.To))
 }
 
-func validateIntI(p *obj.Prog) {
+func encodeRIF(p *obj.Prog) uint32 {
+	return encodeR(p, regi(p.From), 0, regf(p.To))
+}
+
+func validateII(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func validateFloatI(p *obj.Prog) {
+func validateIF(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantIntReg(p, "from3", *p.From3)
 	wantFloatReg(p, "to", p.To)
 }
 
-func encodeRawI(p *obj.Prog, rd uint32) uint32 {
+func encodeI(p *obj.Prog, rd uint32) uint32 {
 	imm := immi(p.From, 12)
 	rs1 := regi(*p.From3)
 	i, ok := encode(p.As)
 	if !ok {
-		panic("encodeRawI: could not encode instruction")
+		panic("encodeI: could not encode instruction")
 	}
 	imm |= uint32(i.csr)
 	return imm<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func encodeIntI(p *obj.Prog) uint32 {
-	return encodeRawI(p, regi(p.To))
+func encodeII(p *obj.Prog) uint32 {
+	return encodeI(p, regi(p.To))
 }
 
-func encodeFloatI(p *obj.Prog) uint32 {
-	return encodeRawI(p, regf(p.To))
+func encodeIF(p *obj.Prog) uint32 {
+	return encodeI(p, regf(p.To))
 }
 
-func validateIntS(p *obj.Prog) {
+func validateSI(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func validateFloatS(p *obj.Prog) {
+func validateSF(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
 	wantFloatReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func encodeRawS(p *obj.Prog, rs2 uint32) uint32 {
+func encodeS(p *obj.Prog, rs2 uint32) uint32 {
 	imm := immi(p.From, 12)
 	rs1 := regi(p.To)
 	i, ok := encode(p.As)
@@ -738,12 +731,12 @@ func encodeRawS(p *obj.Prog, rs2 uint32) uint32 {
 		i.opcode
 }
 
-func encodeIntS(p *obj.Prog) uint32 {
-	return encodeRawS(p, regi(*p.From3))
+func encodeSI(p *obj.Prog) uint32 {
+	return encodeS(p, regi(*p.From3))
 }
 
-func encodeFloatS(p *obj.Prog) uint32 {
-	return encodeRawS(p, regf(*p.From3))
+func encodeSF(p *obj.Prog) uint32 {
+	return encodeS(p, regf(*p.From3))
 }
 
 func validateSB(p *obj.Prog) {
@@ -833,17 +826,31 @@ type encoding struct {
 }
 
 var (
-	rEncoding         = encoding{encode: encodeIntR, validate: validateIntR, length: 4}
-	rFloatEncoding    = encoding{encode: encodeFloatR, validate: validateFloatR, length: 4}
-	rFloatIntEncoding = encoding{encode: encodeFloatIntR, validate: validateFloatIntR, length: 4}
-	rIntFloatEncoding = encoding{encode: encodeIntFloatR, validate: validateIntFloatR, length: 4}
-	iEncoding         = encoding{encode: encodeIntI, validate: validateIntI, length: 4}
-	iFloatEncoding    = encoding{encode: encodeFloatI, validate: validateFloatI, length: 4}
-	sEncoding         = encoding{encode: encodeIntS, validate: validateIntS, length: 4}
-	sFloatEncoding    = encoding{encode: encodeFloatS, validate: validateFloatS, length: 4}
-	sbEncoding        = encoding{encode: encodeSB, validate: validateSB, length: 4}
-	uEncoding         = encoding{encode: encodeU, validate: validateU, length: 4}
-	ujEncoding        = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
+	// Encodings have the following naming convention:
+	//	1. the instruction encoding (R/I/S/SB/U/UJ), in lowercase
+	//	2. zero or more register operand identifiers (I = integer
+	//	   register, F = float register), in uppercase
+	//	3. the word "Encoding"
+	// For example, rIIEncoding indicates an R-type instruction with two
+	// integer register operands; sFEncoding indicates an S-type instruction
+	// with rs2 being a float register.
+
+	rIIEncoding = encoding{encode: encodeRII, validate: validateRII, length: 4}
+	rFFEncoding = encoding{encode: encodeRFF, validate: validateRFF, length: 4}
+	rFIEncoding = encoding{encode: encodeRFI, validate: validateRFI, length: 4}
+	rIFEncoding = encoding{encode: encodeRIF, validate: validateRIF, length: 4}
+
+	iIEncoding = encoding{encode: encodeII, validate: validateII, length: 4}
+	iFEncoding = encoding{encode: encodeIF, validate: validateIF, length: 4}
+
+	sIEncoding = encoding{encode: encodeSI, validate: validateSI, length: 4}
+	sFEncoding = encoding{encode: encodeSF, validate: validateSF, length: 4}
+
+	sbEncoding = encoding{encode: encodeSB, validate: validateSB, length: 4}
+
+	uEncoding = encoding{encode: encodeU, validate: validateU, length: 4}
+
+	ujEncoding = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
 
 	// pseudoOpEncoding panics if encoding is attempted, but does no validation.
 	pseudoOpEncoding = encoding{encode: nil, validate: func(*obj.Prog) {}, length: 0}
@@ -858,76 +865,76 @@ var (
 // TODO: merge this with the encoding table in inst.go.
 // TODO: add other useful per-As info, like whether it is a branch (used in preprocess).
 var encodingForAs = [...]encoding{
-	AADD & obj.AMask:    rEncoding,
-	ASUB & obj.AMask:    rEncoding,
-	ASLL & obj.AMask:    rEncoding,
-	AXOR & obj.AMask:    rEncoding,
-	ASRL & obj.AMask:    rEncoding,
-	ASRA & obj.AMask:    rEncoding,
-	AOR & obj.AMask:     rEncoding,
-	AAND & obj.AMask:    rEncoding,
-	ASLT & obj.AMask:    rEncoding,
-	ASLTU & obj.AMask:   rEncoding,
-	AMUL & obj.AMask:    rEncoding,
-	AMULH & obj.AMask:   rEncoding,
-	AMULHU & obj.AMask:  rEncoding,
-	AMULHSU & obj.AMask: rEncoding,
-	AMULW & obj.AMask:   rEncoding,
-	ADIV & obj.AMask:    rEncoding,
-	ADIVU & obj.AMask:   rEncoding,
-	AREM & obj.AMask:    rEncoding,
-	AREMU & obj.AMask:   rEncoding,
-	ADIVW & obj.AMask:   rEncoding,
-	ADIVUW & obj.AMask:  rEncoding,
-	AREMW & obj.AMask:   rEncoding,
-	AREMUW & obj.AMask:  rEncoding,
+	AADD & obj.AMask:    rIIEncoding,
+	ASUB & obj.AMask:    rIIEncoding,
+	ASLL & obj.AMask:    rIIEncoding,
+	AXOR & obj.AMask:    rIIEncoding,
+	ASRL & obj.AMask:    rIIEncoding,
+	ASRA & obj.AMask:    rIIEncoding,
+	AOR & obj.AMask:     rIIEncoding,
+	AAND & obj.AMask:    rIIEncoding,
+	ASLT & obj.AMask:    rIIEncoding,
+	ASLTU & obj.AMask:   rIIEncoding,
+	AMUL & obj.AMask:    rIIEncoding,
+	AMULH & obj.AMask:   rIIEncoding,
+	AMULHU & obj.AMask:  rIIEncoding,
+	AMULHSU & obj.AMask: rIIEncoding,
+	AMULW & obj.AMask:   rIIEncoding,
+	ADIV & obj.AMask:    rIIEncoding,
+	ADIVU & obj.AMask:   rIIEncoding,
+	AREM & obj.AMask:    rIIEncoding,
+	AREMU & obj.AMask:   rIIEncoding,
+	ADIVW & obj.AMask:   rIIEncoding,
+	ADIVUW & obj.AMask:  rIIEncoding,
+	AREMW & obj.AMask:   rIIEncoding,
+	AREMUW & obj.AMask:  rIIEncoding,
 
-	AFADDS & obj.AMask:   rFloatEncoding,
-	AFSUBS & obj.AMask:   rFloatEncoding,
-	AFMULS & obj.AMask:   rFloatEncoding,
-	AFDIVS & obj.AMask:   rFloatEncoding,
-	AFSQRTS & obj.AMask:  rFloatEncoding,
-	AFSGNJS & obj.AMask:  rFloatEncoding,
-	AFSGNJNS & obj.AMask: rFloatEncoding,
-	AFSGNJXS & obj.AMask: rFloatEncoding,
+	AFADDS & obj.AMask:   rFFEncoding,
+	AFSUBS & obj.AMask:   rFFEncoding,
+	AFMULS & obj.AMask:   rFFEncoding,
+	AFDIVS & obj.AMask:   rFFEncoding,
+	AFSQRTS & obj.AMask:  rFFEncoding,
+	AFSGNJS & obj.AMask:  rFFEncoding,
+	AFSGNJNS & obj.AMask: rFFEncoding,
+	AFSGNJXS & obj.AMask: rFFEncoding,
 
-	AFMVSX & obj.AMask: rIntFloatEncoding,
+	AFMVSX & obj.AMask: rIFEncoding,
 
-	AFCVTWS & obj.AMask: rFloatIntEncoding,
-	AFCVTLS & obj.AMask: rFloatIntEncoding,
-	AFCVTSW & obj.AMask: rIntFloatEncoding,
-	AFCVTSL & obj.AMask: rIntFloatEncoding,
+	AFCVTWS & obj.AMask: rFIEncoding,
+	AFCVTLS & obj.AMask: rFIEncoding,
+	AFCVTSW & obj.AMask: rIFEncoding,
+	AFCVTSL & obj.AMask: rIFEncoding,
 
-	AADDI & obj.AMask:      iEncoding,
-	ASLLI & obj.AMask:      iEncoding,
-	AXORI & obj.AMask:      iEncoding,
-	ASRLI & obj.AMask:      iEncoding,
-	ASRAI & obj.AMask:      iEncoding,
-	AORI & obj.AMask:       iEncoding,
-	AANDI & obj.AMask:      iEncoding,
-	AJALR & obj.AMask:      iEncoding,
-	AECALL & obj.AMask:     iEncoding,
-	ARDCYCLE & obj.AMask:   iEncoding,
-	ARDTIME & obj.AMask:    iEncoding,
-	ARDINSTRET & obj.AMask: iEncoding,
-	ALB & obj.AMask:        iEncoding,
-	ALH & obj.AMask:        iEncoding,
-	ALW & obj.AMask:        iEncoding,
-	ALD & obj.AMask:        iEncoding,
-	ALBU & obj.AMask:       iEncoding,
-	ALHU & obj.AMask:       iEncoding,
-	ALWU & obj.AMask:       iEncoding,
-	ASLTI & obj.AMask:      iEncoding,
-	ASLTIU & obj.AMask:     iEncoding,
+	AADDI & obj.AMask:      iIEncoding,
+	ASLLI & obj.AMask:      iIEncoding,
+	AXORI & obj.AMask:      iIEncoding,
+	ASRLI & obj.AMask:      iIEncoding,
+	ASRAI & obj.AMask:      iIEncoding,
+	AORI & obj.AMask:       iIEncoding,
+	AANDI & obj.AMask:      iIEncoding,
+	AJALR & obj.AMask:      iIEncoding,
+	AECALL & obj.AMask:     iIEncoding,
+	ARDCYCLE & obj.AMask:   iIEncoding,
+	ARDTIME & obj.AMask:    iIEncoding,
+	ARDINSTRET & obj.AMask: iIEncoding,
+	ALB & obj.AMask:        iIEncoding,
+	ALH & obj.AMask:        iIEncoding,
+	ALW & obj.AMask:        iIEncoding,
+	ALD & obj.AMask:        iIEncoding,
+	ALBU & obj.AMask:       iIEncoding,
+	ALHU & obj.AMask:       iIEncoding,
+	ALWU & obj.AMask:       iIEncoding,
+	ASLTI & obj.AMask:      iIEncoding,
+	ASLTIU & obj.AMask:     iIEncoding,
 
-	ASB & obj.AMask: sEncoding,
-	ASH & obj.AMask: sEncoding,
-	ASW & obj.AMask: sEncoding,
-	ASD & obj.AMask: sEncoding,
+	ASB & obj.AMask: sIEncoding,
+	ASH & obj.AMask: sIEncoding,
+	ASW & obj.AMask: sIEncoding,
+	ASD & obj.AMask: sIEncoding,
 
-	AFLW & obj.AMask: iFloatEncoding,
+	AFLW & obj.AMask: iFEncoding,
 
-	AFSW & obj.AMask: sFloatEncoding,
+	AFSW & obj.AMask: sFEncoding,
 
 	ABEQ & obj.AMask:  sbEncoding,
 	ABNE & obj.AMask:  sbEncoding,
