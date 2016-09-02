@@ -189,6 +189,7 @@ var Anames = []string{
 	"WFI",
 	"SFENCEVM",
 	"FNEGS",
+	"FNES",
 	"MOV",
 	"MOVB",
 	"MOVBU",
