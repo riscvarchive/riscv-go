@@ -210,6 +210,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.Gvarkill(v.Aux.(*gc.Node))
 	case ssa.OpVarLive:
 		gc.Gvarlive(v.Aux.(*gc.Node))
+	case ssa.OpKeepAlive:
+		gc.KeepAlive(v)
 	case ssa.OpSP, ssa.OpSB:
 		// nothing to do
 	case ssa.OpRISCVADD, ssa.OpRISCVSUB, ssa.OpRISCVXOR, ssa.OpRISCVOR, ssa.OpRISCVAND,
