@@ -34,6 +34,7 @@ var tests = [...]struct {
 	{name: "avg"},
 	{name: "lrot"},
 	{name: "call"},
+	{name: "keepalive"},
 }
 
 func main() {
