@@ -35,6 +35,7 @@ var tests = [...]struct {
 	{name: "lrot"},
 	{name: "call"},
 	{name: "keepalive"},
+	{name: "global"},
 }
 
 func main() {
