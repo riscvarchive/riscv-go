@@ -72,7 +72,7 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		//
 		// TODO(prattmic): sanity check the opcode.
 		if off&1 != 0 {
-			ctxt.Diag("relocation for %s is not aligned: %#x", r.Sym.Name, off)
+			ctxt.Diag("R_CALLRISCV relocation for %s is not aligned: %#x", r.Sym.Name, off)
 			return 0
 		}
 
@@ -80,7 +80,7 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		if err != nil {
 			// TODO(mpratt): We can only fit 1MB offsets in the
 			// immediate, which we will quickly outgrow.
-			ctxt.Diag("cannot encode relocation offset for %s: %v", r.Sym.Name, err)
+			ctxt.Diag("cannot encode R_CALLRISCV relocation offset for %s: %v", r.Sym.Name, err)
 			return 0
 		}
 
@@ -88,6 +88,36 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		// immediate as whatever p.To.Offset. We need to replace that
 		// immediate with the relocated value.
 		*val = (*val &^ riscv.UJTypeImmMask) | int64(imm)
+	case obj.R_PCRELRISCV:
+		pc := s.Value + int64(r.Off)
+		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
+
+		// Generate AUIPC and arithmetic immediates.
+		low, high, err := riscv.Split32BitImmediate(off)
+		if err != nil {
+			ctxt.Diag("R_PCRELRISCV relocation does not fit in 32-bits: %d", off)
+			return 0
+		}
+
+		auipcImm, err := riscv.EncodeUImmediate(high)
+		if err != nil {
+			ctxt.Diag("cannot encode R_PCRELRISCV AUIPC relocation offset for %s: %v", r.Sym.Name, err)
+			return 0
+		}
+
+		addImm, err := riscv.EncodeIImmediate(low)
+		if err != nil {
+			ctxt.Diag("cannot encode R_PCRELRISCV ADDI relocation offset for %s: %v", r.Sym.Name, err)
+			return 0
+		}
+
+		auipc := *val & 0xffffffff
+		add := (*val >> 32) & 0xffffffff
+
+		auipc = (auipc &^ riscv.UTypeImmMask) | int64(auipcImm)
+		add = (add &^ riscv.ITypeImmMask) | int64(addImm)
+
+		*val = add << 32 | auipc
 	default:
 		return -1
 	}
