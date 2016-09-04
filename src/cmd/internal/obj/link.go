@@ -481,6 +481,9 @@ const (
 	R_CALLRISCV
 	R_CONST
 	R_PCREL
+	// R_PCRELRISCV relocates a pair of AUIPC + load/store instructions to
+	// access a 32-bit PC-relative address.
+	R_PCRELRISCV
 	// R_TLS_LE, used on 386, amd64, and ARM, resolves to the offset of the
 	// thread-local symbol from the thread local base and is used to implement the
 	// "local exec" model for tls access (r.Sym is not set on intel platforms but is

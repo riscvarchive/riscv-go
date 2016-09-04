@@ -88,6 +88,58 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		// immediate as whatever p.To.Offset. We need to replace that
 		// immediate with the relocated value.
 		*val = (*val &^ riscv.UJTypeImmMask) | int64(imm)
+	case obj.R_PCRELRISCV:
+		pc := s.Value + int64(r.Off)
+		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
+
+		//fmt.Printf("R_PCRELRISCV: pc: %#x, off: %#x\n", pc, off)
+
+		// TODO: double check this for sign-extension bugs
+
+		if !riscv.ImmFits(off, 32) {
+			ctxt.Diag("R_PCRELRISCV relocation does not fit in 32-bits: %d", off)
+			return 0
+		}
+
+		high := off >> 12
+		if off&(1<<11) != 0 {
+			high++
+		}
+
+		auipcImm, err := riscv.EncodeUImmediate(high)
+		if err != nil {
+			ctxt.Diag("cannot encode relocation offset for %s: %v", r.Sym.Name, err)
+			return 0
+		}
+
+		// Generate our new low 12 bit value.
+		low := off
+		low &= 1<<12 - 1 // mask off the bits we just handled
+		// Generate upper sign bits, leaving space for the bottom 12 bits.
+		off = int64(low >> 11)
+		off <<= 63
+		off >>= 64 - 12
+		off |= low // put the low bits into place
+
+		//fmt.Printf("R_PCRELRISCV: high: %#x, low: %#x\n", high, off)
+
+		ldsdImm, err := riscv.EncodeIImmediate(off)
+		if err != nil {
+			ctxt.Diag("cannot encode relocation offset for %s: %v", r.Sym.Name, err)
+			return 0
+		}
+
+		// TODO: use ByteOrder here.
+		auipc := *val & 0xffffffff
+		ldsd := (*val >> 32) & 0xffffffff
+
+		auipc = (auipc &^ riscv.UTypeImmMask) | int64(auipcImm)
+		ldsd = (ldsd &^ riscv.ITypeImmMask) | int64(ldsdImm)
+
+		//oldVal := *val
+		*val = ldsd << 32 | auipc
+
+		//fmt.Printf("R_PCRELRISCV: before: %#x, after: %#x\n", oldVal, *val)
 	default:
 		return -1
 	}
