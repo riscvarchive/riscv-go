@@ -98,10 +98,8 @@
 (OffPtr [off] ptr) && config.PtrSize == 4 -> (ADDLconst [off] ptr)
 
 // Lowering other arithmetic
-// TODO: CMPQconst 0 below is redundant because BSF sets Z but how to remove?
-(Ctz64 <t> x) -> (CMOVQEQconst (BSFQ <t> x) (CMPQconst x [0]) [64])
-(Ctz32 <t> x) -> (CMOVLEQconst (BSFL <t> x) (CMPLconst x [0]) [32])
-(Ctz16 <t> x) -> (CMOVWEQconst (BSFW <t> x) (CMPWconst x [0]) [16])
+(Ctz64 <t> x) -> (CMOVQEQ (Select0 <t> (BSFQ x)) (MOVQconst <t> [64]) (Select1 <TypeFlags> (BSFQ x)))
+(Ctz32 <t> x) -> (CMOVLEQ (Select0 <t> (BSFL x)) (MOVLconst <t> [32]) (Select1 <TypeFlags> (BSFL x)))
 
 (Bswap64 x) -> (BSWAPQ x)
 (Bswap32 x) -> (BSWAPL x)
@@ -465,6 +463,39 @@
 (If (SETNEF cmp) yes no) -> (NEF  cmp yes no)
 
 (If cond yes no) -> (NE (TESTB cond cond) yes no)
+
+// Atomic loads.  Other than preserving their ordering with respect to other loads, nothing special here.
+(AtomicLoad32 ptr mem) -> (MOVLatomicload ptr mem)
+(AtomicLoad64 ptr mem) -> (MOVQatomicload ptr mem)
+(AtomicLoadPtr ptr mem) && config.PtrSize == 8 -> (MOVQatomicload ptr mem)
+(AtomicLoadPtr ptr mem) && config.PtrSize == 4 -> (MOVLatomicload ptr mem)
+
+// Atomic stores.  We use XCHG to prevent the hardware reordering a subsequent load.
+// TODO: most runtime uses of atomic stores don't need that property.  Use normal stores for those?
+(AtomicStore32 ptr val mem) -> (Select1 (XCHGL <MakeTuple(config.Frontend().TypeUInt32(),TypeMem)> val ptr mem))
+(AtomicStore64 ptr val mem) -> (Select1 (XCHGQ <MakeTuple(config.Frontend().TypeUInt64(),TypeMem)> val ptr mem))
+(AtomicStorePtrNoWB ptr val mem) && config.PtrSize == 8 -> (Select1 (XCHGQ <MakeTuple(config.Frontend().TypeBytePtr(),TypeMem)> val ptr mem))
+(AtomicStorePtrNoWB ptr val mem) && config.PtrSize == 4 -> (Select1 (XCHGL <MakeTuple(config.Frontend().TypeBytePtr(),TypeMem)> val ptr mem))
+
+// Atomic exchanges.
+(AtomicExchange32 ptr val mem) -> (XCHGL val ptr mem)
+(AtomicExchange64 ptr val mem) -> (XCHGQ val ptr mem)
+
+// Atomic adds.
+(AtomicAdd32 ptr val mem) -> (AddTupleFirst32 (XADDLlock val ptr mem) val)
+(AtomicAdd64 ptr val mem) -> (AddTupleFirst64 (XADDQlock val ptr mem) val)
+(Select0 <t> (AddTupleFirst32 tuple val)) -> (ADDL val (Select0 <t> tuple))
+(Select1     (AddTupleFirst32 tuple _  )) -> (Select1 tuple)
+(Select0 <t> (AddTupleFirst64 tuple val)) -> (ADDQ val (Select0 <t> tuple))
+(Select1     (AddTupleFirst64 tuple _  )) -> (Select1 tuple)
+
+// Atomic compare and swap.
+(AtomicCompareAndSwap32 ptr old new_ mem) -> (CMPXCHGLlock ptr old new_ mem)
+(AtomicCompareAndSwap64 ptr old new_ mem) -> (CMPXCHGQlock ptr old new_ mem)
+
+// Atomic memory updates.
+(AtomicAnd8 ptr val mem) -> (ANDBlock ptr val mem)
+(AtomicOr8 ptr val mem) -> (ORBlock ptr val mem)
 
 // ***************************
 // Above: lowering rules
@@ -907,9 +938,13 @@
 (MOVWloadidx1 [c] {sym} ptr (SHLQconst [1] idx) mem) -> (MOVWloadidx2 [c] {sym} ptr idx mem)
 (MOVLloadidx1 [c] {sym} ptr (SHLQconst [2] idx) mem) -> (MOVLloadidx4 [c] {sym} ptr idx mem)
 (MOVQloadidx1 [c] {sym} ptr (SHLQconst [3] idx) mem) -> (MOVQloadidx8 [c] {sym} ptr idx mem)
+(MOVSSloadidx1 [c] {sym} ptr (SHLQconst [2] idx) mem) -> (MOVSSloadidx4 [c] {sym} ptr idx mem)
+(MOVSDloadidx1 [c] {sym} ptr (SHLQconst [3] idx) mem) -> (MOVSDloadidx8 [c] {sym} ptr idx mem)
 (MOVWstoreidx1 [c] {sym} ptr (SHLQconst [1] idx) val mem) -> (MOVWstoreidx2 [c] {sym} ptr idx val mem)
 (MOVLstoreidx1 [c] {sym} ptr (SHLQconst [2] idx) val mem) -> (MOVLstoreidx4 [c] {sym} ptr idx val mem)
 (MOVQstoreidx1 [c] {sym} ptr (SHLQconst [3] idx) val mem) -> (MOVQstoreidx8 [c] {sym} ptr idx val mem)
+(MOVSSstoreidx1 [c] {sym} ptr (SHLQconst [2] idx) val mem) -> (MOVSSstoreidx4 [c] {sym} ptr idx val mem)
+(MOVSDstoreidx1 [c] {sym} ptr (SHLQconst [3] idx) val mem) -> (MOVSDstoreidx8 [c] {sym} ptr idx val mem)
 (MOVWstoreconstidx1 [c] {sym} ptr (SHLQconst [1] idx) mem) -> (MOVWstoreconstidx2 [c] {sym} ptr idx mem)
 (MOVLstoreconstidx1 [c] {sym} ptr (SHLQconst [2] idx) mem) -> (MOVLstoreconstidx4 [c] {sym} ptr idx mem)
 (MOVQstoreconstidx1 [c] {sym} ptr (SHLQconst [3] idx) mem) -> (MOVQstoreconstidx8 [c] {sym} ptr idx mem)
@@ -1282,31 +1317,6 @@
 (CMPWconst x [0]) -> (TESTW x x)
 (CMPBconst x [0]) -> (TESTB x x)
 
-// Optimizing conditional moves
-(CMOVQEQconst x (InvertFlags y) [c]) -> (CMOVQNEconst x y [c])
-(CMOVLEQconst x (InvertFlags y) [c]) -> (CMOVLNEconst x y [c])
-(CMOVWEQconst x (InvertFlags y) [c]) -> (CMOVWNEconst x y [c])
-
-(CMOVQEQconst _ (FlagEQ) [c]) -> (Const64 [c])
-(CMOVLEQconst _ (FlagEQ) [c]) -> (Const32 [c])
-(CMOVWEQconst _ (FlagEQ) [c]) -> (Const16 [c])
-
-(CMOVQEQconst x (FlagLT_ULT)) -> x
-(CMOVLEQconst x (FlagLT_ULT)) -> x
-(CMOVWEQconst x (FlagLT_ULT)) -> x
-
-(CMOVQEQconst x (FlagLT_UGT)) -> x
-(CMOVLEQconst x (FlagLT_UGT)) -> x
-(CMOVWEQconst x (FlagLT_UGT)) -> x
-
-(CMOVQEQconst x (FlagGT_ULT)) -> x
-(CMOVLEQconst x (FlagGT_ULT)) -> x
-(CMOVWEQconst x (FlagGT_ULT)) -> x
-
-(CMOVQEQconst x (FlagGT_UGT)) -> x
-(CMOVLEQconst x (FlagGT_UGT)) -> x
-(CMOVWEQconst x (FlagGT_UGT)) -> x
-
 // Combining byte loads into larger (unaligned) loads.
 // There are many ways these combinations could occur.  This is
 // designed to match the way encoding/binary.LittleEndian does it.
@@ -1653,3 +1663,37 @@
 	(MOVWstoreconst [ValAndOff(sc).add(off)] {s} ptr mem)
 (MOVBstoreconst [sc] {s} (ADDLconst [off] ptr) mem) && ValAndOff(sc).canAdd(off) ->
 	(MOVBstoreconst [ValAndOff(sc).add(off)] {s} ptr mem)
+
+// Merge ADDQconst and LEAQ into atomic loads.
+(MOVQatomicload [off1] {sym} (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(MOVQatomicload [off1+off2] {sym} ptr mem)
+(MOVLatomicload [off1] {sym} (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(MOVLatomicload [off1+off2] {sym} ptr mem)
+(MOVQatomicload [off1] {sym1} (LEAQ [off2] {sym2} ptr) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(MOVQatomicload [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
+(MOVLatomicload [off1] {sym1} (LEAQ [off2] {sym2} ptr) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(MOVLatomicload [off1+off2] {mergeSym(sym1,sym2)} ptr mem)
+
+// Merge ADDQconst and LEAQ into atomic stores.
+(XCHGQ [off1] {sym} val (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(XCHGQ [off1+off2] {sym} val ptr mem)
+(XCHGQ [off1] {sym1} val (LEAQ [off2] {sym2} ptr) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) && ptr.Op != OpSB ->
+	(XCHGQ [off1+off2] {mergeSym(sym1,sym2)} val ptr mem)
+(XCHGL [off1] {sym} val (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(XCHGL [off1+off2] {sym} val ptr mem)
+(XCHGL [off1] {sym1} val (LEAQ [off2] {sym2} ptr) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) && ptr.Op != OpSB ->
+	(XCHGL [off1+off2] {mergeSym(sym1,sym2)} val ptr mem)
+
+// Merge ADDQconst into atomic adds.
+// TODO: merging LEAQ doesn't work, assembler doesn't like the resulting instructions.
+(XADDQlock [off1] {sym} val (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(XADDQlock [off1+off2] {sym} val ptr mem)
+(XADDLlock [off1] {sym} val (ADDQconst [off2] ptr) mem) && is32Bit(off1+off2) ->
+	(XADDLlock [off1+off2] {sym} val ptr mem)
+
+// Merge ADDQconst into atomic compare and swaps.
+// TODO: merging LEAQ doesn't work, assembler doesn't like the resulting instructions.
+(CMPXCHGQlock [off1] {sym} (ADDQconst [off2] ptr) old new_ mem) && is32Bit(off1+off2) ->
+	(CMPXCHGQlock [off1+off2] {sym} ptr old new_ mem)
+(CMPXCHGLlock [off1] {sym} (ADDQconst [off2] ptr) old new_ mem) && is32Bit(off1+off2) ->
+	(CMPXCHGLlock [off1+off2] {sym} ptr old new_ mem)

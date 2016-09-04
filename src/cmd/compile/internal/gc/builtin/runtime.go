@@ -54,8 +54,7 @@ func slicerunetostring(*[32]byte, []rune) string
 func stringtoslicebyte(*[32]byte, string) []byte
 func stringtoslicebytetmp(string) []byte
 func stringtoslicerune(*[32]rune, string) []rune
-func stringiter(string, int) int
-func stringiter2(string, int) (retk int, retv rune)
+func charntorune(string, int) (retv rune, retk int)
 func slicecopy(to any, fr any, wid uintptr) int
 func slicestringcopy(to any, fr any) int
 
@@ -131,7 +130,8 @@ func selectdefault(sel *byte) (selected bool)
 func selectgo(sel *byte)
 func block()
 
-func makeslice(typ *byte, nel int64, cap int64) (ary []any)
+func makeslice(typ *byte, len int, cap int) (ary []any)
+func makeslice64(typ *byte, len int64, cap int64) (ary []any)
 func growslice(typ *byte, old []any, cap int) (ary []any)
 func memmove(to *any, frm *any, length uintptr)
 func memclr(ptr *byte, length uintptr)

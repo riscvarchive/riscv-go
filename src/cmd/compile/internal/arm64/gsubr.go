@@ -1,5 +1,5 @@
 // Derived from Inferno utils/6c/txt.c
-// http://code.google.com/p/inferno-os/source/browse/utils/6c/txt.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6c/txt.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -43,10 +43,6 @@ var resvd = []int{
 	arm64.REGRT1,
 	arm64.REGRT2,
 	arm64.REG_R31, // REGZERO and REGSP
-	arm64.FREGZERO,
-	arm64.FREGHALF,
-	arm64.FREGONE,
-	arm64.FREGTWO,
 }
 
 /*

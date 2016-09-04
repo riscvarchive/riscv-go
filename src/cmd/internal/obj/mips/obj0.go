@@ -144,9 +144,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	 * expand BECOME pseudo
 	 */
 	if ctxt.Debugvlog != 0 {
-		fmt.Fprintf(ctxt.Bso, "%5.2f noops\n", obj.Cputime())
+		ctxt.Logf("%5.2f noops\n", obj.Cputime())
 	}
-	ctxt.Bso.Flush()
 
 	var q *obj.Prog
 	var q1 *obj.Prog
@@ -293,8 +292,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			} else if cursym.Text.Mark&LEAF == 0 {
 				if cursym.Text.From3.Offset&obj.NOSPLIT != 0 {
 					if ctxt.Debugvlog != 0 {
-						fmt.Fprintf(ctxt.Bso, "save suppressed in: %s\n", cursym.Name)
-						ctxt.Bso.Flush()
+						ctxt.Logf("save suppressed in: %s\n", cursym.Name)
 					}
 
 					cursym.Text.Mark |= LEAF
@@ -402,19 +400,23 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				break
 			}
 
-			if p.To.Sym != nil { // retjmp
-				p.As = AJMP
-				p.To.Type = obj.TYPE_BRANCH
-				break
-			}
+			retSym := p.To.Sym
+			p.To.Name = obj.NAME_NONE // clear fields as we may modify p to other instruction
+			p.To.Sym = nil
 
 			if cursym.Text.Mark&LEAF != 0 {
 				if autosize == 0 {
 					p.As = AJMP
 					p.From = obj.Addr{}
-					p.To.Type = obj.TYPE_MEM
-					p.To.Offset = 0
-					p.To.Reg = REGLINK
+					if retSym != nil { // retjmp
+						p.To.Type = obj.TYPE_BRANCH
+						p.To.Name = obj.NAME_EXTERN
+						p.To.Sym = retSym
+					} else {
+						p.To.Type = obj.TYPE_MEM
+						p.To.Reg = REGLINK
+						p.To.Offset = 0
+					}
 					p.Mark |= BRANCH
 					break
 				}
@@ -446,22 +448,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.From.Reg = REGSP
 			p.To.Type = obj.TYPE_REG
 			p.To.Reg = REG_R4
-
-			if false {
-				// Debug bad returns
-				q = ctxt.NewProg()
-
-				q.As = AMOVV
-				q.Lineno = p.Lineno
-				q.From.Type = obj.TYPE_MEM
-				q.From.Offset = 0
-				q.From.Reg = REG_R4
-				q.To.Type = obj.TYPE_REG
-				q.To.Reg = REGTMP
-
-				q.Link = p.Link
-				p.Link = q
-				p = q
+			if retSym != nil { // retjmp from non-leaf, need to restore LINK register
+				p.To.Reg = REGLINK
 			}
 
 			if autosize != 0 {
@@ -481,9 +469,15 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			q1 = ctxt.NewProg()
 			q1.As = AJMP
 			q1.Lineno = p.Lineno
-			q1.To.Type = obj.TYPE_MEM
-			q1.To.Offset = 0
-			q1.To.Reg = REG_R4
+			if retSym != nil { // retjmp
+				q1.To.Type = obj.TYPE_BRANCH
+				q1.To.Name = obj.NAME_EXTERN
+				q1.To.Sym = retSym
+			} else {
+				q1.To.Type = obj.TYPE_MEM
+				q1.To.Offset = 0
+				q1.To.Reg = REG_R4
+			}
 			q1.Mark |= BRANCH
 			q1.Spadj = +autosize
 

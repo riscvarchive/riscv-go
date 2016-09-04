@@ -1,5 +1,5 @@
 // Inferno utils/6l/pass.c
-// http://code.google.com/p/inferno-os/source/browse/utils/6l/pass.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6l/pass.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -655,17 +655,24 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 	// TODO(rsc): Remove 'p.Mode == 64 &&'.
 	if p.Mode == 64 && autoffset < obj.StackSmall && p.From3Offset()&obj.NOSPLIT == 0 {
+		leaf := true
+	LeafSearch:
 		for q := p; q != nil; q = q.Link {
-			if q.As == obj.ACALL {
-				goto noleaf
-			}
-			if (q.As == obj.ADUFFCOPY || q.As == obj.ADUFFZERO) && autoffset >= obj.StackSmall-8 {
-				goto noleaf
+			switch q.As {
+			case obj.ACALL:
+				leaf = false
+				break LeafSearch
+			case obj.ADUFFCOPY, obj.ADUFFZERO:
+				if autoffset >= obj.StackSmall-8 {
+					leaf = false
+					break LeafSearch
+				}
 			}
 		}
 
-		p.From3.Offset |= obj.NOSPLIT
-	noleaf:
+		if leaf {
+			p.From3.Offset |= obj.NOSPLIT
+		}
 	}
 
 	if p.From3Offset()&obj.NOSPLIT == 0 || p.From3Offset()&obj.WRAPPER != 0 {
@@ -686,17 +693,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		p.From.Type = obj.TYPE_CONST
 		p.From.Offset = int64(autoffset)
 		p.Spadj = autoffset
-	} else {
-		// zero-byte stack adjustment.
-		// Insert a fake non-zero adjustment so that stkcheck can
-		// recognize the end of the stack-splitting prolog.
-		p = obj.Appendp(ctxt, p)
-
-		p.As = obj.ANOP
-		p.Spadj = int32(-ctxt.Arch.PtrSize)
-		p = obj.Appendp(ctxt, p)
-		p.As = obj.ANOP
-		p.Spadj = int32(ctxt.Arch.PtrSize)
 	}
 
 	deltasp := autoffset

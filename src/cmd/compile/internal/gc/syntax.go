@@ -60,12 +60,12 @@ type Node struct {
 	Colas     bool  // OAS resulting from :=
 	Diag      uint8 // already printed error about this
 	Noescape  bool  // func arguments do not escape; TODO(rsc): move Noescape to Func struct (see CL 7360)
-	Walkdef   uint8
-	Typecheck uint8
+	Walkdef   uint8 // tracks state during typecheckdef; 2 == loop detected
+	Typecheck uint8 // tracks state during typechecking; 2 == loop detected
 	Local     bool
-	Dodata    uint8
+	IsStatic  bool // whether this Node will be converted to purely static data
 	Initorder uint8
-	Used      bool
+	Used      bool // for variable/label declared and not used error
 	Isddd     bool // is the argument variadic
 	Implicit  bool
 	Addrtaken bool  // address taken, even if not moved to heap
@@ -80,6 +80,7 @@ const (
 	notLiveAtEnd
 	isClosureVar
 	isOutputParamHeapAddr
+	noInline // used internally by inliner to indicate that a function call should not be inlined; set for OCALLFUNC and OCALLMETH only
 )
 
 func (n *Node) HasBreak() bool {
@@ -110,6 +111,16 @@ func (n *Node) setIsClosureVar(b bool) {
 		n.flags |= isClosureVar
 	} else {
 		n.flags &^= isClosureVar
+	}
+}
+func (n *Node) noInline() bool {
+	return n.flags&noInline != 0
+}
+func (n *Node) setNoInline(b bool) {
+	if b {
+		n.flags |= noInline
+	} else {
+		n.flags &^= noInline
 	}
 }
 
@@ -426,7 +437,7 @@ const (
 	// statements
 	OBLOCK    // { List } (block of code)
 	OBREAK    // break
-	OCASE     // case List: Nbody (select case after processing; List==nil means default)
+	OCASE     // case Left or List[0]..List[1]: Nbody (select case after processing; Left==nil and List==nil means default)
 	OXCASE    // case List: Nbody (select case before processing; List==nil means default)
 	OCONTINUE // continue
 	ODEFER    // defer Left (Left must be call)

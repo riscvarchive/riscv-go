@@ -102,7 +102,7 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 	timeout := dialer.Timeout
 
 	if !dialer.Deadline.IsZero() {
-		deadlineTimeout := dialer.Deadline.Sub(time.Now())
+		deadlineTimeout := time.Until(dialer.Deadline)
 		if timeout == 0 || deadlineTimeout < timeout {
 			timeout = deadlineTimeout
 		}
@@ -135,7 +135,7 @@ func DialWithDialer(dialer *net.Dialer, network, addr string, config *Config) (*
 	// from the hostname we're connecting to.
 	if config.ServerName == "" {
 		// Make a copy to avoid polluting argument or default.
-		c := config.clone()
+		c := config.Clone()
 		c.ServerName = hostname
 		config = c
 	}

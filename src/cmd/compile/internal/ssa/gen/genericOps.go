@@ -257,13 +257,8 @@ var genericOps = []opData{
 	{name: "Com32", argLength: 1},
 	{name: "Com64", argLength: 1},
 
-	{name: "Ctz16", argLength: 1}, // Count trailing (low  order) zeroes (returns 0-16)
-	{name: "Ctz32", argLength: 1}, // Count trailing zeroes (returns 0-32)
+	{name: "Ctz32", argLength: 1}, // Count trailing (low  order) zeroes (returns 0-32)
 	{name: "Ctz64", argLength: 1}, // Count trailing zeroes (returns 0-64)
-
-	{name: "Clz16", argLength: 1}, // Count leading (high order) zeroes (returns 0-16)
-	{name: "Clz32", argLength: 1}, // Count leading zeroes (returns 0-32)
-	{name: "Clz64", argLength: 1}, // Count leading zeroes (returns 0-64)
 
 	{name: "Bswap32", argLength: 1}, // Swap bytes
 	{name: "Bswap64", argLength: 1}, // Swap bytes
@@ -310,10 +305,10 @@ var genericOps = []opData{
 	{name: "Func", aux: "Sym"},   // entry address of a function
 
 	// Memory operations
-	{name: "Load", argLength: 2},                            // Load from arg0.  arg1=memory
-	{name: "Store", argLength: 3, typ: "Mem", aux: "Int64"}, // Store arg1 to arg0.  arg2=memory, auxint=size.  Returns memory.
-	{name: "Move", argLength: 3, typ: "Mem", aux: "Int64"},  // arg0=destptr, arg1=srcptr, arg2=mem, auxint=size.  Returns memory.
-	{name: "Zero", argLength: 2, typ: "Mem", aux: "Int64"},  // arg0=destptr, arg1=mem, auxint=size. Returns memory.
+	{name: "Load", argLength: 2},                                  // Load from arg0.  arg1=memory
+	{name: "Store", argLength: 3, typ: "Mem", aux: "Int64"},       // Store arg1 to arg0.  arg2=memory, auxint=size.  Returns memory.
+	{name: "Move", argLength: 3, typ: "Mem", aux: "SizeAndAlign"}, // arg0=destptr, arg1=srcptr, arg2=mem, auxint=size+alignment.  Returns memory.
+	{name: "Zero", argLength: 2, typ: "Mem", aux: "SizeAndAlign"}, // arg0=destptr, arg1=mem, auxint=size+alignment. Returns memory.
 
 	// Function calls. Arguments to the call have already been written to the stack.
 	// Return values appear on the stack. The method receiver, if any, is treated
@@ -422,10 +417,10 @@ var genericOps = []opData{
 	{name: "Int64Hi", argLength: 1, typ: "UInt32"},   // high 32-bit of arg0
 	{name: "Int64Lo", argLength: 1, typ: "UInt32"},   // low 32-bit of arg0
 
-	{name: "Add32carry", argLength: 2, commutative: true, typ: "(Flags,UInt32)"}, // arg0 + arg1, returns (carry, value)
+	{name: "Add32carry", argLength: 2, commutative: true, typ: "(UInt32,Flags)"}, // arg0 + arg1, returns (value, carry)
 	{name: "Add32withcarry", argLength: 3, commutative: true},                    // arg0 + arg1 + arg2, arg2=carry (0 or 1)
 
-	{name: "Sub32carry", argLength: 2, typ: "(Flags,UInt32)"}, // arg0 - arg1, returns (carry, value)
+	{name: "Sub32carry", argLength: 2, typ: "(UInt32,Flags)"}, // arg0 - arg1, returns (value, carry)
 	{name: "Sub32withcarry", argLength: 3},                    // arg0 - arg1 - arg2, arg2=carry (0 or 1)
 
 	{name: "Mul32uhilo", argLength: 2, typ: "(UInt32,UInt32)"}, // arg0 * arg1, returns (hi, lo)
@@ -437,10 +432,33 @@ var genericOps = []opData{
 	{name: "Cvt32Uto64F", argLength: 1}, // uint32 -> float64, only used on 32-bit arch
 	{name: "Cvt32Fto32U", argLength: 1}, // float32 -> uint32, only used on 32-bit arch
 	{name: "Cvt64Fto32U", argLength: 1}, // float64 -> uint32, only used on 32-bit arch
+	{name: "Cvt64Uto32F", argLength: 1}, // uint64 -> float32, only used on archs that has the instruction
+	{name: "Cvt64Uto64F", argLength: 1}, // uint64 -> float64, only used on archs that has the instruction
+	{name: "Cvt32Fto64U", argLength: 1}, // float32 -> uint64, only used on archs that has the instruction
+	{name: "Cvt64Fto64U", argLength: 1}, // float64 -> uint64, only used on archs that has the instruction
 
 	// pseudo-ops for breaking Tuple
 	{name: "Select0", argLength: 1}, // the first component of a tuple
 	{name: "Select1", argLength: 1}, // the second component of a tuple
+
+	// Atomic operations used for semantically inlining runtime/internal/atomic.
+	// Atomic loads return a new memory so that the loads are properly ordered
+	// with respect to other loads and stores.
+	// TODO: use for sync/atomic at some point.
+	{name: "AtomicLoad32", argLength: 2, typ: "(UInt32,Mem)"},         // Load from arg0.  arg1=memory.  Returns loaded value and new memory.
+	{name: "AtomicLoad64", argLength: 2, typ: "(UInt64,Mem)"},         // Load from arg0.  arg1=memory.  Returns loaded value and new memory.
+	{name: "AtomicLoadPtr", argLength: 2, typ: "(BytePtr,Mem)"},       // Load from arg0.  arg1=memory.  Returns loaded value and new memory.
+	{name: "AtomicStore32", argLength: 3, typ: "Mem"},                 // Store arg1 to *arg0.  arg2=memory.  Returns memory.
+	{name: "AtomicStore64", argLength: 3, typ: "Mem"},                 // Store arg1 to *arg0.  arg2=memory.  Returns memory.
+	{name: "AtomicStorePtrNoWB", argLength: 3, typ: "Mem"},            // Store arg1 to *arg0.  arg2=memory.  Returns memory.
+	{name: "AtomicExchange32", argLength: 3, typ: "(UInt32,Mem)"},     // Store arg1 to *arg0.  arg2=memory.  Returns old contents of *arg0 and new memory.
+	{name: "AtomicExchange64", argLength: 3, typ: "(UInt64,Mem)"},     // Store arg1 to *arg0.  arg2=memory.  Returns old contents of *arg0 and new memory.
+	{name: "AtomicAdd32", argLength: 3, typ: "(UInt32,Mem)"},          // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
+	{name: "AtomicAdd64", argLength: 3, typ: "(UInt64,Mem)"},          // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
+	{name: "AtomicCompareAndSwap32", argLength: 4, typ: "(Bool,Mem)"}, // if *arg0==arg1, then set *arg0=arg2.  Returns true iff store happens and new memory.
+	{name: "AtomicCompareAndSwap64", argLength: 4, typ: "(Bool,Mem)"}, // if *arg0==arg1, then set *arg0=arg2.  Returns true iff store happens and new memory.
+	{name: "AtomicAnd8", argLength: 3, typ: "Mem"},                    // *arg0 &= arg1.  arg2=memory.  Returns memory.
+	{name: "AtomicOr8", argLength: 3, typ: "Mem"},                     // *arg0 |= arg1.  arg2=memory.  Returns memory.
 
 	// riscv bootstrapping
 	{name: "ExitProc", argLength: 2, typ: "Mem"}, // risc-v bootstrapping only: insert process exit syscall, auxint=return code, arg0=memory

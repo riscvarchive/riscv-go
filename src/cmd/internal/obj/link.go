@@ -1,5 +1,5 @@
 // Derived from Inferno utils/6l/l.h and related files.
-// http://code.google.com/p/inferno-os/source/browse/utils/6l/l.h
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6l/l.h
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -33,6 +33,7 @@ package obj
 import (
 	"bufio"
 	"cmd/internal/sys"
+	"fmt"
 )
 
 // An Addr is an argument to an instruction.
@@ -443,14 +444,16 @@ const (
 type Reloc struct {
 	Off  int32
 	Siz  uint8
-	Type int32
+	Type RelocType
 	Add  int64
 	Sym  *LSym
 }
 
-// Reloc.type
+type RelocType int32
+
+//go:generate stringer -type=RelocType
 const (
-	R_ADDR = 1 + iota
+	R_ADDR RelocType = 1 + iota
 	// R_ADDRPOWER relocates a pair of "D-form" instructions (instructions with 16-bit
 	// immediates in the low half of the instruction word), usually addis followed by
 	// another add or a load, inserting the "high adjusted" 16 bits of the address of
@@ -685,6 +688,11 @@ type Link struct {
 func (ctxt *Link) Diag(format string, args ...interface{}) {
 	ctxt.Errors++
 	ctxt.DiagFunc(format, args...)
+}
+
+func (ctxt *Link) Logf(format string, args ...interface{}) {
+	fmt.Fprintf(ctxt.Bso, format, args...)
+	ctxt.Bso.Flush()
 }
 
 // The smallest possible offset from the hardware stack pointer to a local

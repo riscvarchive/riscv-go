@@ -1718,8 +1718,17 @@ func testCancelRequestWithChannelBeforeDo(t *testing.T, withCtx bool) {
 	}
 
 	_, err := c.Do(req)
-	if err == nil || !strings.Contains(err.Error(), "canceled") {
-		t.Errorf("Do error = %v; want cancelation", err)
+	if ue, ok := err.(*url.Error); ok {
+		err = ue.Err
+	}
+	if withCtx {
+		if err != context.Canceled {
+			t.Errorf("Do error = %v; want %v", err, context.Canceled)
+		}
+	} else {
+		if err == nil || !strings.Contains(err.Error(), "canceled") {
+			t.Errorf("Do error = %v; want cancelation", err)
+		}
 	}
 }
 
@@ -3248,7 +3257,7 @@ func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
 
 	cst.tr.ExpectContinueTimeout = 1 * time.Second
 
-	var mu sync.Mutex
+	var mu sync.Mutex // guards buf
 	var buf bytes.Buffer
 	logf := func(format string, args ...interface{}) {
 		mu.Lock()
@@ -3290,8 +3299,8 @@ func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
 		Wait100Continue: func() { logf("Wait100Continue") },
 		Got100Continue:  func() { logf("Got100Continue") },
 		WroteRequest: func(e httptrace.WroteRequestInfo) {
-			close(gotWroteReqEvent)
 			logf("WroteRequest: %+v", e)
+			close(gotWroteReqEvent)
 		},
 	}
 	if noHooks {
@@ -3323,7 +3332,10 @@ func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
 		return
 	}
 
+	mu.Lock()
 	got := buf.String()
+	mu.Unlock()
+
 	wantOnce := func(sub string) {
 		if strings.Count(got, sub) != 1 {
 			t.Errorf("expected substring %q exactly once in output.", sub)
@@ -3362,7 +3374,7 @@ func TestTransportEventTraceRealDNS(t *testing.T) {
 	defer tr.CloseIdleConnections()
 	c := &Client{Transport: tr}
 
-	var mu sync.Mutex
+	var mu sync.Mutex // guards buf
 	var buf bytes.Buffer
 	logf := func(format string, args ...interface{}) {
 		mu.Lock()
@@ -3386,7 +3398,10 @@ func TestTransportEventTraceRealDNS(t *testing.T) {
 		t.Fatal("expected error during DNS lookup")
 	}
 
+	mu.Lock()
 	got := buf.String()
+	mu.Unlock()
+
 	wantSub := func(sub string) {
 		if !strings.Contains(got, sub) {
 			t.Errorf("expected substring %q in output.", sub)
@@ -3509,6 +3524,61 @@ func TestTransportIdleConnTimeout(t *testing.T) {
 	if got := tr.IdleConnStrsForTesting(); len(got) != 0 {
 		t.Errorf("idle conns = %q; want none", got)
 	}
+}
+
+// Issue 16208: Go 1.7 crashed after Transport.IdleConnTimeout if an
+// HTTP/2 connection was established but but its caller no longer
+// wanted it. (Assuming the connection cache was enabled, which it is
+// by default)
+//
+// This test reproduced the crash by setting the IdleConnTimeout low
+// (to make the test reasonable) and then making a request which is
+// canceled by the DialTLS hook, which then also waits to return the
+// real connection until after the RoundTrip saw the error.  Then we
+// know the successful tls.Dial from DialTLS will need to go into the
+// idle pool. Then we give it a of time to explode.
+func TestIdleConnH2Crash(t *testing.T) {
+	cst := newClientServerTest(t, h2Mode, HandlerFunc(func(w ResponseWriter, r *Request) {
+		// nothing
+	}))
+	defer cst.close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	gotErr := make(chan bool, 1)
+
+	cst.tr.IdleConnTimeout = 5 * time.Millisecond
+	cst.tr.DialTLS = func(network, addr string) (net.Conn, error) {
+		cancel()
+		<-gotErr
+		c, err := tls.Dial(network, addr, &tls.Config{
+			InsecureSkipVerify: true,
+			NextProtos:         []string{"h2"},
+		})
+		if err != nil {
+			t.Error(err)
+			return nil, err
+		}
+		if cs := c.ConnectionState(); cs.NegotiatedProtocol != "h2" {
+			t.Errorf("protocol = %q; want %q", cs.NegotiatedProtocol, "h2")
+			c.Close()
+			return nil, errors.New("bogus")
+		}
+		return c, nil
+	}
+
+	req, _ := NewRequest("GET", cst.ts.URL, nil)
+	req = req.WithContext(ctx)
+	res, err := cst.c.Do(req)
+	if err == nil {
+		res.Body.Close()
+		t.Fatal("unexpected success")
+	}
+	gotErr <- true
+
+	// Wait for the explosion.
+	time.Sleep(cst.tr.IdleConnTimeout * 10)
 }
 
 type funcConn struct {

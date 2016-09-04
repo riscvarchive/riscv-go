@@ -35,44 +35,44 @@ import (
 	"log"
 )
 
-func gentext() {
+func gentext(ctxt *ld.Link) {
 }
 
-func adddynrela(rel *ld.LSym, s *ld.LSym, r *ld.Reloc) {
+func adddynrela(ctxt *ld.Link, rel *ld.Symbol, s *ld.Symbol, r *ld.Reloc) {
 	log.Fatalf("adddynrela not implemented")
 }
 
-func adddynrel(s *ld.LSym, r *ld.Reloc) {
+func adddynrel(ctxt *ld.Link, s *ld.Symbol, r *ld.Reloc) {
 	log.Fatalf("adddynrel not implemented")
 }
 
-func elfreloc1(r *ld.Reloc, sectoff int64) int {
+func elfreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
 	log.Printf("elfreloc1")
 	return -1
 }
 
-func elfsetupplt() {
+func elfsetupplt(ctxt *ld.Link) {
 	log.Printf("elfsetuplt")
 	return
 }
 
-func machoreloc1(r *ld.Reloc, sectoff int64) int {
+func machoreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
 	log.Fatalf("machoreloc1 not implemented")
 	return -1
 }
 
-func archreloc(r *ld.Reloc, s *ld.LSym, val *int64) int {
+func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 	switch r.Type {
 	case obj.R_CALLRISCV:
 		pc := s.Value + int64(r.Off)
-		off := ld.Symaddr(r.Sym) + r.Add - pc
+		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
 
 		// This is always a JAL instruction, we just need
 		// to replace the immediate.
 		//
 		// TODO(prattmic): sanity check the opcode.
 		if off&1 != 0 {
-			ld.Ctxt.Diag("relocation for %s is not aligned: %#x", r.Sym.Name, off)
+			ctxt.Diag("relocation for %s is not aligned: %#x", r.Sym.Name, off)
 			return 0
 		}
 
@@ -80,7 +80,7 @@ func archreloc(r *ld.Reloc, s *ld.LSym, val *int64) int {
 		if err != nil {
 			// TODO(mpratt): We can only fit 1MB offsets in the
 			// immediate, which we will quickly outgrow.
-			ld.Ctxt.Diag("cannot encode relocation offset for %s: %v", r.Sym.Name, err)
+			ctxt.Diag("cannot encode relocation offset for %s: %v", r.Sym.Name, err)
 			return 0
 		}
 
@@ -95,67 +95,67 @@ func archreloc(r *ld.Reloc, s *ld.LSym, val *int64) int {
 	return 0
 }
 
-func archrelocvariant(r *ld.Reloc, s *ld.LSym, t int64) int64 {
+func archrelocvariant(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, t int64) int64 {
 	log.Printf("archrelocvariant")
 	return -1
 }
 
 // TODO(mpratt): Refactor asmb for other archs. This worked literally copied
 // and pasted from mips64.
-func asmb() {
-	if ld.Debug['v'] != 0 {
-		fmt.Fprintf(ld.Bso, "%5.2f asmb\n", obj.Cputime())
+func asmb(ctxt *ld.Link) {
+	if ctxt.Debugvlog != 0 {
+		fmt.Fprintf(ctxt.Bso, "%5.2f asmb\n", obj.Cputime())
 	}
-	ld.Bso.Flush()
+	ctxt.Bso.Flush()
 
 	if ld.Iself {
-		ld.Asmbelfsetup()
+		ld.Asmbelfsetup(ctxt)
 	}
 
 	sect := ld.Segtext.Sect
 	ld.Cseek(int64(sect.Vaddr - ld.Segtext.Vaddr + ld.Segtext.Fileoff))
-	ld.Codeblk(int64(sect.Vaddr), int64(sect.Length))
+	ld.Codeblk(ctxt, int64(sect.Vaddr), int64(sect.Length))
 	for sect = sect.Next; sect != nil; sect = sect.Next {
 		ld.Cseek(int64(sect.Vaddr - ld.Segtext.Vaddr + ld.Segtext.Fileoff))
-		ld.Datblk(int64(sect.Vaddr), int64(sect.Length))
+		ld.Datblk(ctxt, int64(sect.Vaddr), int64(sect.Length))
 	}
 
 	if ld.Segrodata.Filelen > 0 {
-		if ld.Debug['v'] != 0 {
-			fmt.Fprintf(ld.Bso, "%5.2f rodatblk\n", obj.Cputime())
+		if ctxt.Debugvlog != 0 {
+			fmt.Fprintf(ctxt.Bso, "%5.2f rodatblk\n", obj.Cputime())
 		}
-		ld.Bso.Flush()
+		ctxt.Bso.Flush()
 
 		ld.Cseek(int64(ld.Segrodata.Fileoff))
-		ld.Datblk(int64(ld.Segrodata.Vaddr), int64(ld.Segrodata.Filelen))
+		ld.Datblk(ctxt, int64(ld.Segrodata.Vaddr), int64(ld.Segrodata.Filelen))
 	}
 
-	if ld.Debug['v'] != 0 {
-		fmt.Fprintf(ld.Bso, "%5.2f datblk\n", obj.Cputime())
+	if ctxt.Debugvlog != 0 {
+		fmt.Fprintf(ctxt.Bso, "%5.2f datblk\n", obj.Cputime())
 	}
-	ld.Bso.Flush()
+	ctxt.Bso.Flush()
 
 	ld.Cseek(int64(ld.Segdata.Fileoff))
-	ld.Datblk(int64(ld.Segdata.Vaddr), int64(ld.Segdata.Filelen))
+	ld.Datblk(ctxt, int64(ld.Segdata.Vaddr), int64(ld.Segdata.Filelen))
 
 	ld.Cseek(int64(ld.Segdwarf.Fileoff))
-	ld.Dwarfblk(int64(ld.Segdwarf.Vaddr), int64(ld.Segdwarf.Filelen))
+	ld.Dwarfblk(ctxt, int64(ld.Segdwarf.Vaddr), int64(ld.Segdwarf.Filelen))
 
 	/* output symbol table */
 	ld.Symsize = 0
 
 	ld.Lcsize = 0
 	symo := uint32(0)
-	if ld.Debug['s'] == 0 {
-		if ld.Debug['v'] != 0 {
-			fmt.Fprintf(ld.Bso, "%5.2f sym\n", obj.Cputime())
+	if !*ld.FlagS {
+		if ctxt.Debugvlog != 0 {
+			fmt.Fprintf(ctxt.Bso, "%5.2f sym\n", obj.Cputime())
 		}
-		ld.Bso.Flush()
+		ctxt.Bso.Flush()
 		switch ld.HEADTYPE {
 		default:
 			if ld.Iself {
 				symo = uint32(ld.Segdwarf.Fileoff + ld.Segdata.Filelen)
-				symo = uint32(ld.Rnd(int64(symo), int64(ld.INITRND)))
+				symo = uint32(ld.Rnd(int64(symo), int64(*ld.FlagRound)))
 			}
 
 		case obj.Hplan9:
@@ -166,15 +166,15 @@ func asmb() {
 		switch ld.HEADTYPE {
 		default:
 			if ld.Iself {
-				if ld.Debug['v'] != 0 {
-					fmt.Fprintf(ld.Bso, "%5.2f elfsym\n", obj.Cputime())
+				if ctxt.Debugvlog != 0 {
+					fmt.Fprintf(ctxt.Bso, "%5.2f elfsym\n", obj.Cputime())
 				}
-				ld.Asmelfsym()
+				ld.Asmelfsym(ctxt)
 				ld.Cflush()
 				ld.Cwrite(ld.Elfstrdat)
 
 				if ld.Linkmode == ld.LinkExternal {
-					ld.Elfemitreloc()
+					ld.Elfemitreloc(ctxt)
 				}
 			}
 
@@ -183,11 +183,11 @@ func asmb() {
 		}
 	}
 
-	ld.Ctxt.Cursym = nil
-	if ld.Debug['v'] != 0 {
-		fmt.Fprintf(ld.Bso, "%5.2f header\n", obj.Cputime())
+	ctxt.Cursym = nil
+	if ctxt.Debugvlog != 0 {
+		fmt.Fprintf(ctxt.Bso, "%5.2f header\n", obj.Cputime())
 	}
-	ld.Bso.Flush()
+	ctxt.Bso.Flush()
 	ld.Cseek(0)
 	switch ld.HEADTYPE {
 	default:
@@ -198,11 +198,11 @@ func asmb() {
 		obj.Hnetbsd,
 		obj.Hopenbsd,
 		obj.Hnacl:
-		ld.Asmbelf(int64(symo))
+		ld.Asmbelf(ctxt, int64(symo))
 	}
 
 	ld.Cflush()
-	if ld.Debug['c'] != 0 {
+	if *ld.FlagC {
 		fmt.Printf("textsize=%d\n", ld.Segtext.Filelen)
 		fmt.Printf("datsize=%d\n", ld.Segdata.Filelen)
 		fmt.Printf("bsssize=%d\n", ld.Segdata.Length-ld.Segdata.Filelen)

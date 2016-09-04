@@ -37,7 +37,7 @@ import (
 
 func Main() {
 	linkarchinit()
-	ld.Ldmain()
+	ld.Main()
 }
 
 func linkarchinit() {
@@ -73,7 +73,7 @@ func linkarchinit() {
 	ld.Thearch.Solarisdynld = "XXX"
 }
 
-func archinit() {
+func archinit(ctxt *ld.Link) {
 	// getgoextlinkenabled is based on GO_EXTLINK_ENABLED when
 	// Go was built; see ../../make.bash.
 	if ld.Linkmode == ld.LinkAuto && obj.Getgoextlinkenabled() == "0" {
@@ -95,20 +95,20 @@ func archinit() {
 		ld.Exitf("unknown -H option: %v", ld.HEADTYPE)
 
 	case obj.Hlinux: /* riscv elf */
-		ld.Elfinit()
+		ld.Elfinit(ctxt)
 		ld.HEADR = ld.ELFRESERVE
-		if ld.INITTEXT == -1 {
-			ld.INITTEXT = 0x10000 + int64(ld.HEADR)
+		if *ld.FlagTextAddr == -1 {
+			*ld.FlagTextAddr = 0x10000 + int64(ld.HEADR)
 		}
-		if ld.INITDAT == -1 {
-			ld.INITDAT = 0
+		if *ld.FlagDataAddr == -1 {
+			*ld.FlagDataAddr = 0
 		}
-		if ld.INITRND == -1 {
-			ld.INITRND = 0x10000
+		if *ld.FlagRound == -1 {
+			*ld.FlagRound = 0x10000
 		}
 	}
 
-	if ld.INITDAT != 0 && ld.INITRND != 0 {
-		fmt.Printf("warning: -D0x%x is ignored because of -R0x%x\n", uint64(ld.INITDAT), uint32(ld.INITRND))
+	if *ld.FlagDataAddr != 0 && *ld.FlagRound != 0 {
+		fmt.Printf("warning: -D0x%x is ignored because of -R0x%x\n", uint64(*ld.FlagDataAddr), uint32(*ld.FlagRound))
 	}
 }

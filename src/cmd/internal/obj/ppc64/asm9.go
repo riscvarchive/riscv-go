@@ -459,7 +459,7 @@ func span9(ctxt *obj.Link, cursym *obj.LSym) {
 	var q *obj.Prog
 	for bflag != 0 {
 		if ctxt.Debugvlog != 0 {
-			fmt.Fprintf(ctxt.Bso, "%5.2f span1\n", obj.Cputime())
+			ctxt.Logf("%5.2f span1\n", obj.Cputime())
 		}
 		bflag = 0
 		c = 0
@@ -1009,6 +1009,10 @@ func buildop(ctxt *obj.Link) {
 			opset(AMULLDV, r0)
 			opset(ADIVD, r0)
 			opset(ADIVDCC, r0)
+			opset(ADIVDE, r0)
+			opset(ADIVDEU, r0)
+			opset(ADIVDECC, r0)
+			opset(ADIVDEUCC, r0)
 			opset(ADIVDVCC, r0)
 			opset(ADIVDV, r0)
 			opset(ADIVDU, r0)
@@ -2670,6 +2674,18 @@ func oprrr(ctxt *obj.Link, a obj.As) uint32 {
 	case AREMDCC, ADIVDCC:
 		return OPVCC(31, 489, 0, 1)
 
+	case ADIVDE:
+		return OPVCC(31, 425, 0, 0)
+
+	case ADIVDECC:
+		return OPVCC(31, 425, 0, 1)
+
+	case ADIVDEU:
+		return OPVCC(31, 393, 0, 0)
+
+	case ADIVDEUCC:
+		return OPVCC(31, 393, 0, 1)
+
 	case AREMDV, ADIVDV:
 		return OPVCC(31, 489, 1, 0)
 
@@ -3092,9 +3108,9 @@ func opirr(ctxt *obj.Link, a obj.As) uint32 {
 	case ABNE:
 		return AOP_RRR(16<<26, 4, 2, 0)
 	case ABVC:
-		return AOP_RRR(16<<26, 4, 3, 0)
+		return AOP_RRR(16<<26, 4, 3, 0) // apparently unordered-clear
 	case ABVS:
-		return AOP_RRR(16<<26, 12, 3, 0)
+		return AOP_RRR(16<<26, 12, 3, 0) // apparently unordered-set
 
 	case ACMP:
 		return OPVCC(11, 0, 0, 0) | 1<<21 /* L=1 */

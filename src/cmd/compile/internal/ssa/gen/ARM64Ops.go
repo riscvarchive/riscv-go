@@ -91,10 +91,10 @@ var regNamesARM64 = []string{
 	"F25",
 	"F26",
 	"F27",
-	"F28", // 0.0
-	"F29", // 0.5
-	"F30", // 1.0
-	"F31", // 2.0
+	"F28",
+	"F29",
+	"F30",
+	"F31",
 
 	// pseudo-registers
 	"SB",
@@ -128,7 +128,7 @@ func init() {
 		gpsp       = gp | buildReg("SP")
 		gpspg      = gpg | buildReg("SP")
 		gpspsbg    = gpspg | buildReg("SB")
-		fp         = buildReg("F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 F25 F26 F27")
+		fp         = buildReg("F0 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 F25 F26 F27 F28 F29 F30 F31")
 		callerSave = gp | fp | buildReg("g") // runtime.setg (and anything calling it) may clobber g
 	)
 	// Common regInfo
@@ -206,6 +206,9 @@ func init() {
 		{name: "FNEGS", argLength: 1, reg: fp11, asm: "FNEGS"},   // -arg0, float32
 		{name: "FNEGD", argLength: 1, reg: fp11, asm: "FNEGD"},   // -arg0, float64
 		{name: "FSQRTD", argLength: 1, reg: fp11, asm: "FSQRTD"}, // sqrt(arg0), float64
+		{name: "REV", argLength: 1, reg: gp11, asm: "REV"},       // byte reverse, 64-bit
+		{name: "REVW", argLength: 1, reg: gp11, asm: "REVW"},     // byte reverse, 32-bit
+		{name: "REV16W", argLength: 1, reg: gp11, asm: "REV16W"}, // byte reverse in each 16-bit halfword, 32-bit
 
 		// shifts
 		{name: "SLL", argLength: 2, reg: gp21, asm: "LSL"},                      // arg0 << arg1, shift amount is mod 64
@@ -356,7 +359,6 @@ func init() {
 		// arg0 = address of memory to zero (in R16 aka arm64.REGRT1, changed as side effect)
 		// arg1 = address of the last element to zero
 		// arg2 = mem
-		// auxint = alignment
 		// returns mem
 		//	MOVD.P	ZR, 8(R16)
 		//	CMP	Rarg1, R16
@@ -365,7 +367,6 @@ func init() {
 		// the-end-of-the-memory - 8 is with the area to zero, ok to spill.
 		{
 			name:      "LoweredZero",
-			aux:       "Int64",
 			argLength: 3,
 			reg: regInfo{
 				inputs:   []regMask{buildReg("R16"), gp},
@@ -379,7 +380,6 @@ func init() {
 		// arg1 = address of src memory (in R16 aka arm64.REGRT1, changed as side effect)
 		// arg2 = address of the last element of src
 		// arg3 = mem
-		// auxint = alignment
 		// returns mem
 		//	MOVD.P	8(R16), Rtmp
 		//	MOVD.P	Rtmp, 8(R17)
@@ -389,7 +389,6 @@ func init() {
 		// the-end-of-src - 8 is within the area to copy, ok to spill.
 		{
 			name:      "LoweredMove",
-			aux:       "Int64",
 			argLength: 4,
 			reg: regInfo{
 				inputs:   []regMask{buildReg("R17"), buildReg("R16"), gp},

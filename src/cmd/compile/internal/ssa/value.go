@@ -26,6 +26,7 @@ type Value struct {
 
 	// Auxiliary info for this value. The type of this information depends on the opcode and type.
 	// AuxInt is used for integer values, Aux is used for other values.
+	// Floats are stored in AuxInt using math.Float64bits(f).
 	AuxInt int64
 	Aux    interface{}
 
@@ -125,6 +126,8 @@ func (v *Value) auxString() string {
 		return fmt.Sprintf(" [%d]", v.AuxInt32())
 	case auxInt64, auxInt128:
 		return fmt.Sprintf(" [%d]", v.AuxInt)
+	case auxSizeAndAlign:
+		return fmt.Sprintf(" [%s]", SizeAndAlign(v.AuxInt))
 	case auxFloat32, auxFloat64:
 		return fmt.Sprintf(" [%g]", v.AuxFloat())
 	case auxString:

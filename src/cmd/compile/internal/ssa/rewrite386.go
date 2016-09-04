@@ -13162,7 +13162,7 @@ func rewriteValue386_OpZeromask(v *Value, config *Config) bool {
 		return true
 	}
 }
-func rewriteBlock386(b *Block) bool {
+func rewriteBlock386(b *Block, config *Config) bool {
 	switch b.Kind {
 	case Block386EQ:
 		// match: (EQ (InvertFlags cmp) yes no)
@@ -13711,6 +13711,7 @@ func rewriteBlock386(b *Block) bool {
 		// result: (NE (TESTB cond cond) yes no)
 		for {
 			v := b.Control
+			_ = v
 			cond := b.Control
 			yes := b.Succs[0]
 			no := b.Succs[1]

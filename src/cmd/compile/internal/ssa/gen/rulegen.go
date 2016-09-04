@@ -209,7 +209,7 @@ func genRules(arch arch) {
 
 	// Generate block rewrite function. There are only a few block types
 	// so we can make this one function with a switch.
-	fmt.Fprintf(w, "func rewriteBlock%s(b *Block) bool {\n", arch.name)
+	fmt.Fprintf(w, "func rewriteBlock%s(b *Block, config *Config) bool {\n", arch.name)
 	fmt.Fprintf(w, "switch b.Kind {\n")
 	ops = nil
 	for op := range blockrules {
@@ -234,6 +234,7 @@ func genRules(arch arch) {
 				if strings.Contains(s[1], "(") {
 					genMatch0(w, arch, s[1], "v", map[string]struct{}{}, false, rule.loc)
 				} else {
+					fmt.Fprintf(w, "_ = v\n") // in case we don't use v
 					fmt.Fprintf(w, "%s := b.Control\n", s[1])
 				}
 			}
@@ -656,7 +657,7 @@ func parseValue(val string, arch arch, loc string) (op opData, oparch string, ty
 	// Sanity check aux, auxint.
 	if auxint != "" {
 		switch op.aux {
-		case "Bool", "Int8", "Int16", "Int32", "Int64", "Int128", "Float32", "Float64", "SymOff", "SymValAndOff", "SymInt32":
+		case "Bool", "Int8", "Int16", "Int32", "Int64", "Int128", "Float32", "Float64", "SymOff", "SymValAndOff", "SymInt32", "SizeAndAlign":
 		default:
 			log.Fatalf("%s: op %s %s can't have auxint", loc, op.name, op.aux)
 		}

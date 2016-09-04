@@ -13,6 +13,8 @@ import (
 	"cmd/compile/internal/big"
 	"encoding/binary"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // The overall structure of Import is symmetric to Export: For each
@@ -21,8 +23,9 @@ import (
 // changes to bimport.go and bexport.go.
 
 type importer struct {
-	in  *bufio.Reader
-	buf []byte // reused for reading strings
+	in      *bufio.Reader
+	buf     []byte // reused for reading strings
+	version int    // export format version
 
 	// object lists, in order of deserialization
 	strList       []string
@@ -48,28 +51,55 @@ type importer struct {
 func Import(in *bufio.Reader) {
 	p := importer{
 		in:      in,
+		version: -1,           // unknown version
 		strList: []string{""}, // empty string is mapped to 0
 	}
 
-	// read low-level encoding format
-	switch format := p.rawByte(); format {
-	case 'c':
-		// compact format - nothing to do
-	case 'd':
-		p.debugFormat = true
-	default:
-		Fatalf("importer: invalid encoding format in export data: got %q; want 'c' or 'd'", format)
+	// read version info
+	var versionstr string
+	if b := p.rawByte(); b == 'c' || b == 'd' {
+		// Go1.7 encoding; first byte encodes low-level
+		// encoding format (compact vs debug).
+		// For backward-compatibility only (avoid problems with
+		// old installed packages). Newly compiled packages use
+		// the extensible format string.
+		// TODO(gri) Remove this support eventually; after Go1.8.
+		if b == 'd' {
+			p.debugFormat = true
+		}
+		p.trackAllTypes = p.rawByte() == 'a'
+		p.posInfoFormat = p.bool()
+		versionstr = p.string()
+		if versionstr == "v1" {
+			p.version = 0
+		}
+	} else {
+		// Go1.8 extensible encoding
+		// read version string and extract version number (ignore anything after the version number)
+		versionstr = p.rawStringln(b)
+		if s := strings.SplitN(versionstr, " ", 3); len(s) >= 2 && s[0] == "version" {
+			if v, err := strconv.Atoi(s[1]); err == nil && v > 0 {
+				p.version = v
+			}
+		}
 	}
 
-	p.trackAllTypes = p.rawByte() == 'a'
-
-	p.posInfoFormat = p.bool()
+	// read version specific flags - extend as necessary
+	switch p.version {
+	// case 3:
+	// 	...
+	//	fallthrough
+	case 2, 1:
+		p.debugFormat = p.rawStringln(p.rawByte()) == "debug"
+		p.trackAllTypes = p.bool()
+		p.posInfoFormat = p.bool()
+	case 0:
+		// Go1.7 encoding format - nothing to do here
+	default:
+		formatErrorf("unknown export format version %d (%q)", p.version, versionstr)
+	}
 
 	// --- generic export data ---
-
-	if v := p.string(); v != exportVersion {
-		Fatalf("importer: unknown export data version: %s", v)
-	}
 
 	// populate typList with predeclared "known" types
 	p.typList = append(p.typList, predeclared()...)
@@ -97,7 +127,7 @@ func Import(in *bufio.Reader) {
 
 	// self-verification
 	if count := p.int(); count != objcount {
-		Fatalf("importer: got %d objects; want %d", objcount, count)
+		formatErrorf("got %d objects; want %d", objcount, count)
 	}
 
 	// --- compiler-specific export data ---
@@ -117,12 +147,12 @@ func Import(in *bufio.Reader) {
 
 	// self-verification
 	if count := p.int(); count != objcount {
-		Fatalf("importer: got %d objects; want %d", objcount, count)
+		formatErrorf("got %d objects; want %d", objcount, count)
 	}
 
 	// read inlineable functions bodies
 	if dclcontext != PEXTERN {
-		Fatalf("importer: unexpected context %d", dclcontext)
+		formatErrorf("unexpected context %d", dclcontext)
 	}
 
 	objcount = 0
@@ -134,12 +164,12 @@ func Import(in *bufio.Reader) {
 
 		// don't process the same function twice
 		if i <= i0 {
-			Fatalf("importer: index not increasing: %d <= %d", i, i0)
+			formatErrorf("index not increasing: %d <= %d", i, i0)
 		}
 		i0 = i
 
 		if Funcdepth != 0 {
-			Fatalf("importer: unexpected Funcdepth %d", Funcdepth)
+			formatErrorf("unexpected Funcdepth %d", Funcdepth)
 		}
 
 		// Note: In the original code, funchdr and funcbody are called for
@@ -173,11 +203,11 @@ func Import(in *bufio.Reader) {
 
 	// self-verification
 	if count := p.int(); count != objcount {
-		Fatalf("importer: got %d functions; want %d", objcount, count)
+		formatErrorf("got %d functions; want %d", objcount, count)
 	}
 
 	if dclcontext != PEXTERN {
-		Fatalf("importer: unexpected context %d", dclcontext)
+		formatErrorf("unexpected context %d", dclcontext)
 	}
 
 	p.verifyTypes()
@@ -190,18 +220,31 @@ func Import(in *bufio.Reader) {
 	testdclstack() // debugging only
 }
 
+func formatErrorf(format string, args ...interface{}) {
+	if debugFormat {
+		Fatalf(format, args...)
+	}
+
+	Yyerror("cannot import %q due to version skew - reinstall package (%s)",
+		importpkg.Path, fmt.Sprintf(format, args...))
+	errorexit()
+}
+
 func (p *importer) verifyTypes() {
 	for _, pair := range p.cmpList {
 		pt := pair.pt
 		t := pair.t
 		if !Eqtype(pt.Orig, t) {
-			// TODO(gri) Is this a possible regular error (stale files)
-			// or can this only happen if export/import is flawed?
-			// (if the latter, change to Fatalf here)
-			Yyerror("inconsistent definition for type %v during import\n\t%v (in %q)\n\t%v (in %q)", pt.Sym, Tconv(pt, FmtLong), pt.Sym.Importdef.Path, Tconv(t, FmtLong), importpkg.Path)
+			formatErrorf("inconsistent definition for type %v during import\n\t%v (in %q)\n\t%v (in %q)", pt.Sym, Tconv(pt, FmtLong), pt.Sym.Importdef.Path, Tconv(t, FmtLong), importpkg.Path)
 		}
 	}
 }
+
+// numImport tracks how often a package with a given name is imported.
+// It is used to provide a better error message (by using the package
+// path to disambiguate) if a package that appears multiple times with
+// the same name appears in an error message.
+var numImport = make(map[string]int)
 
 func (p *importer) pkg() *Pkg {
 	// if the package was seen before, i is its index (>= 0)
@@ -212,7 +255,7 @@ func (p *importer) pkg() *Pkg {
 
 	// otherwise, i is the package tag (< 0)
 	if i != packageTag {
-		Fatalf("importer: expected package tag, found tag = %d", i)
+		formatErrorf("expected package tag, found tag = %d", i)
 	}
 
 	// read package data
@@ -221,21 +264,21 @@ func (p *importer) pkg() *Pkg {
 
 	// we should never see an empty package name
 	if name == "" {
-		Fatalf("importer: empty package name for path %q", path)
+		formatErrorf("empty package name for path %q", path)
 	}
 
 	// we should never see a bad import path
 	if isbadimport(path) {
-		Fatalf("importer: bad package path %q for package %s", path, name)
+		formatErrorf("bad package path %q for package %s", path, name)
 	}
 
 	// an empty path denotes the package we are currently importing;
 	// it must be the first package we see
 	if (path == "") != (len(p.pkgList) == 0) {
-		Fatalf("importer: package path %q for pkg index %d", path, len(p.pkgList))
+		formatErrorf("package path %q for pkg index %d", path, len(p.pkgList))
 	}
 
-	// see importimport (export.go)
+	// add package to pkgList
 	pkg := importpkg
 	if path != "" {
 		pkg = mkpkg(path)
@@ -244,7 +287,7 @@ func (p *importer) pkg() *Pkg {
 		pkg.Name = name
 		numImport[name]++
 	} else if pkg.Name != name {
-		Yyerror("importer: conflicting package names %s and %s for path %q", pkg.Name, name, path)
+		Yyerror("conflicting package names %s and %s for path %q", pkg.Name, name, path)
 	}
 	if incannedimport == 0 && myimportpath != "" && path == myimportpath {
 		Yyerror("import %q: package depends on %q (import cycle)", importpkg.Path, path)
@@ -292,7 +335,7 @@ func (p *importer) obj(tag int) {
 		if sym.Def != nil && sym.Def.Op == ONAME {
 			// function was imported before (via another import)
 			if !Eqtype(sig, sym.Def.Type) {
-				Fatalf("importer: inconsistent definition for func %v during import\n\t%v\n\t%v", sym, sym.Def.Type, sig)
+				formatErrorf("inconsistent definition for func %v during import\n\t%v\n\t%v", sym, sym.Def.Type, sig)
 			}
 			p.funcList = append(p.funcList, nil)
 			break
@@ -312,7 +355,7 @@ func (p *importer) obj(tag int) {
 		}
 
 	default:
-		Fatalf("importer: unexpected object (tag = %d)", tag)
+		formatErrorf("unexpected object (tag = %d)", tag)
 	}
 }
 
@@ -424,15 +467,20 @@ func (p *importer) typ() *Type {
 			p.pos()
 			sym := p.fieldSym()
 
+			// during import unexported method names should be in the type's package
+			if !exportname(sym.Name) && sym.Pkg != tsym.Pkg {
+				Fatalf("imported method name %v in wrong package %s\n", sconv(sym, FmtSign), tsym.Pkg.Name)
+			}
+
 			recv := p.paramList() // TODO(gri) do we need a full param list for the receiver?
 			params := p.paramList()
 			result := p.paramList()
 			nointerface := p.bool()
 
-			n := methodname1(newname(sym), recv[0].Right)
+			n := methodname(newname(sym), recv[0].Right)
 			n.Type = functype(recv[0], params, result)
 			checkwidth(n.Type)
-			addmethod(sym, n.Type, tsym.Pkg, false, nointerface)
+			addmethod(sym, n.Type, false, nointerface)
 			p.funcList = append(p.funcList, n)
 			importlist = append(importlist, n)
 
@@ -485,7 +533,7 @@ func (p *importer) typ() *Type {
 	case interfaceTag:
 		t = p.newtyp(TINTER)
 		if p.int() != 0 {
-			Fatalf("importer: unexpected embedded interface")
+			formatErrorf("unexpected embedded interface")
 		}
 		tointerface0(t, p.methodList())
 
@@ -502,11 +550,11 @@ func (p *importer) typ() *Type {
 		ct.Elem = p.typ()
 
 	default:
-		Fatalf("importer: unexpected type (tag = %d)", i)
+		formatErrorf("unexpected type (tag = %d)", i)
 	}
 
 	if t == nil {
-		Fatalf("importer: nil type (type tag = %d)", i)
+		formatErrorf("nil type (type tag = %d)", i)
 	}
 
 	return t
@@ -580,13 +628,13 @@ func (p *importer) method() *Node {
 // parser.go:sym,hidden_importsym
 func (p *importer) fieldName() *Sym {
 	name := p.string()
+	if p.version == 0 && name == "_" {
+		// version 0 didn't export a package for _ fields
+		// but used the builtin package instead
+		return builtinpkg.Lookup(name)
+	}
 	pkg := localpkg
-	if name == "_" {
-		// During imports, unqualified non-exported identifiers are from builtinpkg
-		// (see parser.go:sym). The binary exporter only exports blank as a non-exported
-		// identifier without qualification.
-		pkg = builtinpkg
-	} else if name == "?" || name != "" && !exportname(name) {
+	if name != "" && !exportname(name) {
 		if name == "?" {
 			name = ""
 		}
@@ -632,7 +680,7 @@ func (p *importer) param(named bool) *Node {
 	if named {
 		name := p.string()
 		if name == "" {
-			Fatalf("importer: expected named parameter")
+			formatErrorf("expected named parameter")
 		}
 		// TODO(gri) Supply function/method package rather than
 		// encoding the package for each parameter repeatedly.
@@ -686,18 +734,18 @@ func (p *importer) value(typ *Type) (x Val) {
 		x.U = p.string()
 
 	case unknownTag:
-		Fatalf("importer: unknown constant (importing package with errors)")
+		formatErrorf("unknown constant (importing package with errors)")
 
 	case nilTag:
 		x.U = new(NilVal)
 
 	default:
-		Fatalf("importer: unexpected value tag %d", tag)
+		formatErrorf("unexpected value tag %d", tag)
 	}
 
 	// verify ideal type
 	if typ.IsUntyped() && untype(x.Ctype()) != typ {
-		Fatalf("importer: value %v and type %v don't match", x, typ)
+		formatErrorf("value %v and type %v don't match", x, typ)
 	}
 
 	return
@@ -798,6 +846,15 @@ func (p *importer) node() *Node {
 		typ := p.typ()
 		n := nodlit(p.value(typ))
 		if !typ.IsUntyped() {
+			// Type-checking simplifies unsafe.Pointer(uintptr(c))
+			// to unsafe.Pointer(c) which then cannot type-checked
+			// again. Re-introduce explicit uintptr(c) conversion.
+			// (issue 16317).
+			if typ.IsUnsafePtr() {
+				conv := Nod(OCALL, typenod(Types[TUINTPTR]), nil)
+				conv.List.Set1(n)
+				n = conv
+			}
 			conv := Nod(OCALL, typenod(typ), nil)
 			conv.List.Set1(n)
 			n = conv
@@ -948,14 +1005,14 @@ func (p *importer) node() *Node {
 	// --------------------------------------------------------------------
 	// statements
 	case ODCL:
-		var lhs *Node
-		if p.bool() {
-			lhs = p.expr()
-		} else {
-			lhs = dclname(p.sym())
+		if p.version < 2 {
+			// versions 0 and 1 exported a bool here but it
+			// was always false - simply ignore in this case
+			p.bool()
 		}
-		// TODO(gri) avoid list created here!
-		return liststmt(variter([]*Node{lhs}, typenod(p.typ()), nil))
+		lhs := dclname(p.sym())
+		typ := typenod(p.typ())
+		return liststmt(variter([]*Node{lhs}, typ, nil)) // TODO(gri) avoid list creation
 
 	// case ODCLFIELD:
 	//	unimplemented
@@ -1137,7 +1194,7 @@ func (p *importer) tagOrIndex() int {
 func (p *importer) int() int {
 	x := p.int64()
 	if int64(int(x)) != x {
-		Fatalf("importer: exported integer too large")
+		formatErrorf("exported integer too large")
 	}
 	return int(x)
 }
@@ -1176,22 +1233,32 @@ func (p *importer) string() string {
 
 func (p *importer) marker(want byte) {
 	if got := p.rawByte(); got != want {
-		Fatalf("importer: incorrect marker: got %c; want %c (pos = %d)", got, want, p.read)
+		formatErrorf("incorrect marker: got %c; want %c (pos = %d)", got, want, p.read)
 	}
 
 	pos := p.read
 	if n := int(p.rawInt64()); n != pos {
-		Fatalf("importer: incorrect position: got %d; want %d", n, pos)
+		formatErrorf("incorrect position: got %d; want %d", n, pos)
 	}
 }
 
-// rawInt64 should only be used by low-level decoders
+// rawInt64 should only be used by low-level decoders.
 func (p *importer) rawInt64() int64 {
 	i, err := binary.ReadVarint(p)
 	if err != nil {
-		Fatalf("importer: read error: %v", err)
+		formatErrorf("read error: %v", err)
 	}
 	return i
+}
+
+// rawStringln should only be used to read the initial version string.
+func (p *importer) rawStringln(b byte) string {
+	p.buf = p.buf[:0]
+	for b != '\n' {
+		p.buf = append(p.buf, b)
+		b = p.rawByte()
+	}
+	return string(p.buf)
 }
 
 // needed for binary.ReadVarint in rawInt64
@@ -1206,13 +1273,13 @@ func (p *importer) rawByte() byte {
 	c, err := p.in.ReadByte()
 	p.read++
 	if err != nil {
-		Fatalf("importer: read error: %v", err)
+		formatErrorf("read error: %v", err)
 	}
 	if c == '|' {
 		c, err = p.in.ReadByte()
 		p.read++
 		if err != nil {
-			Fatalf("importer: read error: %v", err)
+			formatErrorf("read error: %v", err)
 		}
 		switch c {
 		case 'S':
@@ -1220,7 +1287,7 @@ func (p *importer) rawByte() byte {
 		case '|':
 			// nothing to do
 		default:
-			Fatalf("importer: unexpected escape sequence in export data")
+			formatErrorf("unexpected escape sequence in export data")
 		}
 	}
 	return c

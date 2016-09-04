@@ -1,5 +1,5 @@
 // Inferno utils/5l/span.c
-// http://code.google.com/p/inferno-os/source/browse/utils/5l/span.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/5l/span.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -648,7 +648,7 @@ func span5(ctxt *obj.Link, cursym *obj.LSym) {
 	var out [6 + 3]uint32
 	for {
 		if ctxt.Debugvlog != 0 {
-			fmt.Fprintf(ctxt.Bso, "%5.2f span1\n", obj.Cputime())
+			ctxt.Logf("%5.2f span1\n", obj.Cputime())
 		}
 		bflag = 0
 		c = 0

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-func applyRewrite(f *Func, rb func(*Block) bool, rv func(*Value, *Config) bool) {
+func applyRewrite(f *Func, rb func(*Block, *Config) bool, rv func(*Value, *Config) bool) {
 	// repeat rewrites until we find no more rewrites
 	var curb *Block
 	var curv *Value
@@ -34,7 +34,7 @@ func applyRewrite(f *Func, rb func(*Block) bool, rv func(*Value, *Config) bool) 
 				}
 			}
 			curb = b
-			if rb(b) {
+			if rb(b, config) {
 				change = true
 			}
 			curb = nil
@@ -147,6 +147,24 @@ func mergeSym(x, y interface{}) interface{} {
 }
 func canMergeSym(x, y interface{}) bool {
 	return x == nil || y == nil
+}
+
+// isArg returns whether s is an arg symbol
+func isArg(s interface{}) bool {
+	_, ok := s.(*ArgSymbol)
+	return ok
+}
+
+// isAuto returns whether s is an auto symbol
+func isAuto(s interface{}) bool {
+	_, ok := s.(*AutoSymbol)
+	return ok
+}
+
+// isSameSym returns whether sym is the same as the given named symbol
+func isSameSym(sym interface{}, name string) bool {
+	s, ok := sym.(fmt.Stringer)
+	return ok && s.String() == name
 }
 
 // nlz returns the number of leading zeros.

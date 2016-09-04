@@ -589,14 +589,15 @@ func isblanksym(s *Sym) bool {
 	return s != nil && s.Name == "_"
 }
 
-// given receiver of type t (t == r or t == *r)
-// return type to hang methods off (r).
-func methtype(t *Type, mustname int) *Type {
+// methtype returns the underlying type, if any,
+// that owns methods with receiver parameter t.
+// The result is either a named type or an anonymous struct.
+func methtype(t *Type) *Type {
 	if t == nil {
 		return nil
 	}
 
-	// strip away pointer if it's there
+	// Strip away pointer if it's there.
 	if t.IsPtr() {
 		if t.Sym != nil {
 			return nil
@@ -607,29 +608,20 @@ func methtype(t *Type, mustname int) *Type {
 		}
 	}
 
-	// need a type name
-	if t.Sym == nil && (mustname != 0 || !t.IsStruct()) {
+	// Must be a named type or anonymous struct.
+	if t.Sym == nil && !t.IsStruct() {
 		return nil
 	}
 
-	// check types
-	if !issimple[t.Etype] {
-		switch t.Etype {
-		default:
-			return nil
-
-		case TSTRUCT,
-			TARRAY,
-			TSLICE,
-			TMAP,
-			TCHAN,
-			TSTRING,
-			TFUNC:
-			break
-		}
+	// Check types.
+	if issimple[t.Etype] {
+		return t
 	}
-
-	return t
+	switch t.Etype {
+	case TARRAY, TCHAN, TFUNC, TMAP, TSLICE, TSTRING, TSTRUCT:
+		return t
+	}
+	return nil
 }
 
 func cplxsubtype(et EType) EType {
@@ -1487,7 +1479,7 @@ func lookdot0(s *Sym, t *Type, save **Field, ignorecase bool) int {
 		}
 	}
 
-	u = methtype(t, 0)
+	u = methtype(t)
 	if u != nil {
 		for _, f := range u.Methods().Slice() {
 			if f.Embedded == 0 && (f.Sym == s || (ignorecase && strings.EqualFold(f.Sym.Name, s.Name))) {
@@ -1653,7 +1645,7 @@ func expand0(t *Type, followptr bool) {
 		return
 	}
 
-	u = methtype(t, 0)
+	u = methtype(t)
 	if u != nil {
 		for _, f := range u.Methods().Slice() {
 			if f.Sym.Flags&SymUniq != 0 {
@@ -2015,7 +2007,7 @@ func implements(t, iface *Type, m, samename **Field, ptr *int) bool {
 		return true
 	}
 
-	t = methtype(t, 0)
+	t = methtype(t)
 	if t != nil {
 		expandmeth(t)
 	}
@@ -2128,37 +2120,6 @@ func powtwo(n *Node) int {
 	}
 
 	return -1
-}
-
-// return the unsigned type for
-// a signed integer type.
-// returns T if input is not a
-// signed integer type.
-func tounsigned(t *Type) *Type {
-	// this is types[et+1], but not sure
-	// that this relation is immutable
-	switch t.Etype {
-	default:
-		fmt.Printf("tounsigned: unknown type %v\n", t)
-		t = nil
-
-	case TINT:
-		t = Types[TUINT]
-
-	case TINT8:
-		t = Types[TUINT8]
-
-	case TINT16:
-		t = Types[TUINT16]
-
-	case TINT32:
-		t = Types[TUINT32]
-
-	case TINT64:
-		t = Types[TUINT64]
-	}
-
-	return t
 }
 
 func ngotype(n *Node) *Sym {

@@ -171,13 +171,11 @@ func TestTypesInfo(t *testing.T) {
 			`x.(int)`,
 			`(int, bool)`,
 		},
-		// TODO(gri): uncomment if we accept issue 8189.
-		// {`package p2; type mybool bool; var m map[string]complex128; var b mybool; func _() { _, b = m["foo"] }`,
-		// 	`m["foo"]`,
-		// 	`(complex128, p2.mybool)`,
-		// },
-		// TODO(gri): remove if we accept issue 8189.
-		{`package p2; var m map[string]complex128; var b bool; func _() { _, b = m["foo"] }`,
+		{`package p2a; type mybool bool; var m map[string]complex128; var b mybool; func _() { _, b = m["foo"] }`,
+			`m["foo"]`,
+			`(complex128, p2a.mybool)`,
+		},
+		{`package p2b; var m map[string]complex128; var b bool; func _() { _, b = m["foo"] }`,
 			`m["foo"]`,
 			`(complex128, bool)`,
 		},
@@ -1018,7 +1016,11 @@ func TestScopeLookupParent(t *testing.T) {
 	}
 	var info Info
 	makePkg := func(path string, files ...*ast.File) {
-		imports[path], _ = conf.Check(path, fset, files, &info)
+		var err error
+		imports[path], err = conf.Check(path, fset, files, &info)
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	makePkg("lib", mustParse("package lib; var X int"))
@@ -1026,17 +1028,44 @@ func TestScopeLookupParent(t *testing.T) {
 	// name at that point and checks that it resolves to a decl of
 	// the specified kind and line number.  "undef" means undefined.
 	mainSrc := `
+/*lib=pkgname:5*/ /*X=var:1*/ /*Pi=const:8*/ /*T=typename:9*/ /*Y=var:10*/ /*F=func:12*/
 package main
+
 import "lib"
-var Y = lib.X
-func f() {
-	print(Y) /*Y=var:4*/
-	z /*z=undef*/ := /*z=undef*/ 1 /*z=var:7*/
-	print(z)
-	/*f=func:5*/ /*lib=pkgname:3*/
-	type /*T=undef*/ T /*T=typename:10*/ *T
+import . "lib"
+
+const Pi = 3.1415
+type T struct{}
+var Y, _ = lib.X, X
+
+func F(){
+	const pi, e = 3.1415, /*pi=undef*/ 2.71828 /*pi=const:13*/ /*e=const:13*/
+	type /*t=undef*/ t /*t=typename:14*/ *t
+	print(Y) /*Y=var:10*/
+	x, Y := Y, /*x=undef*/ /*Y=var:10*/ Pi /*x=var:16*/ /*Y=var:16*/ ; _ = x; _ = Y
+	var F = /*F=func:12*/ F /*F=var:17*/ ; _ = F
+
+	var a []int
+	for i, x := range /*i=undef*/ /*x=var:16*/ a /*i=var:20*/ /*x=var:20*/ { _ = i; _ = x }
+
+	var i interface{}
+	switch y := i.(type) { /*y=undef*/
+	case /*y=undef*/ int /*y=var:23*/ :
+	case float32, /*y=undef*/ float64 /*y=var:23*/ :
+	default /*y=var:23*/:
+		println(y)
+	}
+	/*y=undef*/
+
+        switch int := i.(type) {
+        case /*int=typename:0*/ int /*int=var:31*/ :
+        	println(int)
+        default /*int=var:31*/ :
+        }
 }
+/*main=undef*/
 `
+
 	info.Uses = make(map[*ast.Ident]Object)
 	f := mustParse(mainSrc)
 	makePkg("main", f)
@@ -1141,4 +1170,128 @@ func TestIssue15305(t *testing.T) {
 		}
 	}
 	t.Errorf("CallExpr has no type")
+}
+
+// TestCompositeLitTypes verifies that Info.Types registers the correct
+// types for composite literal expressions and composite literal type
+// expressions.
+func TestCompositeLitTypes(t *testing.T) {
+	for _, test := range []struct {
+		lit, typ string
+	}{
+		{`[16]byte{}`, `[16]byte`},
+		{`[...]byte{}`, `[0]byte`},                // test for issue #14092
+		{`[...]int{1, 2, 3}`, `[3]int`},           // test for issue #14092
+		{`[...]int{90: 0, 98: 1, 2}`, `[100]int`}, // test for issue #14092
+		{`[]int{}`, `[]int`},
+		{`map[string]bool{"foo": true}`, `map[string]bool`},
+		{`struct{}{}`, `struct{}`},
+		{`struct{x, y int; z complex128}{}`, `struct{x int; y int; z complex128}`},
+	} {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, test.lit, "package p; var _ = "+test.lit, 0)
+		if err != nil {
+			t.Fatalf("%s: %v", test.lit, err)
+		}
+
+		info := &Info{
+			Types: make(map[ast.Expr]TypeAndValue),
+		}
+		if _, err = new(Config).Check("p", fset, []*ast.File{f}, info); err != nil {
+			t.Fatalf("%s: %v", test.lit, err)
+		}
+
+		cmptype := func(x ast.Expr, want string) {
+			tv, ok := info.Types[x]
+			if !ok {
+				t.Errorf("%s: no Types entry found", test.lit)
+				return
+			}
+			if tv.Type == nil {
+				t.Errorf("%s: type is nil", test.lit)
+				return
+			}
+			if got := tv.Type.String(); got != want {
+				t.Errorf("%s: got %v, want %s", test.lit, got, want)
+			}
+		}
+
+		// test type of composite literal expression
+		rhs := f.Decls[0].(*ast.GenDecl).Specs[0].(*ast.ValueSpec).Values[0]
+		cmptype(rhs, test.typ)
+
+		// test type of composite literal type expression
+		cmptype(rhs.(*ast.CompositeLit).Type, test.typ)
+	}
+}
+
+// TestObjectParents verifies that objects have parent scopes or not
+// as specified by the Object interface.
+func TestObjectParents(t *testing.T) {
+	const src = `
+package p
+
+const C = 0
+
+type T1 struct {
+	a, b int
+	T2
+}
+
+type T2 interface {
+	im1()
+	im2()
+}
+
+func (T1) m1() {}
+func (*T1) m2() {}
+
+func f(x int) { y := x; print(y) }
+`
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "src", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	info := &Info{
+		Defs: make(map[*ast.Ident]Object),
+	}
+	if _, err = new(Config).Check("p", fset, []*ast.File{f}, info); err != nil {
+		t.Fatal(err)
+	}
+
+	for ident, obj := range info.Defs {
+		if obj == nil {
+			// only package names and implicit vars have a nil object
+			// (in this test we only need to handle the package name)
+			if ident.Name != "p" {
+				t.Errorf("%v has nil object", ident)
+			}
+			continue
+		}
+
+		// struct fields, type-associated and interface methods
+		// have no parent scope
+		wantParent := true
+		switch obj := obj.(type) {
+		case *Var:
+			if obj.IsField() {
+				wantParent = false
+			}
+		case *Func:
+			if obj.Type().(*Signature).Recv() != nil { // method
+				wantParent = false
+			}
+		}
+
+		gotParent := obj.Parent() != nil
+		switch {
+		case gotParent && !wantParent:
+			t.Errorf("%v: want no parent, got %s", ident, obj.Parent())
+		case !gotParent && wantParent:
+			t.Errorf("%v: no parent found", ident)
+		}
+	}
 }

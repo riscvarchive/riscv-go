@@ -15,14 +15,27 @@ package gc
 import (
 	"bufio"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
 
 const trace = false // if set, parse tracing can be enabled with -x
 
-// parse_file parses a single Go source file.
-func parse_file(bin *bufio.Reader) {
+// oldParseFile parses a single Go source file.
+func oldParseFile(infile string) {
+	f, err := os.Open(infile)
+	if err != nil {
+		fmt.Printf("open %s: %v\n", infile, err)
+		errorexit()
+	}
+	defer f.Close()
+	bin := bufio.NewReader(f)
+
+	// Skip initial BOM if present.
+	if r, _, _ := bin.ReadRune(); r != BOM {
+		bin.UnreadRune()
+	}
 	newparser(bin, nil).file()
 }
 
@@ -1878,7 +1891,7 @@ func (p *parser) fndcl() *Node {
 
 		f := Nod(ODCLFUNC, nil, nil)
 		f.Func.Shortname = newfuncname(name)
-		f.Func.Nname = methodname1(f.Func.Shortname, recv.Right)
+		f.Func.Nname = methodname(f.Func.Shortname, recv.Right)
 		f.Func.Nname.Name.Defn = f
 		f.Func.Nname.Name.Param.Ntype = t
 		declare(f.Func.Nname, PFUNC)

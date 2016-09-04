@@ -106,12 +106,6 @@ TEXT _cgo_reginit(SB),NOSPLIT|NOFRAME,$0-0
 TEXT runtime·reginit(SB),NOSPLIT|NOFRAME,$0-0
 	// set R0 to zero, it's expected by the toolchain
 	XOR R0, R0
-	// initialize essential FP registers
-	FMOVD	$4503601774854144.0, F27
-	FMOVD	$0.5, F29
-	FSUB	F29, F29, F28
-	FADD	F29, F29, F30
-	FADD	F30, F30, F31
 	RET
 
 /*
@@ -908,14 +902,14 @@ equal:
 // See runtime_test.go:eqstring_generic for
 // equivalent Go code.
 TEXT runtime·eqstring(SB),NOSPLIT,$0-33
-	MOVD    s1str+0(FP), R3
-	MOVD    s2str+16(FP), R4
+	MOVD    s1_base+0(FP), R3
+	MOVD    s2_base+16(FP), R4
 	MOVD    $1, R5
 	MOVB    R5, ret+32(FP)
 	CMP     R3, R4
 	BNE     2(PC)
 	RET
-	MOVD    s1len+8(FP), R5
+	MOVD    s1_len+8(FP), R5
 	BL      runtime·memeqbody(SB)
 	MOVB    R9, ret+32(FP)
 	RET
@@ -1048,7 +1042,7 @@ samebytes:
 	MOVD	R8, (R7)
 	RET
 
-TEXT runtime·fastrand1(SB), NOSPLIT, $0-4
+TEXT runtime·fastrand(SB), NOSPLIT, $0-4
 	MOVD	g_m(g), R4
 	MOVWZ	m_fastrand(R4), R3
 	ADD	R3, R3
@@ -1109,8 +1103,8 @@ TEXT runtime·prefetcht2(SB),NOSPLIT,$0-8
 TEXT runtime·prefetchnta(SB),NOSPLIT,$0-8
 	RET
 
-TEXT runtime·sigreturn(SB),NOSPLIT,$0-8
-        RET
+TEXT runtime·sigreturn(SB),NOSPLIT,$0-0
+	RET
 
 // prepGoExitFrame saves the current TOC pointer (i.e. the TOC pointer for the
 // module containing runtime) to the frame that goexit will execute in when

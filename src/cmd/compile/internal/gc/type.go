@@ -153,7 +153,6 @@ type Type struct {
 	Etype      EType // kind of type
 	Noalg      bool  // suppress hash and eq algorithm generation
 	Trecur     uint8 // to detect loops
-	Printed    bool  // prevent duplicate export printing
 	Local      bool  // created in this file
 	Deferwidth bool
 	Broke      bool  // broken type definition.
@@ -570,9 +569,9 @@ func substAny(t *Type, types *[]*Type) *Type {
 				results = results.Copy()
 			}
 			t = t.Copy()
-			*t.RecvsP() = recvs
-			*t.ResultsP() = results
-			*t.ParamsP() = params
+			t.FuncType().Receiver = recvs
+			t.FuncType().Results = results
+			t.FuncType().Params = params
 		}
 
 	case TSTRUCT:
@@ -677,30 +676,9 @@ func (t *Type) wantEtype(et EType) {
 	}
 }
 
-func (t *Type) wantEtype2(et1, et2 EType) {
-	if t.Etype != et1 && t.Etype != et2 {
-		Fatalf("want %v or %v, but have %v", et1, et2, t)
-	}
-}
-
-func (t *Type) RecvsP() **Type {
-	t.wantEtype(TFUNC)
-	return &t.Extra.(*FuncType).Receiver
-}
-
-func (t *Type) ParamsP() **Type {
-	t.wantEtype(TFUNC)
-	return &t.Extra.(*FuncType).Params
-}
-
-func (t *Type) ResultsP() **Type {
-	t.wantEtype(TFUNC)
-	return &t.Extra.(*FuncType).Results
-}
-
-func (t *Type) Recvs() *Type   { return *t.RecvsP() }
-func (t *Type) Params() *Type  { return *t.ParamsP() }
-func (t *Type) Results() *Type { return *t.ResultsP() }
+func (t *Type) Recvs() *Type   { return t.FuncType().Receiver }
+func (t *Type) Params() *Type  { return t.FuncType().Params }
+func (t *Type) Results() *Type { return t.FuncType().Results }
 
 // Recv returns the receiver of function type t, if any.
 func (t *Type) Recv() *Field {
@@ -1074,6 +1052,28 @@ func (t *Type) IsKind(et EType) bool {
 
 func (t *Type) IsBoolean() bool {
 	return t.Etype == TBOOL
+}
+
+var unsignedEType = [...]EType{
+	TINT8:    TUINT8,
+	TUINT8:   TUINT8,
+	TINT16:   TUINT16,
+	TUINT16:  TUINT16,
+	TINT32:   TUINT32,
+	TUINT32:  TUINT32,
+	TINT64:   TUINT64,
+	TUINT64:  TUINT64,
+	TINT:     TUINT,
+	TUINT:    TUINT,
+	TUINTPTR: TUINTPTR,
+}
+
+// toUnsigned returns the unsigned equivalent of integer type t.
+func (t *Type) toUnsigned() *Type {
+	if !t.IsInteger() {
+		Fatalf("unsignedType(%v)", t)
+	}
+	return Types[unsignedEType[t.Etype]]
 }
 
 func (t *Type) IsInteger() bool {

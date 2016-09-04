@@ -5,6 +5,7 @@
 package os_test
 
 import (
+	"internal/testenv"
 	"io/ioutil"
 	"os"
 	osexec "os/exec"
@@ -18,22 +19,6 @@ import (
 var supportJunctionLinks = true
 
 func init() {
-	tmpdir, err := ioutil.TempDir("", "symtest")
-	if err != nil {
-		panic("failed to create temp directory: " + err.Error())
-	}
-	defer os.RemoveAll(tmpdir)
-
-	err = os.Symlink("target", filepath.Join(tmpdir, "symlink"))
-	if err != nil {
-		err = err.(*os.LinkError).Err
-		switch err {
-		case syscall.EWINDOWS, syscall.ERROR_PRIVILEGE_NOT_HELD:
-			supportsSymlinks = false
-		}
-	}
-	defer os.Remove("target")
-
 	b, _ := osexec.Command("cmd", "/c", "mklink", "/?").Output()
 	if !strings.Contains(string(b), " /J ") {
 		supportJunctionLinks = false
@@ -243,5 +228,28 @@ func TestDeleteReadOnly(t *testing.T) {
 	}
 	if err = os.Remove(p); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestStatSymlinkLoop(t *testing.T) {
+	testenv.MustHaveSymlink(t)
+
+	defer chtmpdir(t)()
+
+	err := os.Symlink("x", "y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("y")
+
+	err = os.Symlink("y", "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("x")
+
+	_, err = os.Stat("x")
+	if perr, ok := err.(*os.PathError); !ok || perr.Err != syscall.ELOOP {
+		t.Errorf("expected *PathError with ELOOP, got %T: %v\n", err, err)
 	}
 }

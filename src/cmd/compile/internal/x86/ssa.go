@@ -196,17 +196,17 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 
 	case ssa.Op386ADDLcarry, ssa.Op386SUBLcarry:
 		// output 0 is carry/borrow, output 1 is the low 32 bits.
-		r := gc.SSARegNum1(v)
+		r := gc.SSARegNum0(v)
 		if r != gc.SSARegNum(v.Args[0]) {
-			v.Fatalf("input[0] and output[1] not in same register %s", v.LongString())
+			v.Fatalf("input[0] and output[0] not in same register %s", v.LongString())
 		}
 		opregreg(v.Op.Asm(), r, gc.SSARegNum(v.Args[1]))
 
 	case ssa.Op386ADDLconstcarry, ssa.Op386SUBLconstcarry:
 		// output 0 is carry/borrow, output 1 is the low 32 bits.
-		r := gc.SSARegNum1(v)
+		r := gc.SSARegNum0(v)
 		if r != gc.SSARegNum(v.Args[0]) {
-			v.Fatalf("input[0] and output[1] not in same register %s", v.LongString())
+			v.Fatalf("input[0] and output[0] not in same register %s", v.LongString())
 		}
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST
@@ -818,17 +818,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	case ssa.OpVarLive:
 		gc.Gvarlive(v.Aux.(*gc.Node))
 	case ssa.OpKeepAlive:
-		if !v.Args[0].Type.IsPtrShaped() {
-			v.Fatalf("keeping non-pointer alive %v", v.Args[0])
-		}
-		n, off := gc.AutoVar(v.Args[0])
-		if n == nil {
-			v.Fatalf("KeepLive with non-spilled value %s %s", v, v.Args[0])
-		}
-		if off != 0 {
-			v.Fatalf("KeepLive with non-zero offset spill location %s:%d", n, off)
-		}
-		gc.Gvarlive(n)
+		gc.KeepAlive(v)
 	case ssa.Op386LoweredNilCheck:
 		// Optimization - if the subsequent block has a load or store
 		// at the same address, we don't need to issue this instruction.

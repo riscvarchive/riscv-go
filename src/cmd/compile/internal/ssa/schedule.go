@@ -84,7 +84,7 @@ func schedule(f *Func) {
 		// Compute score. Larger numbers are scheduled closer to the end of the block.
 		for _, v := range b.Values {
 			switch {
-			case v.Op == OpAMD64LoweredGetClosurePtr || v.Op == OpPPC64LoweredGetClosurePtr || v.Op == OpARMLoweredGetClosurePtr || v.Op == OpARM64LoweredGetClosurePtr || v.Op == Op386LoweredGetClosurePtr:
+			case v.Op == OpAMD64LoweredGetClosurePtr || v.Op == OpPPC64LoweredGetClosurePtr || v.Op == OpARMLoweredGetClosurePtr || v.Op == OpARM64LoweredGetClosurePtr || v.Op == Op386LoweredGetClosurePtr || v.Op == OpMIPS64LoweredGetClosurePtr:
 				// We also score GetLoweredClosurePtr as early as possible to ensure that the
 				// context register is not stomped. GetLoweredClosurePtr should only appear
 				// in the entry block where there are no phi functions, so there is no
@@ -128,9 +128,13 @@ func schedule(f *Func) {
 		// the calculated store chain is good only for this block.
 		for _, v := range b.Values {
 			if v.Op != OpPhi && v.Type.IsMemory() {
+				mem := v
+				if v.Op == OpSelect1 {
+					v = v.Args[0]
+				}
 				for _, w := range v.Args {
 					if w.Type.IsMemory() {
-						nextMem[w.ID] = v
+						nextMem[w.ID] = mem
 					}
 				}
 			}

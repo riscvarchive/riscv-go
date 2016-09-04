@@ -1340,15 +1340,15 @@ eq:
 // See runtime_test.go:eqstring_generic for
 // equivalent Go code.
 TEXT runtime·eqstring(SB),NOSPLIT,$0-33
-	MOVQ	s1str+0(FP), SI
-	MOVQ	s2str+16(FP), DI
+	MOVQ	s1_base+0(FP), SI
+	MOVQ	s2_base+16(FP), DI
 	CMPQ	SI, DI
 	JEQ	eq
-	MOVQ	s1len+8(FP), BX
-	LEAQ	v+32(FP), AX
+	MOVQ	s1_len+8(FP), BX
+	LEAQ	ret+32(FP), AX
 	JMP	runtime·memeqbody(SB)
 eq:
-	MOVB	$1, v+32(FP)
+	MOVB	$1, ret+32(FP)
 	RET
 
 // a in SI
@@ -1695,13 +1695,31 @@ big_loop_avx2_exit:
 	JMP loop
 
 
-// TODO: Also use this in bytes.Index
 TEXT strings·indexShortStr(SB),NOSPLIT,$0-40
 	MOVQ s+0(FP), DI
 	// We want len in DX and AX, because PCMPESTRI implicitly consumes them
 	MOVQ s_len+8(FP), DX
 	MOVQ c+16(FP), BP
 	MOVQ c_len+24(FP), AX
+	MOVQ DI, R10
+	LEAQ ret+32(FP), R11
+	JMP  runtime·indexShortStr(SB)
+
+TEXT bytes·indexShortStr(SB),NOSPLIT,$0-56
+	MOVQ s+0(FP), DI
+	MOVQ s_len+8(FP), DX
+	MOVQ c+24(FP), BP
+	MOVQ c_len+32(FP), AX
+	MOVQ DI, R10
+	LEAQ ret+48(FP), R11
+	JMP  runtime·indexShortStr(SB)
+
+// AX: length of string, that we are searching for
+// DX: length of string, in which we are searching
+// DI: pointer to string, in which we are searching
+// BP: pointer to string, that we are searching for
+// R11: address, where to put return value
+TEXT runtime·indexShortStr(SB),NOSPLIT,$0
 	CMPQ AX, DX
 	JA fail
 	CMPQ DX, $16
@@ -1853,7 +1871,7 @@ partial_success17to31:
 	CMPQ DI,DX
 	JB loop17to31
 fail:
-	MOVQ $-1, ret+32(FP)
+	MOVQ $-1, (R11)
 	RET
 sse42:
 	MOVL runtime·cpuid_ecx(SB), CX
@@ -1893,8 +1911,8 @@ loop_sse42:
 sse42_success:
 	ADDQ CX, DI
 success:
-	SUBQ s+0(FP), DI
-	MOVQ DI, ret+32(FP)
+	SUBQ R10, DI
+	MOVQ DI, (R11)
 	RET
 
 
@@ -2052,7 +2070,7 @@ eqret:
 	MOVB	$0, ret+48(FP)
 	RET
 
-TEXT runtime·fastrand1(SB), NOSPLIT, $0-4
+TEXT runtime·fastrand(SB), NOSPLIT, $0-4
 	get_tls(CX)
 	MOVQ	g(CX), AX
 	MOVQ	g_m(AX), AX

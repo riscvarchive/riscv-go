@@ -616,7 +616,7 @@ func (c *gcControllerState) enlistWorker() {
 	}
 	myID := gp.m.p.ptr().id
 	for tries := 0; tries < 5; tries++ {
-		id := int32(fastrand1() % uint32(gomaxprocs-1))
+		id := int32(fastrand() % uint32(gomaxprocs-1))
 		if id >= myID {
 			id++
 		}
@@ -1073,9 +1073,8 @@ top:
 		// Transition from mark 1 to mark 2.
 		//
 		// The global work list is empty, but there can still be work
-		// sitting in the per-P work caches and there can be more
-		// objects reachable from global roots since they don't have write
-		// barriers. Rescan some roots and flush work caches.
+		// sitting in the per-P work caches.
+		// Flush and disable work caches.
 
 		gcMarkRootCheck()
 
@@ -1095,8 +1094,7 @@ top:
 			// ensure all Ps see gcBlackenPromptly. This
 			// also blocks until any remaining mark 1
 			// workers have exited their loop so we can
-			// start new mark 2 workers that will observe
-			// the new root marking jobs.
+			// start new mark 2 workers.
 			forEachP(func(_p_ *p) {
 				_p_.gcw.dispose()
 			})

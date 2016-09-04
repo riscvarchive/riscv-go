@@ -1,6 +1,6 @@
 // Derived from Inferno utils/6l/obj.c and utils/6l/span.c
-// http://code.google.com/p/inferno-os/source/browse/utils/6l/obj.c
-// http://code.google.com/p/inferno-os/source/browse/utils/6l/span.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6l/obj.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6l/span.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -58,12 +58,12 @@ var headers = []struct {
 
 func linknew(arch *sys.Arch) *Link {
 	ctxt := &Link{
-		Hash: []map[string]*LSym{
+		Hash: []map[string]*Symbol{
 			// preallocate about 2mb for hash of
 			// non static symbols
-			make(map[string]*LSym, 100000),
+			make(map[string]*Symbol, 100000),
 		},
-		Allsym: make([]*LSym, 0, 100000),
+		Allsym: make([]*Symbol, 0, 100000),
 		Arch:   arch,
 		Goroot: obj.Getgoroot(),
 	}
@@ -160,13 +160,13 @@ func linknew(arch *sys.Arch) *Link {
 	return ctxt
 }
 
-func linknewsym(ctxt *Link, name string, v int) *LSym {
-	batch := ctxt.LSymBatch
+func linknewsym(ctxt *Link, name string, v int) *Symbol {
+	batch := ctxt.SymbolBatch
 	if len(batch) == 0 {
-		batch = make([]LSym, 1000)
+		batch = make([]Symbol, 1000)
 	}
 	s := &batch[0]
-	ctxt.LSymBatch = batch[1:]
+	ctxt.SymbolBatch = batch[1:]
 
 	s.Dynid = -1
 	s.Plt = -1
@@ -178,7 +178,7 @@ func linknewsym(ctxt *Link, name string, v int) *LSym {
 	return s
 }
 
-func Linklookup(ctxt *Link, name string, v int) *LSym {
+func Linklookup(ctxt *Link, name string, v int) *Symbol {
 	m := ctxt.Hash[v]
 	s := m[name]
 	if s != nil {
@@ -191,7 +191,7 @@ func Linklookup(ctxt *Link, name string, v int) *LSym {
 }
 
 // read-only lookup
-func Linkrlookup(ctxt *Link, name string, v int) *LSym {
+func Linkrlookup(ctxt *Link, name string, v int) *Symbol {
 	return ctxt.Hash[v][name]
 }
 

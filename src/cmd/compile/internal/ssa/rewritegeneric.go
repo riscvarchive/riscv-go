@@ -232,6 +232,8 @@ func rewriteValuegeneric(v *Value, config *Config) bool {
 		return rewriteValuegeneric_OpNeqPtr(v, config)
 	case OpNeqSlice:
 		return rewriteValuegeneric_OpNeqSlice(v, config)
+	case OpNot:
+		return rewriteValuegeneric_OpNot(v, config)
 	case OpOffPtr:
 		return rewriteValuegeneric_OpOffPtr(v, config)
 	case OpOr16:
@@ -316,6 +318,8 @@ func rewriteValuegeneric(v *Value, config *Config) bool {
 		return rewriteValuegeneric_OpSliceLen(v, config)
 	case OpSlicePtr:
 		return rewriteValuegeneric_OpSlicePtr(v, config)
+	case OpSqrt:
+		return rewriteValuegeneric_OpSqrt(v, config)
 	case OpStore:
 		return rewriteValuegeneric_OpStore(v, config)
 	case OpStringLen:
@@ -356,6 +360,8 @@ func rewriteValuegeneric(v *Value, config *Config) bool {
 		return rewriteValuegeneric_OpXor64(v, config)
 	case OpXor8:
 		return rewriteValuegeneric_OpXor8(v, config)
+	case OpZero:
+		return rewriteValuegeneric_OpZero(v, config)
 	}
 	return false
 }
@@ -6352,6 +6358,641 @@ func rewriteValuegeneric_OpNeqSlice(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValuegeneric_OpNot(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Not (Eq64 x y))
+	// cond:
+	// result: (Neq64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpEq64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpNeq64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Eq32 x y))
+	// cond:
+	// result: (Neq32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpEq32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpNeq32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Eq16 x y))
+	// cond:
+	// result: (Neq16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpEq16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpNeq16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Eq8  x y))
+	// cond:
+	// result: (Neq8  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpEq8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpNeq8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (EqB  x y))
+	// cond:
+	// result: (NeqB  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpEqB {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpNeqB)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Neq64 x y))
+	// cond:
+	// result: (Eq64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpNeq64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpEq64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Neq32 x y))
+	// cond:
+	// result: (Eq32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpNeq32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpEq32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Neq16 x y))
+	// cond:
+	// result: (Eq16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpNeq16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpEq16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Neq8  x y))
+	// cond:
+	// result: (Eq8  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpNeq8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpEq8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (NeqB  x y))
+	// cond:
+	// result: (EqB  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpNeqB {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpEqB)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater64 x y))
+	// cond:
+	// result: (Leq64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater32 x y))
+	// cond:
+	// result: (Leq32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater16 x y))
+	// cond:
+	// result: (Leq16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater8  x y))
+	// cond:
+	// result: (Leq8  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater64U x y))
+	// cond:
+	// result: (Leq64U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater64U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq64U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater32U x y))
+	// cond:
+	// result: (Leq32U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater32U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq32U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater16U x y))
+	// cond:
+	// result: (Leq16U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater16U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq16U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Greater8U  x y))
+	// cond:
+	// result: (Leq8U  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGreater8U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLeq8U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq64 x y))
+	// cond:
+	// result: (Less64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq32 x y))
+	// cond:
+	// result: (Less32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq16 x y))
+	// cond:
+	// result: (Less16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq8  x y))
+	// cond:
+	// result: (Less8  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq64U x y))
+	// cond:
+	// result: (Less64U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq64U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess64U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq32U x y))
+	// cond:
+	// result: (Less32U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq32U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess32U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq16U x y))
+	// cond:
+	// result: (Less16U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq16U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess16U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Geq8U  x y))
+	// cond:
+	// result: (Less8U  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpGeq8U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpLess8U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less64 x y))
+	// cond:
+	// result: (Geq64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less32 x y))
+	// cond:
+	// result: (Geq32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less16 x y))
+	// cond:
+	// result: (Geq16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less8  x y))
+	// cond:
+	// result: (Geq8  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less64U x y))
+	// cond:
+	// result: (Geq64U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess64U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq64U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less32U x y))
+	// cond:
+	// result: (Geq32U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess32U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq32U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less16U x y))
+	// cond:
+	// result: (Geq16U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess16U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq16U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Less8U  x y))
+	// cond:
+	// result: (Geq8U  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLess8U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGeq8U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq64 x y))
+	// cond:
+	// result: (Greater64 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq64 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater64)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq32 x y))
+	// cond:
+	// result: (Greater32 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq32 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater32)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq16 x y))
+	// cond:
+	// result: (Greater16 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq16 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater16)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq8  x y))
+	// cond:
+	// result: (Greater8 x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq8 {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater8)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq64U x y))
+	// cond:
+	// result: (Greater64U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq64U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater64U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq32U x y))
+	// cond:
+	// result: (Greater32U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq32U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater32U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq16U x y))
+	// cond:
+	// result: (Greater16U x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq16U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater16U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	// match: (Not (Leq8U  x y))
+	// cond:
+	// result: (Greater8U  x y)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLeq8U {
+			break
+		}
+		x := v_0.Args[0]
+		y := v_0.Args[1]
+		v.reset(OpGreater8U)
+		v.AddArg(x)
+		v.AddArg(y)
+		return true
+	}
+	return false
+}
 func rewriteValuegeneric_OpOffPtr(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -9032,6 +9673,24 @@ func rewriteValuegeneric_OpSlicePtr(v *Value, config *Config) bool {
 	}
 	return false
 }
+func rewriteValuegeneric_OpSqrt(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Sqrt (Const64F [c]))
+	// cond:
+	// result: (Const64F [f2i(math.Sqrt(i2f(c)))])
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpConst64F {
+			break
+		}
+		c := v_0.AuxInt
+		v.reset(OpConst64F)
+		v.AuxInt = f2i(math.Sqrt(i2f(c)))
+		return true
+	}
+	return false
+}
 func rewriteValuegeneric_OpStore(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -9951,6 +10610,34 @@ func rewriteValuegeneric_OpTrunc16to8(v *Value, config *Config) bool {
 		v.AuxInt = int64(int8(c))
 		return true
 	}
+	// match: (Trunc16to8  (ZeroExt8to16  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to16 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc16to8  (SignExt8to16  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to16 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
 	// match: (Trunc16to8  (And16 (Const16 [y]) x))
 	// cond: y&0xFF == 0xFF
 	// result: (Trunc16to8 x)
@@ -9988,6 +10675,60 @@ func rewriteValuegeneric_OpTrunc32to16(v *Value, config *Config) bool {
 		c := v_0.AuxInt
 		v.reset(OpConst16)
 		v.AuxInt = int64(int16(c))
+		return true
+	}
+	// match: (Trunc32to16 (ZeroExt8to32  x))
+	// cond:
+	// result: (ZeroExt8to16  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpZeroExt8to16)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc32to16 (ZeroExt16to32 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt16to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc32to16 (SignExt8to32  x))
+	// cond:
+	// result: (SignExt8to16  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpSignExt8to16)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc32to16 (SignExt16to32 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt16to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
 		return true
 	}
 	// match: (Trunc32to16 (And32 (Const32 [y]) x))
@@ -10029,6 +10770,34 @@ func rewriteValuegeneric_OpTrunc32to8(v *Value, config *Config) bool {
 		v.AuxInt = int64(int8(c))
 		return true
 	}
+	// match: (Trunc32to8  (ZeroExt8to32  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc32to8  (SignExt8to32  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to32 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
 	// match: (Trunc32to8  (And32 (Const32 [y]) x))
 	// cond: y&0xFF == 0xFF
 	// result: (Trunc32to8 x)
@@ -10066,6 +10835,60 @@ func rewriteValuegeneric_OpTrunc64to16(v *Value, config *Config) bool {
 		c := v_0.AuxInt
 		v.reset(OpConst16)
 		v.AuxInt = int64(int16(c))
+		return true
+	}
+	// match: (Trunc64to16 (ZeroExt8to64  x))
+	// cond:
+	// result: (ZeroExt8to16  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpZeroExt8to16)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to16 (ZeroExt16to64 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt16to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to16 (SignExt8to64  x))
+	// cond:
+	// result: (SignExt8to16  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpSignExt8to16)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to16 (SignExt16to64 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt16to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
 		return true
 	}
 	// match: (Trunc64to16 (And64 (Const64 [y]) x))
@@ -10107,6 +10930,86 @@ func rewriteValuegeneric_OpTrunc64to32(v *Value, config *Config) bool {
 		v.AuxInt = int64(int32(c))
 		return true
 	}
+	// match: (Trunc64to32 (ZeroExt8to64  x))
+	// cond:
+	// result: (ZeroExt8to32  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpZeroExt8to32)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to32 (ZeroExt16to64 x))
+	// cond:
+	// result: (ZeroExt16to32 x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt16to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpZeroExt16to32)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to32 (ZeroExt32to64 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt32to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to32 (SignExt8to64  x))
+	// cond:
+	// result: (SignExt8to32  x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpSignExt8to32)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to32 (SignExt16to64 x))
+	// cond:
+	// result: (SignExt16to32 x)
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt16to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpSignExt16to32)
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to32 (SignExt32to64 x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt32to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
 	// match: (Trunc64to32 (And64 (Const64 [y]) x))
 	// cond: y&0xFFFFFFFF == 0xFFFFFFFF
 	// result: (Trunc64to32 x)
@@ -10144,6 +11047,34 @@ func rewriteValuegeneric_OpTrunc64to8(v *Value, config *Config) bool {
 		c := v_0.AuxInt
 		v.reset(OpConst8)
 		v.AuxInt = int64(int8(c))
+		return true
+	}
+	// match: (Trunc64to8  (ZeroExt8to64  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpZeroExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
+	// match: (Trunc64to8  (SignExt8to64  x))
+	// cond:
+	// result: x
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpSignExt8to64 {
+			break
+		}
+		x := v_0.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
 		return true
 	}
 	// match: (Trunc64to8  (And64 (Const64 [y]) x))
@@ -10677,7 +11608,43 @@ func rewriteValuegeneric_OpXor8(v *Value, config *Config) bool {
 	}
 	return false
 }
-func rewriteBlockgeneric(b *Block) bool {
+func rewriteValuegeneric_OpZero(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Zero (Load (OffPtr [c] (SP)) mem:(StaticCall {sym} _)) mem2)
+	// cond: c == config.ctxt.FixedFrameSize() + config.PtrSize 	&& mem2 == mem 	&& isSameSym(sym, "runtime.newobject")
+	// result: mem
+	for {
+		v_0 := v.Args[0]
+		if v_0.Op != OpLoad {
+			break
+		}
+		v_0_0 := v_0.Args[0]
+		if v_0_0.Op != OpOffPtr {
+			break
+		}
+		c := v_0_0.AuxInt
+		v_0_0_0 := v_0_0.Args[0]
+		if v_0_0_0.Op != OpSP {
+			break
+		}
+		mem := v_0.Args[1]
+		if mem.Op != OpStaticCall {
+			break
+		}
+		sym := mem.Aux
+		mem2 := v.Args[1]
+		if !(c == config.ctxt.FixedFrameSize()+config.PtrSize && mem2 == mem && isSameSym(sym, "runtime.newobject")) {
+			break
+		}
+		v.reset(OpCopy)
+		v.Type = mem.Type
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteBlockgeneric(b *Block, config *Config) bool {
 	switch b.Kind {
 	case BlockCheck:
 		// match: (Check (NilCheck (GetG _) _) next)
@@ -10696,6 +11663,80 @@ func rewriteBlockgeneric(b *Block) bool {
 			b.Kind = BlockPlain
 			b.SetControl(nil)
 			_ = next
+			return true
+		}
+		// match: (Check (NilCheck (Load (OffPtr [c] (SP)) mem:(StaticCall {sym} _)) _) succ)
+		// cond: c == config.ctxt.FixedFrameSize() + config.PtrSize 	&& isSameSym(sym, "runtime.newobject")
+		// result: (Plain nil succ)
+		for {
+			v := b.Control
+			if v.Op != OpNilCheck {
+				break
+			}
+			v_0 := v.Args[0]
+			if v_0.Op != OpLoad {
+				break
+			}
+			v_0_0 := v_0.Args[0]
+			if v_0_0.Op != OpOffPtr {
+				break
+			}
+			c := v_0_0.AuxInt
+			v_0_0_0 := v_0_0.Args[0]
+			if v_0_0_0.Op != OpSP {
+				break
+			}
+			mem := v_0.Args[1]
+			if mem.Op != OpStaticCall {
+				break
+			}
+			sym := mem.Aux
+			succ := b.Succs[0]
+			if !(c == config.ctxt.FixedFrameSize()+config.PtrSize && isSameSym(sym, "runtime.newobject")) {
+				break
+			}
+			b.Kind = BlockPlain
+			b.SetControl(nil)
+			_ = succ
+			return true
+		}
+		// match: (Check (NilCheck (OffPtr (Load (OffPtr [c] (SP)) mem:(StaticCall {sym} _))) _) succ)
+		// cond: c == config.ctxt.FixedFrameSize() + config.PtrSize 	&& isSameSym(sym, "runtime.newobject")
+		// result: (Plain nil succ)
+		for {
+			v := b.Control
+			if v.Op != OpNilCheck {
+				break
+			}
+			v_0 := v.Args[0]
+			if v_0.Op != OpOffPtr {
+				break
+			}
+			v_0_0 := v_0.Args[0]
+			if v_0_0.Op != OpLoad {
+				break
+			}
+			v_0_0_0 := v_0_0.Args[0]
+			if v_0_0_0.Op != OpOffPtr {
+				break
+			}
+			c := v_0_0_0.AuxInt
+			v_0_0_0_0 := v_0_0_0.Args[0]
+			if v_0_0_0_0.Op != OpSP {
+				break
+			}
+			mem := v_0_0.Args[1]
+			if mem.Op != OpStaticCall {
+				break
+			}
+			sym := mem.Aux
+			succ := b.Succs[0]
+			if !(c == config.ctxt.FixedFrameSize()+config.PtrSize && isSameSym(sym, "runtime.newobject")) {
+				break
+			}
+			b.Kind = BlockPlain
+			b.SetControl(nil)
+			_ = succ
 			return true
 		}
 	case BlockIf:

@@ -92,7 +92,6 @@ func init() {
 		ax         = buildReg("AX")
 		cx         = buildReg("CX")
 		dx         = buildReg("DX")
-		x15        = buildReg("X15")
 		gp         = buildReg("AX CX DX BX BP SI DI R8 R9 R10 R11 R12 R13 R14 R15")
 		fp         = buildReg("X0 X1 X2 X3 X4 X5 X6 X7 X8 X9 X10 X11 X12 X13 X14 X15")
 		gpsp       = gp | buildReg("SP")
@@ -122,8 +121,7 @@ func init() {
 		gp1flags = regInfo{inputs: []regMask{gpsp}}
 		flagsgp  = regInfo{inputs: nil, outputs: gponly}
 
-		// for CMOVconst -- uses AX to hold constant temporary.
-		gp1flagsgp = regInfo{inputs: []regMask{gp &^ ax}, clobbers: ax, outputs: []regMask{gp &^ ax}}
+		gp11flags = regInfo{inputs: []regMask{gp}, outputs: []regMask{gp, 0}}
 
 		readflags = regInfo{inputs: nil, outputs: gponly}
 		flagsgpax = regInfo{inputs: nil, clobbers: ax, outputs: []regMask{gp &^ ax}}
@@ -135,11 +133,11 @@ func init() {
 		gpstoreconst    = regInfo{inputs: []regMask{gpspsb, 0}}
 		gpstoreidx      = regInfo{inputs: []regMask{gpspsb, gpsp, gpsp, 0}}
 		gpstoreconstidx = regInfo{inputs: []regMask{gpspsb, gpsp, 0}}
+		gpstorexchg     = regInfo{inputs: []regMask{gp, gp, 0}, outputs: []regMask{gp}}
+		cmpxchg         = regInfo{inputs: []regMask{gp, ax, gp, 0}, outputs: []regMask{gp, 0}, clobbers: ax}
 
-		fp01    = regInfo{inputs: nil, outputs: fponly}
-		fp21    = regInfo{inputs: []regMask{fp, fp}, outputs: fponly}
-		fp21x15 = regInfo{inputs: []regMask{fp &^ x15, fp &^ x15},
-			clobbers: x15, outputs: []regMask{fp &^ x15}}
+		fp01     = regInfo{inputs: nil, outputs: fponly}
+		fp21     = regInfo{inputs: []regMask{fp, fp}, outputs: fponly}
 		fpgp     = regInfo{inputs: fponly, outputs: gponly}
 		gpfp     = regInfo{inputs: gponly, outputs: fponly}
 		fp11     = regInfo{inputs: fponly, outputs: fponly}
@@ -156,12 +154,12 @@ func init() {
 		// fp ops
 		{name: "ADDSS", argLength: 2, reg: fp21, asm: "ADDSS", commutative: true, resultInArg0: true}, // fp32 add
 		{name: "ADDSD", argLength: 2, reg: fp21, asm: "ADDSD", commutative: true, resultInArg0: true}, // fp64 add
-		{name: "SUBSS", argLength: 2, reg: fp21x15, asm: "SUBSS", resultInArg0: true},                 // fp32 sub
-		{name: "SUBSD", argLength: 2, reg: fp21x15, asm: "SUBSD", resultInArg0: true},                 // fp64 sub
+		{name: "SUBSS", argLength: 2, reg: fp21, asm: "SUBSS", resultInArg0: true},                    // fp32 sub
+		{name: "SUBSD", argLength: 2, reg: fp21, asm: "SUBSD", resultInArg0: true},                    // fp64 sub
 		{name: "MULSS", argLength: 2, reg: fp21, asm: "MULSS", commutative: true, resultInArg0: true}, // fp32 mul
 		{name: "MULSD", argLength: 2, reg: fp21, asm: "MULSD", commutative: true, resultInArg0: true}, // fp64 mul
-		{name: "DIVSS", argLength: 2, reg: fp21x15, asm: "DIVSS", resultInArg0: true},                 // fp32 div
-		{name: "DIVSD", argLength: 2, reg: fp21x15, asm: "DIVSD", resultInArg0: true},                 // fp64 div
+		{name: "DIVSS", argLength: 2, reg: fp21, asm: "DIVSS", resultInArg0: true},                    // fp32 div
+		{name: "DIVSD", argLength: 2, reg: fp21, asm: "DIVSD", resultInArg0: true},                    // fp64 div
 
 		{name: "MOVSSload", argLength: 2, reg: fpload, asm: "MOVSS", aux: "SymOff"},            // fp32 load
 		{name: "MOVSDload", argLength: 2, reg: fpload, asm: "MOVSD", aux: "SymOff"},            // fp64 load
@@ -285,21 +283,16 @@ func init() {
 		{name: "NOTQ", argLength: 1, reg: gp11, asm: "NOTQ", resultInArg0: true, clobberFlags: true}, // ^arg0
 		{name: "NOTL", argLength: 1, reg: gp11, asm: "NOTL", resultInArg0: true, clobberFlags: true}, // ^arg0
 
-		{name: "BSFQ", argLength: 1, reg: gp11, asm: "BSFQ", clobberFlags: true}, // arg0 # of low-order zeroes ; undef if zero
-		{name: "BSFL", argLength: 1, reg: gp11, asm: "BSFL", clobberFlags: true}, // arg0 # of low-order zeroes ; undef if zero
-		{name: "BSFW", argLength: 1, reg: gp11, asm: "BSFW", clobberFlags: true}, // arg0 # of low-order zeroes ; undef if zero
-
-		{name: "BSRQ", argLength: 1, reg: gp11, asm: "BSRQ", clobberFlags: true}, // arg0 # of high-order zeroes ; undef if zero
-		{name: "BSRL", argLength: 1, reg: gp11, asm: "BSRL", clobberFlags: true}, // arg0 # of high-order zeroes ; undef if zero
-		{name: "BSRW", argLength: 1, reg: gp11, asm: "BSRW", clobberFlags: true}, // arg0 # of high-order zeroes ; undef if zero
+		// BSF{L,Q} returns a tuple [result, flags]
+		// result is undefined if the input is zero.
+		// flags are set to "equal" if the input is zero, "not equal" otherwise.
+		{name: "BSFQ", argLength: 1, reg: gp11flags, asm: "BSFQ", typ: "(UInt64,Flags)"}, // # of low-order zeroes in 64-bit arg
+		{name: "BSFL", argLength: 1, reg: gp11flags, asm: "BSFL", typ: "(UInt32,Flags)"}, // # of low-order zeroes in 32-bit arg
 
 		// Note ASM for ops moves whole register
-		{name: "CMOVQEQconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVQEQ", typ: "UInt64", aux: "Int64", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z set
-		{name: "CMOVLEQconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVLEQ", typ: "UInt32", aux: "Int32", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z set
-		{name: "CMOVWEQconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVLEQ", typ: "UInt16", aux: "Int16", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z set
-		{name: "CMOVQNEconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVQNE", typ: "UInt64", aux: "Int64", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z not set
-		{name: "CMOVLNEconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVLNE", typ: "UInt32", aux: "Int32", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z not set
-		{name: "CMOVWNEconst", argLength: 2, reg: gp1flagsgp, asm: "CMOVLNE", typ: "UInt16", aux: "Int16", resultInArg0: true, clobberFlags: true}, // replace arg0 w/ constant if Z not set
+		//
+		{name: "CMOVQEQ", argLength: 3, reg: gp21, asm: "CMOVQEQ", resultInArg0: true}, // if arg2 encodes "equal" return arg1 else arg0
+		{name: "CMOVLEQ", argLength: 3, reg: gp21, asm: "CMOVLEQ", resultInArg0: true}, // if arg2 encodes "equal" return arg1 else arg0
 
 		{name: "BSWAPQ", argLength: 1, reg: gp11, asm: "BSWAPQ", resultInArg0: true, clobberFlags: true}, // arg0 swap bytes
 		{name: "BSWAPL", argLength: 1, reg: gp11, asm: "BSWAPL", resultInArg0: true, clobberFlags: true}, // arg0 swap bytes
@@ -515,6 +508,54 @@ func init() {
 		{name: "FlagLT_UGT"}, // signed < and unsigned >
 		{name: "FlagGT_UGT"}, // signed > and unsigned <
 		{name: "FlagGT_ULT"}, // signed > and unsigned >
+
+		// Atomic loads.  These are just normal loads but return <value,memory> tuples
+		// so they can be properly ordered with other loads.
+		// load from arg0+auxint+aux.  arg1=mem.
+		{name: "MOVLatomicload", argLength: 2, reg: gpload, asm: "MOVL", aux: "SymOff"},
+		{name: "MOVQatomicload", argLength: 2, reg: gpload, asm: "MOVQ", aux: "SymOff"},
+
+		// Atomic stores and exchanges.  Stores use XCHG to get the right memory ordering semantics.
+		// store arg0 to arg1+auxint+aux, arg2=mem.
+		// These ops return a tuple of <old contents of *(arg1+auxint+aux), memory>.
+		// Note: arg0 and arg1 are backwards compared to MOVLstore (to facilitate resultInArg0)!
+		{name: "XCHGL", argLength: 3, reg: gpstorexchg, asm: "XCHGL", aux: "SymOff", resultInArg0: true},
+		{name: "XCHGQ", argLength: 3, reg: gpstorexchg, asm: "XCHGQ", aux: "SymOff", resultInArg0: true},
+
+		// Atomic adds.
+		// *(arg1+auxint+aux) += arg0.  arg2=mem.
+		// Returns a tuple of <old contents of *(arg1+auxint+aux), memory>.
+		// Note: arg0 and arg1 are backwards compared to MOVLstore (to facilitate resultInArg0)!
+		{name: "XADDLlock", argLength: 3, reg: gpstorexchg, asm: "XADDL", typ: "(UInt32,Mem)", aux: "SymOff", resultInArg0: true},
+		{name: "XADDQlock", argLength: 3, reg: gpstorexchg, asm: "XADDQ", typ: "(UInt64,Mem)", aux: "SymOff", resultInArg0: true},
+		{name: "AddTupleFirst32", argLength: 2}, // arg0=tuple <x,y>.  Returns <x+arg1,y>.
+		{name: "AddTupleFirst64", argLength: 2}, // arg0=tuple <x,y>.  Returns <x+arg1,y>.
+
+		// Compare and swap.
+		// arg0 = pointer, arg1 = old value, arg2 = new value, arg3 = memory.
+		// if *(arg0+auxint+aux) == arg1 {
+		//   *(arg0+auxint+aux) = arg2
+		//   return (true, memory)
+		// } else {
+		//   return (false, memory)
+		// }
+		// Note that these instructions also return the old value in AX, but we ignore it.
+		// TODO: have these return flags instead of bool.  The current system generates:
+		//    CMPXCHGQ ...
+		//    SETEQ AX
+		//    CMPB  AX, $0
+		//    JNE ...
+		// instead of just
+		//    CMPXCHGQ ...
+		//    JEQ ...
+		// but we can't do that because memory-using ops can't generate flags yet
+		// (flagalloc wants to move flag-generating instructions around).
+		{name: "CMPXCHGLlock", argLength: 4, reg: cmpxchg, asm: "CMPXCHGL", aux: "SymOff"},
+		{name: "CMPXCHGQlock", argLength: 4, reg: cmpxchg, asm: "CMPXCHGQ", aux: "SymOff"},
+
+		// Atomic memory updates.
+		{name: "ANDBlock", argLength: 3, reg: gpstore, asm: "ANDB", aux: "SymOff"}, // *(arg0+auxint+aux) &= arg1
+		{name: "ORBlock", argLength: 3, reg: gpstore, asm: "ORB", aux: "SymOff"},   // *(arg0+auxint+aux) |= arg1
 	}
 
 	var AMD64blocks = []blockData{

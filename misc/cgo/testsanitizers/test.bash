@@ -88,6 +88,11 @@ if test "$msan" = "yes"; then
 	status=1
     fi
 
+    if ! go run -msan msan5.go; then
+	echo "FAIL: msan5"
+	status=1
+    fi
+
     if go run -msan msan_fail.go 2>/dev/null; then
 	echo "FAIL: msan_fail"
 	status=1
@@ -156,6 +161,9 @@ if test "$tsan" = "yes"; then
 
 	# This test requires rebuilding runtime/cgo with -fsanitize=thread.
 	testtsan tsan6.go "CGO_CFLAGS=-fsanitize=thread CGO_LDFLAGS=-fsanitize=thread" "-installsuffix=tsan"
+
+	# This test requires rebuilding runtime/cgo with -fsanitize=thread.
+	testtsan tsan7.go "CGO_CFLAGS=-fsanitize=thread CGO_LDFLAGS=-fsanitize=thread" "-installsuffix=tsan"
     fi
 fi
 

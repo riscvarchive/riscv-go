@@ -11,9 +11,6 @@
 TEXT runtime·rt0_go(SB),NOSPLIT,$0
 	// SP = stack; R0 = argc; R1 = argv
 
-	// initialize essential registers
-	BL	runtime·reginit(SB)
-
 	SUB	$32, RSP
 	MOVW	R0, 8(RSP) // argc
 	MOVD	R1, 16(RSP) // argv
@@ -98,15 +95,6 @@ TEXT runtime·breakpoint(SB),NOSPLIT,$-8-0
 	RET
 
 TEXT runtime·asminit(SB),NOSPLIT,$-8-0
-	RET
-
-TEXT runtime·reginit(SB),NOSPLIT,$-8-0
-	// initialize essential FP registers
-	FMOVD	$4503601774854144.0, F27
-	FMOVD	$0.5, F29
-	FSUBD	F29, F29, F28
-	FADDD	F29, F29, F30
-	FADDD	F30, F30, F31
 	RET
 
 /*
@@ -869,9 +857,9 @@ samebytes:
 // See runtime_test.go:eqstring_generic for
 // equivalent Go code.
 TEXT runtime·eqstring(SB),NOSPLIT,$0-33
-	MOVD	s1str+0(FP), R0
-	MOVD	s1len+8(FP), R1
-	MOVD	s2str+16(FP), R2
+	MOVD	s1_base+0(FP), R0
+	MOVD	s1_len+8(FP), R1
+	MOVD	s2_base+16(FP), R2
 	ADD	R0, R1		// end
 loop:
 	CMP	R0, R1
@@ -961,7 +949,7 @@ equal:
 	MOVB	R0, ret+48(FP)
 	RET
 
-TEXT runtime·fastrand1(SB),NOSPLIT,$-8-4
+TEXT runtime·fastrand(SB),NOSPLIT,$-8-4
 	MOVD	g_m(g), R1
 	MOVWU	m_fastrand(R1), R0
 	ADD	R0, R0
@@ -996,8 +984,8 @@ TEXT runtime·prefetcht2(SB),NOSPLIT,$0-8
 TEXT runtime·prefetchnta(SB),NOSPLIT,$0-8
 	RET
 
-TEXT runtime·sigreturn(SB),NOSPLIT,$0-8
-        RET
+TEXT runtime·sigreturn(SB),NOSPLIT,$0-0
+	RET
 
 // This is called from .init_array and follows the platform, not Go, ABI.
 TEXT runtime·addmoduledata(SB),NOSPLIT,$0-0

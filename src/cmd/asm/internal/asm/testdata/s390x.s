@@ -78,6 +78,17 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	DIVWU	R1, R2                // b90400a0b90400b2b99700a1b904002b
 	DIVWU	R1, R2, R3            // b90400a0b90400b2b99700a1b904003b
 
+	LAA	R1, R2, 524287(R3)    // eb213fff7ff8
+	LAAG	R4, R5, -524288(R6)   // eb54600080e8
+	LAAL	R7, R8, 8192(R9)      // eb87900002fa
+	LAALG	R10, R11, -8192(R12)  // ebbac000feea
+	LAN	R1, R2, (R3)          // eb21300000f4
+	LANG	R4, R5, (R6)          // eb54600000e4
+	LAX	R7, R8, (R9)          // eb87900000f7
+	LAXG	R10, R11, (R12)       // ebbac00000e7
+	LAO	R1, R2, (R3)          // eb21300000f6
+	LAOG	R4, R5, (R6)          // eb54600000e6
+
 	XC	$8, (R15), n-8(SP)       // XC  (R15), $8, n-8(SP)       // d707f010f000
 	NC	$8, (R15), n-8(SP)       // NC  (R15), $8, n-8(SP)       // d407f010f000
 	OC	$8, (R15), n-8(SP)       // OC  (R15), $8, n-8(SP)       // d607f010f000
@@ -167,6 +178,8 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	FABS	F1, F2                 // b3100021
 	FSQRTS	F3, F4                 // b3140043
 	FSQRT	F5, F15                // b31500f5
+	FIEBR	$0, F0, F1             // b3570010
+	FIDBR	$7, F2, F3             // b35f7032
 
 	VL	(R15), V1              // e710f0000006
 	VST	V1, (R15)              // e710f000000e

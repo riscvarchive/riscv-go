@@ -4762,7 +4762,7 @@ func rewriteValueRISCV_OpZeroExt8to64(v *Value, config *Config) bool {
 		return true
 	}
 }
-func rewriteBlockRISCV(b *Block) bool {
+func rewriteBlockRISCV(b *Block, config *Config) bool {
 	switch b.Kind {
 	case BlockIf:
 		// match: (If (Eq64    x y) yes no)
@@ -4980,6 +4980,7 @@ func rewriteBlockRISCV(b *Block) bool {
 		// result: (BRANCH (BNE (MOVQconst <cond.Type>) (ANDI <cond.Type> [1] cond)) yes no)
 		for {
 			v := b.Control
+			_ = v
 			cond := b.Control
 			yes := b.Succs[0]
 			no := b.Succs[1]

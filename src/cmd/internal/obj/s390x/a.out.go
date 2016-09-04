@@ -286,6 +286,8 @@ const (
 	AFSUBS
 	AFSQRT
 	AFSQRTS
+	AFIEBR
+	AFIDBR
 
 	// convert from int32/int64 to float/float64
 	ACEFBRA
@@ -363,6 +365,18 @@ const (
 	ALARL
 	ALA
 	ALAY
+
+	// interlocked load and op
+	ALAA
+	ALAAG
+	ALAAL
+	ALAALG
+	ALAN
+	ALANG
+	ALAX
+	ALAXG
+	ALAO
+	ALAOG
 
 	// load/store multiple
 	ALMY

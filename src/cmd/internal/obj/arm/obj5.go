@@ -1,5 +1,5 @@
 // Derived from Inferno utils/5c/swt.c
-// http://code.google.com/p/inferno-os/source/browse/utils/5c/swt.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/5c/swt.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -359,8 +359,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 			if autosize == 0 && cursym.Text.Mark&LEAF == 0 {
 				if ctxt.Debugvlog != 0 {
-					fmt.Fprintf(ctxt.Bso, "save suppressed in: %s\n", cursym.Name)
-					ctxt.Bso.Flush()
+					ctxt.Logf("save suppressed in: %s\n", cursym.Name)
 				}
 
 				cursym.Text.Mark |= LEAF

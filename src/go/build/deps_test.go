@@ -180,7 +180,7 @@ var pkgDeps = map[string][]string{
 	"testing":          {"L2", "flag", "fmt", "os", "runtime/debug", "runtime/pprof", "runtime/trace", "time"},
 	"testing/iotest":   {"L2", "log"},
 	"testing/quick":    {"L2", "flag", "fmt", "reflect"},
-	"internal/testenv": {"L2", "OS", "flag", "testing"},
+	"internal/testenv": {"L2", "OS", "flag", "testing", "syscall"},
 
 	// L4 is defined as L3+fmt+log+time, because in general once
 	// you're using L3 packages, use of fmt, log, or time is not a big deal.
@@ -392,7 +392,7 @@ var pkgDeps = map[string][]string{
 	"net/http/cookiejar": {"L4", "NET", "net/http"},
 	"net/http/fcgi":      {"L4", "NET", "OS", "net/http", "net/http/cgi"},
 	"net/http/httptest":  {"L4", "NET", "OS", "crypto/tls", "flag", "net/http", "net/http/internal"},
-	"net/http/httputil":  {"L4", "NET", "OS", "net/http", "net/http/internal"},
+	"net/http/httputil":  {"L4", "NET", "OS", "context", "net/http", "net/http/internal"},
 	"net/http/pprof":     {"L4", "OS", "html/template", "net/http", "runtime/pprof", "runtime/trace"},
 	"net/rpc":            {"L4", "NET", "encoding/gob", "html/template", "net/http"},
 	"net/rpc/jsonrpc":    {"L4", "NET", "encoding/json", "net/rpc"},

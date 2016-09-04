@@ -1,5 +1,5 @@
 // errorcheck -0 -d=nil
-// +build amd64 arm amd64p32 386 arm64
+// +build amd64 arm amd64p32 386 arm64 mips64 mips64le
 
 // Copyright 2013 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -225,4 +225,12 @@ func m4(m map[int][800]byte) (byte, bool) {
 func p1() byte {
 	p := new([100]byte)
 	return p[5] // ERROR "removed nil check"
+}
+
+// make sure not to do nil check for access of PAUTOHEAP
+//go:noinline
+func (p *Struct) m() {}
+func c1() {
+	var x Struct
+	func() { x.m() }() // ERROR "removed nil check"
 }

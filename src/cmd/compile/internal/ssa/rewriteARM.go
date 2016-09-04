@@ -16824,7 +16824,7 @@ func rewriteValueARM_OpZeromask(v *Value, config *Config) bool {
 		return true
 	}
 }
-func rewriteBlockARM(b *Block) bool {
+func rewriteBlockARM(b *Block, config *Config) bool {
 	switch b.Kind {
 	case BlockARMEQ:
 		// match: (EQ (FlagEQ) yes no)
@@ -17305,6 +17305,7 @@ func rewriteBlockARM(b *Block) bool {
 		// result: (NE (CMPconst [0] cond) yes no)
 		for {
 			v := b.Control
+			_ = v
 			cond := b.Control
 			yes := b.Succs[0]
 			no := b.Succs[1]

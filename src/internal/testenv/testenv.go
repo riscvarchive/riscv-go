@@ -127,6 +127,21 @@ func MustHaveExternalNetwork(t *testing.T) {
 	}
 }
 
+// HasSymlink reports whether the current system can use os.Symlink.
+func HasSymlink() bool {
+	ok, _ := hasSymlink()
+	return ok
+}
+
+// MustHaveSymlink reports whether the current system can use os.Symlink.
+// If not, MustHaveSymlink calls t.Skip with an explanation.
+func MustHaveSymlink(t *testing.T) {
+	ok, reason := hasSymlink()
+	if !ok {
+		t.Skipf("skipping test: cannot make symlinks on %s/%s%s", runtime.GOOS, runtime.GOARCH, reason)
+	}
+}
+
 var flaky = flag.Bool("flaky", false, "run known-flaky tests too")
 
 func SkipFlaky(t *testing.T, issue int) {

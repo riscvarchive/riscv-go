@@ -108,8 +108,9 @@ func (e UnknownAuthorityError) Error() string {
 		if len(certName) == 0 {
 			if len(e.hintCert.Subject.Organization) > 0 {
 				certName = e.hintCert.Subject.Organization[0]
+			} else {
+				certName = "serial:" + e.hintCert.SerialNumber.String()
 			}
-			certName = "serial:" + e.hintCert.SerialNumber.String()
 		}
 		s += fmt.Sprintf(" (possibly because of %q while trying to verify candidate authority certificate %q)", e.hintErr, certName)
 	}
@@ -262,9 +263,13 @@ func (c *Certificate) Verify(opts VerifyOptions) (chains [][]*Certificate, err e
 		}
 	}
 
-	candidateChains, err := c.buildChains(make(map[int][][]*Certificate), []*Certificate{c}, &opts)
-	if err != nil {
-		return
+	var candidateChains [][]*Certificate
+	if opts.Roots.contains(c) {
+		candidateChains = append(candidateChains, []*Certificate{c})
+	} else {
+		if candidateChains, err = c.buildChains(make(map[int][][]*Certificate), []*Certificate{c}, &opts); err != nil {
+			return nil, err
+		}
 	}
 
 	keyUsages := opts.KeyUsages

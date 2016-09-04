@@ -77,11 +77,11 @@ var regNamesPPC64 = []string{
 	"F24",
 	"F25",
 	"F26",
-	// "F27", // reserved for "floating conversion constant"
-	// "F28", // 0.0
-	// "F29", // 0.5
-	// "F30", // 1.0
-	// "F31", // 2.0
+	"F27",
+	"F28",
+	"F29",
+	"F30",
+	"F31",
 
 	// "CR0",
 	// "CR1",
@@ -124,7 +124,7 @@ func init() {
 		fp = buildReg("F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 F13 F14 F15 F16 F17 F18 F19 F20 F21 F22 F23 F24 F25 F26")
 		sp = buildReg("SP")
 		sb = buildReg("SB")
-		// gr  = buildReg("g")
+		gr = buildReg("g")
 		// cr  = buildReg("CR")
 		// ctr = buildReg("CTR")
 		// lr  = buildReg("LR")
@@ -148,7 +148,7 @@ func init() {
 		fp2cr       = regInfo{inputs: []regMask{fp, fp}}
 		fpload      = regInfo{inputs: []regMask{gp | sp | sb}, outputs: []regMask{fp}}
 		fpstore     = regInfo{inputs: []regMask{gp | sp | sb, fp}}
-		callerSave  = regMask(gp | fp)
+		callerSave  = regMask(gp | fp | gr)
 	)
 	ops := []opData{
 		{name: "ADD", argLength: 2, reg: gp21, asm: "ADD", commutative: true},     // arg0 + arg1
@@ -241,8 +241,8 @@ func init() {
 		{name: "MOVWZload", argLength: 2, reg: gpload, asm: "MOVWZ", aux: "SymOff", typ: "UInt32"}, // zero extend uint32 to uint64
 		{name: "MOVDload", argLength: 2, reg: gpload, asm: "MOVD", aux: "SymOff", typ: "Int64"},
 
-		{name: "FMOVDload", argLength: 2, reg: fpload, asm: "FMOVD", typ: "Float64"},
-		{name: "FMOVSload", argLength: 2, reg: fpload, asm: "FMOVS", typ: "Float32"},
+		{name: "FMOVDload", argLength: 2, reg: fpload, asm: "FMOVD", aux: "SymOff", typ: "Float64"},
+		{name: "FMOVSload", argLength: 2, reg: fpload, asm: "FMOVS", aux: "SymOff", typ: "Float32"},
 		{name: "MOVBstore", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem"},
 		{name: "MOVHstore", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem"},
 		{name: "MOVWstore", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem"},

@@ -40,7 +40,7 @@ func shouldssa(fn *Node) bool {
 		if os.Getenv("SSATEST") == "" {
 			return false
 		}
-	case "amd64", "amd64p32", "arm", "386", "arm64", "riscv":
+	case "amd64", "amd64p32", "arm", "386", "arm64", "ppc64le", "mips64", "mips64le", "riscv":
 		// Generally available.
 	}
 	if !ssaEnabled {
@@ -193,7 +193,7 @@ func buildssa(fn *Node) *ssa.Func {
 
 	// Check that we used all labels
 	for name, lab := range s.labels {
-		if !lab.used() && !lab.reported {
+		if !lab.used() && !lab.reported && !lab.defNode.Used {
 			yyerrorl(lab.defNode.Lineno, "label %v defined and not used", name)
 			lab.reported = true
 		}
@@ -462,6 +462,11 @@ func (s *state) newValue3I(op ssa.Op, t ssa.Type, aux int64, arg0, arg1, arg2 *s
 	return s.curBlock.NewValue3I(s.peekLine(), op, t, aux, arg0, arg1, arg2)
 }
 
+// newValue4 adds a new value with four arguments to the current block.
+func (s *state) newValue4(op ssa.Op, t ssa.Type, arg0, arg1, arg2, arg3 *ssa.Value) *ssa.Value {
+	return s.curBlock.NewValue4(s.peekLine(), op, t, arg0, arg1, arg2, arg3)
+}
+
 // entryNewValue0 adds a new value with no arguments to the entry block.
 func (s *state) entryNewValue0(op ssa.Op, t ssa.Type) *ssa.Value {
 	return s.f.Entry.NewValue0(s.peekLine(), op, t)
@@ -571,7 +576,14 @@ func (s *state) stmt(n *Node) {
 	case OEMPTY, ODCLCONST, ODCLTYPE, OFALL:
 
 	// Expression statements
-	case OCALLFUNC, OCALLMETH, OCALLINTER:
+	case OCALLFUNC:
+		if isIntrinsicCall(n) {
+			s.intrinsicCall(n)
+			return
+		}
+		fallthrough
+
+	case OCALLMETH, OCALLINTER:
 		s.call(n, callNormal)
 		if n.Op == OCALLFUNC && n.Left.Op == ONAME && n.Left.Class == PFUNC &&
 			(compiling_runtime && n.Left.Sym.Name == "throw" ||
@@ -966,6 +978,9 @@ func (s *state) stmt(n *Node) {
 		p := s.expr(n.Left)
 		s.nilCheck(p)
 
+	case OSQRT:
+		s.expr(n.Left)
+
 	case ORISCVEXIT:
 		a := s.expr(n.List.First())
 		s.vars[&memVar] = s.newValue2(ssa.OpExitProc, ssa.TypeMem, a, s.mem())
@@ -1349,6 +1364,14 @@ var fpConvOpToSSA32 = map[twoTypes]twoOpsAndType{
 	twoTypes{TFLOAT64, TUINT32}: twoOpsAndType{ssa.OpCvt64Fto32U, ssa.OpCopy, TUINT32},
 }
 
+// uint64<->float conversions, only on machines that have intructions for that
+var uint64fpConvOpToSSA = map[twoTypes]twoOpsAndType{
+	twoTypes{TUINT64, TFLOAT32}: twoOpsAndType{ssa.OpCopy, ssa.OpCvt64Uto32F, TUINT64},
+	twoTypes{TUINT64, TFLOAT64}: twoOpsAndType{ssa.OpCopy, ssa.OpCvt64Uto64F, TUINT64},
+	twoTypes{TFLOAT32, TUINT64}: twoOpsAndType{ssa.OpCvt32Fto64U, ssa.OpCopy, TUINT64},
+	twoTypes{TFLOAT64, TUINT64}: twoOpsAndType{ssa.OpCvt64Fto64U, ssa.OpCopy, TUINT64},
+}
+
 var shiftOpToSSA = map[opAndTwoTypes]ssa.Op{
 	opAndTwoTypes{OLSH, TINT8, TUINT8}:   ssa.OpLsh8x8,
 	opAndTwoTypes{OLSH, TUINT8, TUINT8}:  ssa.OpLsh8x8,
@@ -1667,6 +1690,11 @@ func (s *state) expr(n *Node) *ssa.Value {
 			conv, ok := fpConvOpToSSA[twoTypes{s.concreteEtype(ft), s.concreteEtype(tt)}]
 			if s.config.IntSize == 4 && Thearch.LinkArch.Name != "amd64p32" {
 				if conv1, ok1 := fpConvOpToSSA32[twoTypes{s.concreteEtype(ft), s.concreteEtype(tt)}]; ok1 {
+					conv = conv1
+				}
+			}
+			if Thearch.LinkArch.Name == "arm64" {
+				if conv1, ok1 := uint64fpConvOpToSSA[twoTypes{s.concreteEtype(ft), s.concreteEtype(tt)}]; ok1 {
 					conv = conv1
 				}
 			}
@@ -2096,8 +2124,8 @@ func (s *state) expr(n *Node) *ssa.Value {
 		return s.newValue2(ssa.OpStringMake, n.Type, p, l)
 
 	case OCALLFUNC:
-		if isIntrinsicCall1(n) {
-			return s.intrinsicCall1(n)
+		if isIntrinsicCall(n) {
+			return s.intrinsicCall(n)
 		}
 		fallthrough
 
@@ -2505,12 +2533,226 @@ const (
 	callGo
 )
 
-// isSSAIntrinsic1 returns true if n is a call to a recognized 1-arg intrinsic
-// that can be handled by the SSA backend.
-// SSA uses this, but so does the front end to see if should not
-// inline a function because it is a candidate for intrinsic
-// substitution.
-func isSSAIntrinsic1(s *Sym) bool {
+// TODO: make this a field of a configuration object instead of a global.
+var intrinsics *intrinsicInfo
+
+type intrinsicInfo struct {
+	std      map[intrinsicKey]intrinsicBuilder
+	intSized map[sizedIntrinsicKey]intrinsicBuilder
+	ptrSized map[sizedIntrinsicKey]intrinsicBuilder
+}
+
+// An intrinsicBuilder converts a call node n into an ssa value that
+// implements that call as an intrinsic.
+type intrinsicBuilder func(s *state, n *Node) *ssa.Value
+
+type intrinsicKey struct {
+	pkg string
+	fn  string
+}
+
+type sizedIntrinsicKey struct {
+	pkg  string
+	fn   string
+	size int
+}
+
+func intrinsicInit() {
+	i := &intrinsicInfo{}
+	intrinsics = i
+
+	// initial set of intrinsics.
+	i.std = map[intrinsicKey]intrinsicBuilder{
+		/******** runtime/internal/sys ********/
+		intrinsicKey{"runtime/internal/sys", "Ctz32"}: func(s *state, n *Node) *ssa.Value {
+			return s.newValue1(ssa.OpCtz32, Types[TUINT32], s.intrinsicFirstArg(n))
+		},
+		intrinsicKey{"runtime/internal/sys", "Ctz64"}: func(s *state, n *Node) *ssa.Value {
+			return s.newValue1(ssa.OpCtz64, Types[TUINT64], s.intrinsicFirstArg(n))
+		},
+		intrinsicKey{"runtime/internal/sys", "Bswap32"}: func(s *state, n *Node) *ssa.Value {
+			return s.newValue1(ssa.OpBswap32, Types[TUINT32], s.intrinsicFirstArg(n))
+		},
+		intrinsicKey{"runtime/internal/sys", "Bswap64"}: func(s *state, n *Node) *ssa.Value {
+			return s.newValue1(ssa.OpBswap64, Types[TUINT64], s.intrinsicFirstArg(n))
+		},
+
+		/******** runtime/internal/atomic ********/
+		intrinsicKey{"runtime/internal/atomic", "Load"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue2(ssa.OpAtomicLoad32, ssa.MakeTuple(Types[TUINT32], ssa.TypeMem), s.intrinsicArg(n, 0), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT32], v)
+		},
+		intrinsicKey{"runtime/internal/atomic", "Load64"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue2(ssa.OpAtomicLoad64, ssa.MakeTuple(Types[TUINT64], ssa.TypeMem), s.intrinsicArg(n, 0), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT64], v)
+		},
+		intrinsicKey{"runtime/internal/atomic", "Loadp"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue2(ssa.OpAtomicLoadPtr, ssa.MakeTuple(Ptrto(Types[TUINT8]), ssa.TypeMem), s.intrinsicArg(n, 0), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Ptrto(Types[TUINT8]), v)
+		},
+
+		intrinsicKey{"runtime/internal/atomic", "Store"}: func(s *state, n *Node) *ssa.Value {
+			s.vars[&memVar] = s.newValue3(ssa.OpAtomicStore32, ssa.TypeMem, s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			return nil
+		},
+		intrinsicKey{"runtime/internal/atomic", "Store64"}: func(s *state, n *Node) *ssa.Value {
+			s.vars[&memVar] = s.newValue3(ssa.OpAtomicStore64, ssa.TypeMem, s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			return nil
+		},
+		intrinsicKey{"runtime/internal/atomic", "StorepNoWB"}: func(s *state, n *Node) *ssa.Value {
+			s.vars[&memVar] = s.newValue3(ssa.OpAtomicStorePtrNoWB, ssa.TypeMem, s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			return nil
+		},
+
+		intrinsicKey{"runtime/internal/atomic", "Xchg"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue3(ssa.OpAtomicExchange32, ssa.MakeTuple(Types[TUINT32], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT32], v)
+		},
+		intrinsicKey{"runtime/internal/atomic", "Xchg64"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue3(ssa.OpAtomicExchange64, ssa.MakeTuple(Types[TUINT64], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT64], v)
+		},
+
+		intrinsicKey{"runtime/internal/atomic", "Xadd"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue3(ssa.OpAtomicAdd32, ssa.MakeTuple(Types[TUINT32], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT32], v)
+		},
+		intrinsicKey{"runtime/internal/atomic", "Xadd64"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue3(ssa.OpAtomicAdd64, ssa.MakeTuple(Types[TUINT64], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TUINT64], v)
+		},
+
+		intrinsicKey{"runtime/internal/atomic", "Cas"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue4(ssa.OpAtomicCompareAndSwap32, ssa.MakeTuple(Types[TBOOL], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.intrinsicArg(n, 2), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TBOOL], v)
+		},
+		intrinsicKey{"runtime/internal/atomic", "Cas64"}: func(s *state, n *Node) *ssa.Value {
+			v := s.newValue4(ssa.OpAtomicCompareAndSwap64, ssa.MakeTuple(Types[TBOOL], ssa.TypeMem), s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.intrinsicArg(n, 2), s.mem())
+			s.vars[&memVar] = s.newValue1(ssa.OpSelect1, ssa.TypeMem, v)
+			return s.newValue1(ssa.OpSelect0, Types[TBOOL], v)
+		},
+
+		intrinsicKey{"runtime/internal/atomic", "And8"}: func(s *state, n *Node) *ssa.Value {
+			s.vars[&memVar] = s.newValue3(ssa.OpAtomicAnd8, ssa.TypeMem, s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			return nil
+		},
+		intrinsicKey{"runtime/internal/atomic", "Or8"}: func(s *state, n *Node) *ssa.Value {
+			s.vars[&memVar] = s.newValue3(ssa.OpAtomicOr8, ssa.TypeMem, s.intrinsicArg(n, 0), s.intrinsicArg(n, 1), s.mem())
+			return nil
+		},
+	}
+
+	// aliases internal to runtime/internal/atomic
+	i.std[intrinsicKey{"runtime/internal/atomic", "Loadint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}]
+
+	// intrinsics which vary depending on the size of int/ptr.
+	i.intSized = map[sizedIntrinsicKey]intrinsicBuilder{
+		sizedIntrinsicKey{"runtime/internal/atomic", "Loaduint", 4}: i.std[intrinsicKey{"runtime/internal/atomic", "Load"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Loaduint", 8}: i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}],
+	}
+	i.ptrSized = map[sizedIntrinsicKey]intrinsicBuilder{
+		sizedIntrinsicKey{"runtime/internal/atomic", "Loaduintptr", 4}:  i.std[intrinsicKey{"runtime/internal/atomic", "Load"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Loaduintptr", 8}:  i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Storeuintptr", 4}: i.std[intrinsicKey{"runtime/internal/atomic", "Store"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Storeuintptr", 8}: i.std[intrinsicKey{"runtime/internal/atomic", "Store64"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Xchguintptr", 4}:  i.std[intrinsicKey{"runtime/internal/atomic", "Xchg"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Xchguintptr", 8}:  i.std[intrinsicKey{"runtime/internal/atomic", "Xchg64"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Xadduintptr", 4}:  i.std[intrinsicKey{"runtime/internal/atomic", "Xadd"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Xadduintptr", 8}:  i.std[intrinsicKey{"runtime/internal/atomic", "Xadd64"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Casuintptr", 4}:   i.std[intrinsicKey{"runtime/internal/atomic", "Cas"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Casuintptr", 8}:   i.std[intrinsicKey{"runtime/internal/atomic", "Cas64"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Casp1", 4}:        i.std[intrinsicKey{"runtime/internal/atomic", "Cas"}],
+		sizedIntrinsicKey{"runtime/internal/atomic", "Casp1", 8}:        i.std[intrinsicKey{"runtime/internal/atomic", "Cas64"}],
+	}
+
+	/******** sync/atomic ********/
+	if flag_race {
+		// The race detector needs to be able to intercept these calls.
+		// We can't intrinsify them.
+		return
+	}
+	// these are all aliases to runtime/internal/atomic implementations.
+	i.std[intrinsicKey{"sync/atomic", "LoadInt32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load"}]
+	i.std[intrinsicKey{"sync/atomic", "LoadInt64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}]
+	i.std[intrinsicKey{"sync/atomic", "LoadPointer"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Loadp"}]
+	i.std[intrinsicKey{"sync/atomic", "LoadUint32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load"}]
+	i.std[intrinsicKey{"sync/atomic", "LoadUint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "LoadUintptr", 4}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "LoadUintptr", 8}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Load64"}]
+
+	i.std[intrinsicKey{"sync/atomic", "StoreInt32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store"}]
+	i.std[intrinsicKey{"sync/atomic", "StoreInt64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store64"}]
+	// Note: not StorePointer, that needs a write barrier.  Same below for {CompareAnd}Swap.
+	i.std[intrinsicKey{"sync/atomic", "StoreUint32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store"}]
+	i.std[intrinsicKey{"sync/atomic", "StoreUint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store64"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "StoreUintptr", 4}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "StoreUintptr", 8}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Store64"}]
+
+	i.std[intrinsicKey{"sync/atomic", "SwapInt32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap"}]
+	i.std[intrinsicKey{"sync/atomic", "SwapInt64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap64"}]
+	i.std[intrinsicKey{"sync/atomic", "SwapUint32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap"}]
+	i.std[intrinsicKey{"sync/atomic", "SwapUint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap64"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "SwapUintptr", 4}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "SwapUintptr", 8}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Swap64"}]
+
+	i.std[intrinsicKey{"sync/atomic", "CompareAndSwapInt32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas"}]
+	i.std[intrinsicKey{"sync/atomic", "CompareAndSwapInt64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas64"}]
+	i.std[intrinsicKey{"sync/atomic", "CompareAndSwapUint32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas"}]
+	i.std[intrinsicKey{"sync/atomic", "CompareAndSwapUint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas64"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "CompareAndSwapUintptr", 4}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "CompareAndSwapUintptr", 8}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Cas64"}]
+
+	i.std[intrinsicKey{"sync/atomic", "AddInt32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd"}]
+	i.std[intrinsicKey{"sync/atomic", "AddInt64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd64"}]
+	i.std[intrinsicKey{"sync/atomic", "AddUint32"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd"}]
+	i.std[intrinsicKey{"sync/atomic", "AddUint64"}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd64"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "AddUintptr", 4}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd"}]
+	i.ptrSized[sizedIntrinsicKey{"sync/atomic", "AddUintptr", 8}] =
+		i.std[intrinsicKey{"runtime/internal/atomic", "Xadd64"}]
+}
+
+// findIntrinsic returns a function which builds the SSA equivalent of the
+// function identified by the symbol sym.  If sym is not an intrinsic call, returns nil.
+func findIntrinsic(sym *Sym) intrinsicBuilder {
 	// The test below is not quite accurate -- in the event that
 	// a function is disabled on a per-function basis, for example
 	// because of hash-keyed binary failure search, SSA might be
@@ -2520,58 +2762,62 @@ func isSSAIntrinsic1(s *Sym) bool {
 	// leading/trailing instructions, but heuristics might change
 	// in the future or on different architectures).
 	if !ssaEnabled || ssa.IntrinsicsDisable || Thearch.LinkArch.Family != sys.AMD64 {
-		return false
+		return nil
 	}
-	if s != nil && s.Pkg != nil && s.Pkg.Path == "runtime/internal/sys" {
-		switch s.Name {
-		case
-			"Ctz64", "Ctz32", "Ctz16",
-			"Bswap64", "Bswap32":
-			return true
-		}
+	// TODO: parameterize this code by architecture. Maybe we should ask the SSA
+	// backend if it can lower the ops involved?
+	if sym == nil || sym.Pkg == nil {
+		return nil
 	}
-	return false
+	if intrinsics == nil {
+		intrinsicInit()
+	}
+	pkg := sym.Pkg.Path
+	fn := sym.Name
+	f := intrinsics.std[intrinsicKey{pkg, fn}]
+	if f != nil {
+		return f
+	}
+	f = intrinsics.intSized[sizedIntrinsicKey{pkg, fn, Widthint}]
+	if f != nil {
+		return f
+	}
+	return intrinsics.ptrSized[sizedIntrinsicKey{pkg, fn, Widthptr}]
 }
 
-func isIntrinsicCall1(n *Node) bool {
+func isIntrinsicCall(n *Node) bool {
 	if n == nil || n.Left == nil {
 		return false
 	}
-	return isSSAIntrinsic1(n.Left.Sym)
+	return findIntrinsic(n.Left.Sym) != nil
 }
 
-// intrinsicFirstArg extracts arg from n.List and eval
-func (s *state) intrinsicFirstArg(n *Node) *ssa.Value {
-	x := n.List.First()
+// intrinsicCall converts a call to a recognized intrinsic function into the intrinsic SSA operation.
+func (s *state) intrinsicCall(n *Node) *ssa.Value {
+	v := findIntrinsic(n.Left.Sym)(s, n)
+	if ssa.IntrinsicsDebug > 0 {
+		x := v
+		if x == nil {
+			x = s.mem()
+		}
+		if x.Op == ssa.OpSelect0 || x.Op == ssa.OpSelect1 {
+			x = x.Args[0]
+		}
+		Warnl(n.Lineno, "intrinsic substitution for %v with %s", n.Left.Sym.Name, x.LongString())
+	}
+	return v
+}
+
+// intrinsicArg extracts the ith arg from n.List and returns its value.
+func (s *state) intrinsicArg(n *Node, i int) *ssa.Value {
+	x := n.List.Slice()[i]
 	if x.Op == OAS {
 		x = x.Right
 	}
 	return s.expr(x)
 }
-
-// intrinsicCall1 converts a call to a recognized 1-arg intrinsic
-// into the intrinsic
-func (s *state) intrinsicCall1(n *Node) *ssa.Value {
-	var result *ssa.Value
-	switch n.Left.Sym.Name {
-	case "Ctz64":
-		result = s.newValue1(ssa.OpCtz64, Types[TUINT64], s.intrinsicFirstArg(n))
-	case "Ctz32":
-		result = s.newValue1(ssa.OpCtz32, Types[TUINT32], s.intrinsicFirstArg(n))
-	case "Ctz16":
-		result = s.newValue1(ssa.OpCtz16, Types[TUINT16], s.intrinsicFirstArg(n))
-	case "Bswap64":
-		result = s.newValue1(ssa.OpBswap64, Types[TUINT64], s.intrinsicFirstArg(n))
-	case "Bswap32":
-		result = s.newValue1(ssa.OpBswap32, Types[TUINT32], s.intrinsicFirstArg(n))
-	}
-	if result == nil {
-		Fatalf("Unknown special call: %v", n.Left.Sym)
-	}
-	if ssa.IntrinsicsDebug > 0 {
-		Warnl(n.Lineno, "intrinsic substitution for %v with %s", n.Left.Sym.Name, result.LongString())
-	}
-	return result
+func (s *state) intrinsicFirstArg(n *Node) *ssa.Value {
+	return s.intrinsicArg(n, 0)
 }
 
 // Calls the function n using the specified call type.
@@ -3425,20 +3671,6 @@ var u64_f32 u2fcvtTab = u2fcvtTab{
 	one:   (*state).constInt64,
 }
 
-// Excess generality on a machine with 64-bit integer registers.
-// Not used on AMD64.
-var u32_f32 u2fcvtTab = u2fcvtTab{
-	geq:   ssa.OpGeq32,
-	cvt2F: ssa.OpCvt32to32F,
-	and:   ssa.OpAnd32,
-	rsh:   ssa.OpRsh32Ux32,
-	or:    ssa.OpOr32,
-	add:   ssa.OpAdd32F,
-	one: func(s *state, t ssa.Type, x int64) *ssa.Value {
-		return s.constInt32(t, int32(x))
-	},
-}
-
 func (s *state) uint64Tofloat64(n *Node, x *ssa.Value, ft, tt *Type) *ssa.Value {
 	return s.uintTofloat(&u64_f64, n, x, ft, tt)
 }
@@ -4110,20 +4342,6 @@ func genssa(f *ssa.Func, ptxt *obj.Prog, gcargs, gclocals *Sym) {
 	f.Config.HTML.Close()
 }
 
-// movZero generates a register indirect move with a 0 immediate and keeps track of bytes left and next offset
-func movZero(as obj.As, width int64, nbytes int64, offset int64, regnum int16) (nleft int64, noff int64) {
-	p := Prog(as)
-	// TODO: use zero register on archs that support it.
-	p.From.Type = obj.TYPE_CONST
-	p.From.Offset = 0
-	p.To.Type = obj.TYPE_MEM
-	p.To.Reg = regnum
-	p.To.Offset = offset
-	offset += width
-	nleft = nbytes - width
-	return nleft, offset
-}
-
 type FloatingEQNEJump struct {
 	Jump  obj.As
 	Index int
@@ -4353,6 +4571,25 @@ func CheckLoweredGetClosurePtr(v *ssa.Value) {
 	if entry != v.Block || entry.Values[0] != v {
 		Fatalf("in %s, badly placed LoweredGetClosurePtr: %v %v", v.Block.Func.Name, v.Block, v)
 	}
+}
+
+// KeepAlive marks the variable referenced by OpKeepAlive as live.
+// Called during ssaGenValue.
+func KeepAlive(v *ssa.Value) {
+	if v.Op != ssa.OpKeepAlive {
+		v.Fatalf("KeepAlive called with non-KeepAlive value: %v", v.LongString())
+	}
+	if !v.Args[0].Type.IsPtrShaped() {
+		v.Fatalf("keeping non-pointer alive %v", v.Args[0])
+	}
+	n, off := AutoVar(v.Args[0])
+	if n == nil {
+		v.Fatalf("KeepAlive with non-spilled value %s %s", v, v.Args[0])
+	}
+	if off != 0 {
+		v.Fatalf("KeepAlive with non-zero offset spill location %s:%d", n, off)
+	}
+	Gvarlive(n)
 }
 
 // AutoVar returns a *Node and int64 representing the auto variable and offset within it

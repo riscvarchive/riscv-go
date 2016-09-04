@@ -17,11 +17,12 @@ type Config struct {
 	arch            string                     // "amd64", etc.
 	IntSize         int64                      // 4 or 8
 	PtrSize         int64                      // 4 or 8
-	lowerBlock      func(*Block) bool          // lowering function
+	lowerBlock      func(*Block, *Config) bool // lowering function
 	lowerValue      func(*Value, *Config) bool // lowering function
 	registers       []Register                 // machine registers
 	gpRegMask       regMask                    // general purpose integer register mask
 	fpRegMask       regMask                    // floating point register mask
+	specialRegMask  regMask                    // special register mask
 	FPReg           int8                       // register number of frame pointer, -1 if not used
 	hasGReg         bool                       // has hardware g register
 	fe              Frontend                   // callbacks into compiler frontend
@@ -194,6 +195,17 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 		c.noDuffDevice = true // TODO: Resolve PPC64 DuffDevice (has zero, but not copy)
 		c.NeedsFpScratch = true
 		c.hasGReg = true
+	case "mips64", "mips64le":
+		c.IntSize = 8
+		c.PtrSize = 8
+		c.lowerBlock = rewriteBlockMIPS64
+		c.lowerValue = rewriteValueMIPS64
+		c.registers = registersMIPS64[:]
+		c.gpRegMask = gpRegMaskMIPS64
+		c.fpRegMask = fpRegMaskMIPS64
+		c.specialRegMask = specialRegMaskMIPS64
+		c.FPReg = framepointerRegMIPS64
+		c.hasGReg = true
 	case "riscv":
 		c.IntSize = 8
 		c.PtrSize = 8
@@ -264,6 +276,7 @@ func (c *Config) Set387(b bool) {
 
 func (c *Config) Frontend() Frontend      { return c.fe }
 func (c *Config) SparsePhiCutoff() uint64 { return c.sparsePhiCutoff }
+func (c *Config) Ctxt() *obj.Link         { return c.ctxt }
 
 // NewFunc returns a new, empty function object.
 // Caller must call f.Free() before calling NewFunc again.

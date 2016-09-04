@@ -1,5 +1,5 @@
 // Derived from Inferno utils/6c/reg.c
-// http://code.google.com/p/inferno-os/source/browse/utils/6c/reg.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6c/reg.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -112,10 +112,6 @@ func regnames(n *int) []string {
 func excludedregs() uint64 {
 	// Exclude registers with fixed functions
 	regbits := 1<<0 | RtoB(mips.REGSP) | RtoB(mips.REGG) | RtoB(mips.REGSB) | RtoB(mips.REGTMP) | RtoB(mips.REGLINK) | RtoB(mips.REG_R26) | RtoB(mips.REG_R27)
-
-	// Also exclude floating point registers with fixed constants
-	regbits |= RtoB(mips.FREGZERO) | RtoB(mips.FREGHALF) | RtoB(mips.FREGONE) | RtoB(mips.FREGTWO)
-
 	return regbits
 }
 

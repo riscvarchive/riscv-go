@@ -1,5 +1,5 @@
 // Derived from Inferno utils/6l/l.h and related files.
-// http://code.google.com/p/inferno-os/source/browse/utils/6l/l.h
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/6l/l.h
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -32,12 +32,14 @@ package ld
 
 import (
 	"bufio"
+	"cmd/internal/obj"
 	"cmd/internal/sys"
 	"debug/elf"
 	"fmt"
 )
 
-type LSym struct {
+// Symbol is an entry in the symbol table.
+type Symbol struct {
 	Name        string
 	Extname     string
 	Type        int16
@@ -56,28 +58,28 @@ type LSym struct {
 	// is not set for symbols defined by the packages being linked or by symbols
 	// read by ldelf (and so is left as elf.STT_NOTYPE).
 	ElfType     elf.SymType
-	Next        *LSym
-	Sub         *LSym
-	Outer       *LSym
-	Gotype      *LSym
-	Reachparent *LSym
+	Sub         *Symbol
+	Outer       *Symbol
+	Gotype      *Symbol
+	Reachparent *Symbol
 	File        string
 	Dynimplib   string
 	Dynimpvers  string
 	Sect        *Section
 	FuncInfo    *FuncInfo
-	P           []byte
-	R           []Reloc
+	// P contains the raw symbol data.
+	P []byte
+	R []Reloc
 }
 
-func (s *LSym) String() string {
+func (s *Symbol) String() string {
 	if s.Version == 0 {
 		return s.Name
 	}
 	return fmt.Sprintf("%s<%d>", s.Name, s.Version)
 }
 
-func (s *LSym) ElfsymForReloc() int32 {
+func (s *Symbol) ElfsymForReloc() int32 {
 	// If putelfsym created a local version of this symbol, use that in all
 	// relocations.
 	if s.LocalElfsym != 0 {
@@ -134,54 +136,54 @@ type Reloc struct {
 	Off     int32
 	Siz     uint8
 	Done    uint8
-	Type    int32
+	Type    obj.RelocType
 	Variant int32
 	Add     int64
 	Xadd    int64
-	Sym     *LSym
-	Xsym    *LSym
+	Sym     *Symbol
+	Xsym    *Symbol
 }
 
 type Auto struct {
-	Asym    *LSym
-	Gotype  *LSym
+	Asym    *Symbol
+	Gotype  *Symbol
 	Aoffset int32
 	Name    int16
 }
 
 type Shlib struct {
-	Path             string
-	Hash             []byte
-	Deps             []string
-	File             *elf.File
-	gcdata_addresses map[*LSym]uint64
+	Path            string
+	Hash            []byte
+	Deps            []string
+	File            *elf.File
+	gcdataAddresses map[*Symbol]uint64
 }
 
 type Link struct {
 	Goarm     int32
 	Headtype  int
 	Arch      *sys.Arch
-	Debugvlog int32
+	Debugvlog int
 	Bso       *bufio.Writer
 	Windows   int32
 	Goroot    string
 
 	// Symbol lookup based on name and indexed by version.
-	Hash []map[string]*LSym
+	Hash []map[string]*Symbol
 
-	Allsym     []*LSym
-	Tlsg       *LSym
-	Libdir     []string
-	Library    []*Library
-	Shlibs     []Shlib
-	Tlsoffset  int
-	Diag       func(string, ...interface{})
-	Cursym     *LSym
-	Version    int
-	Textp      []*LSym
-	Filesyms   []*LSym
-	Moduledata *LSym
-	LSymBatch  []LSym
+	Allsym    []*Symbol
+	Tlsg      *Symbol
+	Libdir    []string
+	Library   []*Library
+	Shlibs    []Shlib
+	Tlsoffset int
+
+	Cursym      *Symbol
+	Version     int
+	Textp       []*Symbol
+	Filesyms    []*Symbol
+	Moduledata  *Symbol
+	SymbolBatch []Symbol
 }
 
 // The smallest possible offset from the hardware stack pointer to a local
@@ -203,7 +205,12 @@ func (ctxt *Link) FixedFrameSize() int64 {
 
 func (l *Link) IncVersion() {
 	l.Version++
-	l.Hash = append(l.Hash, make(map[string]*LSym))
+	l.Hash = append(l.Hash, make(map[string]*Symbol))
+}
+
+func (l *Link) Logf(format string, args ...interface{}) {
+	fmt.Fprintf(l.Bso, format, args...)
+	l.Bso.Flush()
 }
 
 type Library struct {
@@ -223,9 +230,9 @@ type FuncInfo struct {
 	Pcfile      Pcdata
 	Pcline      Pcdata
 	Pcdata      []Pcdata
-	Funcdata    []*LSym
+	Funcdata    []*Symbol
 	Funcdataoff []int64
-	File        []*LSym
+	File        []*Symbol
 }
 
 type Pcdata struct {

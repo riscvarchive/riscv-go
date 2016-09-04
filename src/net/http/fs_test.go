@@ -270,10 +270,10 @@ func TestFileServerEscapesNames(t *testing.T) {
 	tests := []struct {
 		name, escaped string
 	}{
-		{`simple_name`, `<a href="simple_name">simple_name</a>`},
-		{`"'<>&`, `<a href="%22%27%3C%3E&">&#34;&#39;&lt;&gt;&amp;</a>`},
-		{`?foo=bar#baz`, `<a href="%3Ffoo=bar%23baz">?foo=bar#baz</a>`},
-		{`<combo>?foo`, `<a href="%3Ccombo%3E%3Ffoo">&lt;combo&gt;?foo</a>`},
+		{`simple_name`, `<a href="./simple_name">simple_name</a>`},
+		{`"'<>&`, `<a href="./%22%27%3C%3E&">&#34;&#39;&lt;&gt;&amp;</a>`},
+		{`?foo=bar#baz`, `<a href="./%3Ffoo=bar%23baz">?foo=bar#baz</a>`},
+		{`<combo>?foo`, `<a href="./%3Ccombo%3E%3Ffoo">&lt;combo&gt;?foo</a>`},
 	}
 
 	// We put each test file in its own directory in the fakeFS so we can look at it in isolation.
@@ -349,7 +349,7 @@ func TestFileServerSortsNames(t *testing.T) {
 		t.Fatalf("read Body: %v", err)
 	}
 	s := string(b)
-	if !strings.Contains(s, "<a href=\"a\">a</a>\n<a href=\"b\">b</a>") {
+	if !strings.Contains(s, "<a href=\"./a\">a</a>\n<a href=\"./b\">b</a>") {
 		t.Errorf("output appears to be unsorted:\n%s", s)
 	}
 }
@@ -765,6 +765,7 @@ func TestServeContent(t *testing.T) {
 		reqHeader        map[string]string
 		wantLastMod      string
 		wantContentType  string
+		wantContentRange string
 		wantStatus       int
 	}
 	htmlModTime := mustStat(t, "testdata/index.html").ModTime()
@@ -820,8 +821,19 @@ func TestServeContent(t *testing.T) {
 			reqHeader: map[string]string{
 				"Range": "bytes=0-4",
 			},
-			wantStatus:      StatusPartialContent,
-			wantContentType: "text/css; charset=utf-8",
+			wantStatus:       StatusPartialContent,
+			wantContentType:  "text/css; charset=utf-8",
+			wantContentRange: "bytes 0-4/8",
+		},
+		"range_no_overlap": {
+			file:      "testdata/style.css",
+			serveETag: `"A"`,
+			reqHeader: map[string]string{
+				"Range": "bytes=10-20",
+			},
+			wantStatus:       StatusRequestedRangeNotSatisfiable,
+			wantContentType:  "text/plain; charset=utf-8",
+			wantContentRange: "bytes */8",
 		},
 		// An If-Range resource for entity "A", but entity "B" is now current.
 		// The Range request should be ignored.
@@ -842,9 +854,10 @@ func TestServeContent(t *testing.T) {
 				"Range":    "bytes=0-4",
 				"If-Range": "Wed, 25 Jun 2014 17:12:18 GMT",
 			},
-			wantStatus:      StatusPartialContent,
-			wantContentType: "text/css; charset=utf-8",
-			wantLastMod:     "Wed, 25 Jun 2014 17:12:18 GMT",
+			wantStatus:       StatusPartialContent,
+			wantContentType:  "text/css; charset=utf-8",
+			wantContentRange: "bytes 0-4/8",
+			wantLastMod:      "Wed, 25 Jun 2014 17:12:18 GMT",
 		},
 		"range_with_modtime_nanos": {
 			file:    "testdata/style.css",
@@ -853,9 +866,10 @@ func TestServeContent(t *testing.T) {
 				"Range":    "bytes=0-4",
 				"If-Range": "Wed, 25 Jun 2014 17:12:18 GMT",
 			},
-			wantStatus:      StatusPartialContent,
-			wantContentType: "text/css; charset=utf-8",
-			wantLastMod:     "Wed, 25 Jun 2014 17:12:18 GMT",
+			wantStatus:       StatusPartialContent,
+			wantContentType:  "text/css; charset=utf-8",
+			wantContentRange: "bytes 0-4/8",
+			wantLastMod:      "Wed, 25 Jun 2014 17:12:18 GMT",
 		},
 		"unix_zero_modtime": {
 			content:         strings.NewReader("<html>foo"),
@@ -902,6 +916,9 @@ func TestServeContent(t *testing.T) {
 		}
 		if g, e := res.Header.Get("Content-Type"), tt.wantContentType; g != e {
 			t.Errorf("test %q: content-type = %q, want %q", testName, g, e)
+		}
+		if g, e := res.Header.Get("Content-Range"), tt.wantContentRange; g != e {
+			t.Errorf("test %q: content-range = %q, want %q", testName, g, e)
 		}
 		if g, e := res.Header.Get("Last-Modified"), tt.wantLastMod; g != e {
 			t.Errorf("test %q: last-modified = %q, want %q", testName, g, e)

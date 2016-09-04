@@ -25,7 +25,7 @@ func buildTest(t *testing.T, filename string) {
 func doTest(t *testing.T, filename string, kind string) {
 	testenv.MustHaveGoBuild(t)
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command("go", kind, filepath.Join("testdata", filename))
+	cmd := exec.Command(testenv.GoToolPath(t), kind, filepath.Join("testdata", filename))
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -103,3 +103,5 @@ func TestSlice(t *testing.T) { runTest(t, "slice.go") }
 func TestNamedReturn(t *testing.T) { runTest(t, "namedReturn.go") }
 
 func TestDuplicateLoad(t *testing.T) { runTest(t, "dupLoad.go") }
+
+func TestSqrt(t *testing.T) { runTest(t, "sqrt_const.go") }

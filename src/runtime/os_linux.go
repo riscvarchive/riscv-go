@@ -133,7 +133,7 @@ const (
 )
 
 //go:noescape
-func clone(flags int32, stk, mm, gg, fn unsafe.Pointer) int32
+func clone(flags int32, stk, mp, gp, fn unsafe.Pointer) int32
 
 // May run with m.p==nil, so write barriers are not allowed.
 //go:nowritebarrier
@@ -360,7 +360,7 @@ func memlimit() uintptr {
 //#endif
 
 func sigreturn()
-func sigtramp()
+func sigtramp(sig uint32, info *siginfo, ctx unsafe.Pointer)
 func cgoSigtramp()
 
 //go:noescape
@@ -388,7 +388,6 @@ func osyield()
 //go:nowritebarrierrec
 func setsig(i int32, fn uintptr, restart bool) {
 	var sa sigactiont
-	memclr(unsafe.Pointer(&sa), unsafe.Sizeof(sa))
 	sa.sa_flags = _SA_SIGINFO | _SA_ONSTACK | _SA_RESTORER
 	if restart {
 		sa.sa_flags |= _SA_RESTART
@@ -431,8 +430,6 @@ func setsigstack(i int32) {
 //go:nowritebarrierrec
 func getsig(i int32) uintptr {
 	var sa sigactiont
-
-	memclr(unsafe.Pointer(&sa), unsafe.Sizeof(sa))
 	if rt_sigaction(uintptr(i), nil, &sa, unsafe.Sizeof(sa.sa_mask)) != 0 {
 		throw("rt_sigaction read failure")
 	}

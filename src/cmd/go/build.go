@@ -338,6 +338,13 @@ func buildModeInit() {
 		case "darwin/arm", "darwin/arm64":
 			codegenArg = "-shared"
 		default:
+			switch goos {
+			case "dragonfly", "freebsd", "linux", "netbsd", "openbsd", "solaris":
+				// Use -shared so that the result is
+				// suitable for inclusion in a PIE or
+				// shared library.
+				codegenArg = "-shared"
+			}
 		}
 		exeSuffix = ".a"
 		ldBuildmode = "c-archive"
@@ -424,10 +431,13 @@ func buildModeInit() {
 			buildAsmflags = append(buildAsmflags, codegenArg)
 			buildGcflags = append(buildGcflags, codegenArg)
 		}
-		if buildContext.InstallSuffix != "" {
-			buildContext.InstallSuffix += "_"
+		// Don't alter InstallSuffix when modifying default codegen args.
+		if buildBuildmode != "default" || buildLinkshared {
+			if buildContext.InstallSuffix != "" {
+				buildContext.InstallSuffix += "_"
+			}
+			buildContext.InstallSuffix += codegenArg[1:]
 		}
-		buildContext.InstallSuffix += codegenArg[1:]
 	}
 }
 
@@ -572,6 +582,10 @@ func libname(args []string, pkgs []*Package) (string, error) {
 }
 
 func runInstall(cmd *Command, args []string) {
+	installPackages(args, false)
+}
+
+func installPackages(args []string, forGet bool) {
 	if gobin != "" && !filepath.IsAbs(gobin) {
 		fatalf("cannot install, GOBIN must be an absolute path")
 	}
@@ -599,6 +613,8 @@ func runInstall(cmd *Command, args []string) {
 
 	var b builder
 	b.init()
+	// Set the behavior for `go get` to not error on packages with test files only.
+	b.testFilesOnlyOK = forGet
 	var a *action
 	if buildBuildmode == "shared" {
 		if libName, err := libname(args, pkgs); err != nil {
@@ -688,6 +704,8 @@ type builder struct {
 	mkdirCache  map[string]bool      // a cache of created directories
 	flagCache   map[string]bool      // a cache of supported compiler flags
 	print       func(args ...interface{}) (int, error)
+
+	testFilesOnlyOK bool // do not error if the packages only have test files
 
 	output    sync.Mutex
 	scriptDir string // current directory in printed script
@@ -1272,6 +1290,8 @@ func (b *builder) do(root *action) {
 		if err != nil {
 			if err == errPrintedOutput {
 				setExitStatus(2)
+			} else if _, ok := err.(*build.NoGoError); ok && len(a.p.TestGoFiles) > 0 && b.testFilesOnlyOK {
+				// Ignore the "no buildable Go source files" error for a package with only test files.
 			} else {
 				errorf("%s", err)
 			}
@@ -1358,7 +1378,7 @@ func (b *builder) build(a *action) (err error) {
 	}
 
 	defer func() {
-		if err != nil && err != errPrintedOutput {
+		if _, ok := err.(*build.NoGoError); err != nil && err != errPrintedOutput && !(ok && b.testFilesOnlyOK && len(a.p.TestGoFiles) > 0) {
 			err = fmt.Errorf("go build %s: %v", a.p.ImportPath, err)
 		}
 	}()
@@ -1544,12 +1564,12 @@ func (b *builder) build(a *action) (err error) {
 	}
 
 	// Assemble .s files.
-	for _, file := range sfiles {
-		out := file[:len(file)-len(".s")] + ".o"
-		if err := buildToolchain.asm(b, a.p, obj, obj+out, file); err != nil {
+	if len(sfiles) > 0 {
+		ofiles, err := buildToolchain.asm(b, a.p, obj, sfiles)
+		if err != nil {
 			return err
 		}
-		objects = append(objects, out)
+		objects = append(objects, ofiles...)
 	}
 
 	// NOTE(rsc): On Windows, it is critically important that the
@@ -2186,9 +2206,9 @@ type toolchain interface {
 	// cc runs the toolchain's C compiler in a directory on a C file
 	// to produce an output file.
 	cc(b *builder, p *Package, objdir, ofile, cfile string) error
-	// asm runs the assembler in a specific directory on a specific file
-	// to generate the named output file.
-	asm(b *builder, p *Package, obj, ofile, sfile string) error
+	// asm runs the assembler in a specific directory on specific files
+	// and returns a list of named output files.
+	asm(b *builder, p *Package, obj string, sfiles []string) ([]string, error)
 	// pkgpath builds an appropriate path for a temporary package file.
 	pkgpath(basedir string, p *Package) string
 	// pack runs the archive packer in a specific directory to create
@@ -2225,8 +2245,8 @@ func (noToolchain) gc(b *builder, p *Package, archive, obj string, asmhdr bool, 
 	return "", nil, noCompiler()
 }
 
-func (noToolchain) asm(b *builder, p *Package, obj, ofile, sfile string) error {
-	return noCompiler()
+func (noToolchain) asm(b *builder, p *Package, obj string, sfiles []string) ([]string, error) {
+	return nil, noCompiler()
 }
 
 func (noToolchain) pkgpath(basedir string, p *Package) string {
@@ -2323,10 +2343,10 @@ func (gcToolchain) gc(b *builder, p *Package, archive, obj string, asmhdr bool, 
 	return ofile, output, err
 }
 
-func (gcToolchain) asm(b *builder, p *Package, obj, ofile, sfile string) error {
+func (gcToolchain) asm(b *builder, p *Package, obj string, sfiles []string) ([]string, error) {
 	// Add -I pkg/GOOS_GOARCH so #include "textflag.h" works in .s files.
 	inc := filepath.Join(goroot, "pkg", "include")
-	sfile = mkAbs(p.Dir, sfile)
+	ofile := obj + "asm.o"
 	args := []interface{}{buildToolExec, tool("asm"), "-o", ofile, "-trimpath", b.work, "-I", obj, "-I", inc, "-D", "GOOS_" + goos, "-D", "GOARCH_" + goarch, buildAsmflags}
 	if p.ImportPath == "runtime" && goarch == "386" {
 		for _, arg := range buildAsmflags {
@@ -2335,11 +2355,13 @@ func (gcToolchain) asm(b *builder, p *Package, obj, ofile, sfile string) error {
 			}
 		}
 	}
-	args = append(args, sfile)
-	if err := b.run(p.Dir, p.ImportPath, nil, args...); err != nil {
-		return err
+	for _, sfile := range sfiles {
+		args = append(args, mkAbs(p.Dir, sfile))
 	}
-	return nil
+	if err := b.run(p.Dir, p.ImportPath, nil, args...); err != nil {
+		return nil, err
+	}
+	return []string{ofile}, nil
 }
 
 // toolVerify checks that the command line args writes the same output file
@@ -2606,15 +2628,24 @@ func (tools gccgoToolchain) gc(b *builder, p *Package, archive, obj string, asmh
 	return ofile, output, err
 }
 
-func (tools gccgoToolchain) asm(b *builder, p *Package, obj, ofile, sfile string) error {
-	sfile = mkAbs(p.Dir, sfile)
-	defs := []string{"-D", "GOOS_" + goos, "-D", "GOARCH_" + goarch}
-	if pkgpath := gccgoCleanPkgpath(p); pkgpath != "" {
-		defs = append(defs, `-D`, `GOPKGPATH=`+pkgpath)
+func (tools gccgoToolchain) asm(b *builder, p *Package, obj string, sfiles []string) ([]string, error) {
+	var ofiles []string
+	for _, sfile := range sfiles {
+		ofile := obj + sfile[:len(sfile)-len(".s")] + ".o"
+		ofiles = append(ofiles, ofile)
+		sfile = mkAbs(p.Dir, sfile)
+		defs := []string{"-D", "GOOS_" + goos, "-D", "GOARCH_" + goarch}
+		if pkgpath := gccgoCleanPkgpath(p); pkgpath != "" {
+			defs = append(defs, `-D`, `GOPKGPATH=`+pkgpath)
+		}
+		defs = tools.maybePIC(defs)
+		defs = append(defs, b.gccArchArgs()...)
+		err := b.run(p.Dir, p.ImportPath, nil, tools.compiler(), "-xassembler-with-cpp", "-I", obj, "-c", "-o", ofile, defs, sfile)
+		if err != nil {
+			return nil, err
+		}
 	}
-	defs = tools.maybePIC(defs)
-	defs = append(defs, b.gccArchArgs()...)
-	return b.run(p.Dir, p.ImportPath, nil, tools.compiler(), "-xassembler-with-cpp", "-I", obj, "-c", "-o", ofile, defs, sfile)
+	return ofiles, nil
 }
 
 func (gccgoToolchain) pkgpath(basedir string, p *Package) string {
@@ -2969,9 +3000,19 @@ func (b *builder) gfortran(p *Package, out string, flags []string, ffile string)
 }
 
 // ccompile runs the given C or C++ compiler and creates an object from a single source file.
-func (b *builder) ccompile(p *Package, out string, flags []string, file string, compiler []string) error {
+func (b *builder) ccompile(p *Package, outfile string, flags []string, file string, compiler []string) error {
 	file = mkAbs(p.Dir, file)
-	return b.run(p.Dir, p.ImportPath, nil, compiler, flags, "-o", out, "-c", file)
+	desc := p.ImportPath
+	output, err := b.runOut(p.Dir, desc, nil, compiler, flags, "-o", outfile, "-c", file)
+	if len(output) > 0 {
+		b.showOutput(p.Dir, desc, b.processOutput(output))
+		if err != nil {
+			err = errPrintedOutput
+		} else if os.Getenv("GO_BUILDER_NAME") != "" {
+			return errors.New("C compiler warning promoted to error on Go builders")
+		}
+	}
+	return err
 }
 
 // gccld runs the gcc linker to create an executable from a set of object files.
@@ -3164,7 +3205,7 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 		}
 	}
 
-	if buildMSan && p.ImportPath != "runtime/cgo" {
+	if buildMSan {
 		cgoCFLAGS = append([]string{"-fsanitize=memory"}, cgoCFLAGS...)
 		cgoLDFLAGS = append([]string{"-fsanitize=memory"}, cgoLDFLAGS...)
 	}
@@ -3175,17 +3216,16 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 	// cgo
 	// TODO: CGO_FLAGS?
 	gofiles := []string{obj + "_cgo_gotypes.go"}
-	cfiles := []string{"_cgo_main.c", "_cgo_export.c"}
+	cfiles := []string{"_cgo_export.c"}
 	for _, fn := range cgofiles {
 		f := cgoRe.ReplaceAllString(fn[:len(fn)-2], "_")
 		gofiles = append(gofiles, obj+f+"cgo1.go")
 		cfiles = append(cfiles, f+"cgo2.c")
 	}
-	defunC := obj + "_cgo_defun.c"
 
-	cgoflags := []string{}
 	// TODO: make cgo not depend on $GOARCH?
 
+	cgoflags := []string{}
 	if p.Standard && p.ImportPath == "runtime/cgo" {
 		cgoflags = append(cgoflags, "-import_runtime_cgo=false")
 	}
@@ -3227,23 +3267,119 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 	}
 	outGo = append(outGo, gofiles...)
 
-	// cc _cgo_defun.c
-	_, gccgo := buildToolchain.(gccgoToolchain)
-	if gccgo {
+	// gcc
+	cflags := stringList(cgoCPPFLAGS, cgoCFLAGS)
+	for _, cfile := range cfiles {
+		ofile := obj + cfile[:len(cfile)-1] + "o"
+		if err := b.gcc(p, ofile, cflags, obj+cfile); err != nil {
+			return nil, nil, err
+		}
+		outObj = append(outObj, ofile)
+	}
+
+	for _, file := range gccfiles {
+		ofile := obj + cgoRe.ReplaceAllString(file[:len(file)-1], "_") + "o"
+		if err := b.gcc(p, ofile, cflags, file); err != nil {
+			return nil, nil, err
+		}
+		outObj = append(outObj, ofile)
+	}
+
+	cxxflags := stringList(cgoCPPFLAGS, cgoCXXFLAGS)
+	for _, file := range gxxfiles {
+		// Append .o to the file, just in case the pkg has file.c and file.cpp
+		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
+		if err := b.gxx(p, ofile, cxxflags, file); err != nil {
+			return nil, nil, err
+		}
+		outObj = append(outObj, ofile)
+	}
+
+	for _, file := range mfiles {
+		// Append .o to the file, just in case the pkg has file.c and file.m
+		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
+		if err := b.gcc(p, ofile, cflags, file); err != nil {
+			return nil, nil, err
+		}
+		outObj = append(outObj, ofile)
+	}
+
+	fflags := stringList(cgoCPPFLAGS, cgoFFLAGS)
+	for _, file := range ffiles {
+		// Append .o to the file, just in case the pkg has file.c and file.f
+		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
+		if err := b.gfortran(p, ofile, fflags, file); err != nil {
+			return nil, nil, err
+		}
+		outObj = append(outObj, ofile)
+	}
+
+	switch buildToolchain.(type) {
+	case gcToolchain:
+		importGo := obj + "_cgo_import.go"
+		if err := b.dynimport(p, obj, importGo, cgoExe, cflags, cgoLDFLAGS, outObj); err != nil {
+			return nil, nil, err
+		}
+		outGo = append(outGo, importGo)
+
+		ofile := obj + "_all.o"
+		if err := b.collect(p, obj, ofile, cgoLDFLAGS, outObj); err != nil {
+			return nil, nil, err
+		}
+		outObj = []string{ofile}
+
+	case gccgoToolchain:
+		defunC := obj + "_cgo_defun.c"
 		defunObj := obj + "_cgo_defun.o"
 		if err := buildToolchain.cc(b, p, obj, defunObj, defunC); err != nil {
 			return nil, nil, err
 		}
 		outObj = append(outObj, defunObj)
+
+	default:
+		noCompiler()
 	}
 
-	// gcc
-	var linkobj []string
+	return outGo, outObj, nil
+}
 
-	var bareLDFLAGS []string
+// dynimport creates a Go source file named importGo containing
+// //go:cgo_import_dynamic directives for each symbol or library
+// dynamically imported by the object files outObj.
+func (b *builder) dynimport(p *Package, obj, importGo, cgoExe string, cflags, cgoLDFLAGS, outObj []string) error {
+	cfile := obj + "_cgo_main.c"
+	ofile := obj + "_cgo_main.o"
+	if err := b.gcc(p, ofile, cflags, cfile); err != nil {
+		return err
+	}
+
+	linkobj := stringList(ofile, outObj, p.SysoFiles)
+	dynobj := obj + "_cgo_.o"
+
+	// we need to use -pie for Linux/ARM to get accurate imported sym
+	ldflags := cgoLDFLAGS
+	if (goarch == "arm" && goos == "linux") || goos == "android" {
+		ldflags = append(ldflags, "-pie")
+	}
+	if err := b.gccld(p, dynobj, ldflags, linkobj); err != nil {
+		return err
+	}
+
+	// cgo -dynimport
+	var cgoflags []string
+	if p.Standard && p.ImportPath == "runtime/cgo" {
+		cgoflags = []string{"-dynlinker"} // record path to dynamic linker
+	}
+	return b.run(p.Dir, p.ImportPath, nil, buildToolExec, cgoExe, "-dynpackage", p.Name, "-dynimport", dynobj, "-dynout", importGo, cgoflags)
+}
+
+// collect partially links the object files outObj into a single
+// relocatable object file named ofile.
+func (b *builder) collect(p *Package, obj, ofile string, cgoLDFLAGS, outObj []string) error {
 	// When linking relocatable objects, various flags need to be
 	// filtered out as they are inapplicable and can cause some linkers
 	// to fail.
+	var ldflags []string
 	for i := 0; i < len(cgoLDFLAGS); i++ {
 		f := cgoLDFLAGS[i]
 		switch {
@@ -3278,109 +3414,11 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 				i++
 			}
 		default:
-			bareLDFLAGS = append(bareLDFLAGS, f)
+			ldflags = append(ldflags, f)
 		}
 	}
 
-	var staticLibs []string
-	if goos == "windows" {
-		// libmingw32 and libmingwex have some inter-dependencies,
-		// so must use linker groups.
-		staticLibs = []string{"-Wl,--start-group", "-lmingwex", "-lmingw32", "-Wl,--end-group"}
-	}
-
-	cflags := stringList(cgoCPPFLAGS, cgoCFLAGS)
-	for _, cfile := range cfiles {
-		ofile := obj + cfile[:len(cfile)-1] + "o"
-		if err := b.gcc(p, ofile, cflags, obj+cfile); err != nil {
-			return nil, nil, err
-		}
-		linkobj = append(linkobj, ofile)
-		if !strings.HasSuffix(ofile, "_cgo_main.o") {
-			outObj = append(outObj, ofile)
-		}
-	}
-
-	for _, file := range gccfiles {
-		ofile := obj + cgoRe.ReplaceAllString(file[:len(file)-1], "_") + "o"
-		if err := b.gcc(p, ofile, cflags, file); err != nil {
-			return nil, nil, err
-		}
-		linkobj = append(linkobj, ofile)
-		outObj = append(outObj, ofile)
-	}
-
-	cxxflags := stringList(cgoCPPFLAGS, cgoCXXFLAGS)
-	for _, file := range gxxfiles {
-		// Append .o to the file, just in case the pkg has file.c and file.cpp
-		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
-		if err := b.gxx(p, ofile, cxxflags, file); err != nil {
-			return nil, nil, err
-		}
-		linkobj = append(linkobj, ofile)
-		outObj = append(outObj, ofile)
-	}
-
-	for _, file := range mfiles {
-		// Append .o to the file, just in case the pkg has file.c and file.m
-		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
-		if err := b.gcc(p, ofile, cflags, file); err != nil {
-			return nil, nil, err
-		}
-		linkobj = append(linkobj, ofile)
-		outObj = append(outObj, ofile)
-	}
-
-	fflags := stringList(cgoCPPFLAGS, cgoFFLAGS)
-	for _, file := range ffiles {
-		// Append .o to the file, just in case the pkg has file.c and file.f
-		ofile := obj + cgoRe.ReplaceAllString(file, "_") + ".o"
-		if err := b.gfortran(p, ofile, fflags, file); err != nil {
-			return nil, nil, err
-		}
-		linkobj = append(linkobj, ofile)
-		outObj = append(outObj, ofile)
-	}
-
-	linkobj = append(linkobj, p.SysoFiles...)
-	dynobj := obj + "_cgo_.o"
-	pie := (goarch == "arm" && goos == "linux") || goos == "android"
-	if pie { // we need to use -pie for Linux/ARM to get accurate imported sym
-		cgoLDFLAGS = append(cgoLDFLAGS, "-pie")
-	}
-	if err := b.gccld(p, dynobj, cgoLDFLAGS, linkobj); err != nil {
-		return nil, nil, err
-	}
-	if pie { // but we don't need -pie for normal cgo programs
-		cgoLDFLAGS = cgoLDFLAGS[0 : len(cgoLDFLAGS)-1]
-	}
-
-	if _, ok := buildToolchain.(gccgoToolchain); ok {
-		// we don't use dynimport when using gccgo.
-		return outGo, outObj, nil
-	}
-
-	// cgo -dynimport
-	importGo := obj + "_cgo_import.go"
-	cgoflags = []string{}
-	if p.Standard && p.ImportPath == "runtime/cgo" {
-		cgoflags = append(cgoflags, "-dynlinker") // record path to dynamic linker
-	}
-	if err := b.run(p.Dir, p.ImportPath, nil, buildToolExec, cgoExe, "-objdir", obj, "-dynpackage", p.Name, "-dynimport", dynobj, "-dynout", importGo, cgoflags); err != nil {
-		return nil, nil, err
-	}
-	outGo = append(outGo, importGo)
-
-	ofile := obj + "_all.o"
-	var gccObjs, nonGccObjs []string
-	for _, f := range outObj {
-		if strings.HasSuffix(f, ".o") {
-			gccObjs = append(gccObjs, f)
-		} else {
-			nonGccObjs = append(nonGccObjs, f)
-		}
-	}
-	ldflags := stringList(bareLDFLAGS, "-Wl,-r", "-nostdlib", staticLibs)
+	ldflags = append(ldflags, "-Wl,-r", "-nostdlib")
 
 	if b.gccSupportsNoPie() {
 		ldflags = append(ldflags, "-no-pie")
@@ -3389,16 +3427,7 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 	// We are creating an object file, so we don't want a build ID.
 	ldflags = b.disableBuildID(ldflags)
 
-	if err := b.gccld(p, ofile, ldflags, gccObjs); err != nil {
-		return nil, nil, err
-	}
-
-	// NOTE(rsc): The importObj is a 5c/6c/8c object and on Windows
-	// must be processed before the gcc-generated objects.
-	// Put it first.  https://golang.org/issue/2601
-	outObj = stringList(nonGccObjs, ofile)
-
-	return outGo, outObj, nil
+	return b.gccld(p, ofile, ldflags, outObj)
 }
 
 // Run SWIG on all SWIG input files.

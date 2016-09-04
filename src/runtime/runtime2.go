@@ -498,7 +498,7 @@ type p struct {
 
 	runSafePointFn uint32 // if 1, run sched.safePointFn at next safe point
 
-	pad [64]byte
+	pad [sys.CacheLineSize]byte
 }
 
 const (
@@ -574,11 +574,6 @@ const (
 	_LockExternal = 1
 	_LockInternal = 2
 )
-
-type sigtabtt struct {
-	flags int32
-	name  *int8
-}
 
 const (
 	_SigNotify   = 1 << iota // let signal.Notify have signal, even if from kernel

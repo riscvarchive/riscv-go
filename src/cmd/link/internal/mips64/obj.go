@@ -1,5 +1,5 @@
 // Inferno utils/5l/obj.c
-// http://code.google.com/p/inferno-os/source/browse/utils/5l/obj.c
+// https://bitbucket.org/inferno-os/inferno-os/src/default/utils/5l/obj.c
 //
 //	Copyright © 1994-1999 Lucent Technologies Inc.  All rights reserved.
 //	Portions Copyright © 1995-1997 C H Forsyth (forsyth@terzarima.net)
@@ -42,7 +42,7 @@ import (
 
 func Main() {
 	linkarchinit()
-	ld.Ldmain()
+	ld.Main()
 }
 
 func linkarchinit() {
@@ -92,7 +92,7 @@ func linkarchinit() {
 	ld.Thearch.Solarisdynld = "XXX"
 }
 
-func archinit() {
+func archinit(ctxt *ld.Link) {
 	// getgoextlinkenabled is based on GO_EXTLINK_ENABLED when
 	// Go was built; see ../../make.bash.
 	if ld.Linkmode == ld.LinkAuto && obj.Getgoextlinkenabled() == "0" {
@@ -119,45 +119,45 @@ func archinit() {
 	case obj.Hplan9: /* plan 9 */
 		ld.HEADR = 32
 
-		if ld.INITTEXT == -1 {
-			ld.INITTEXT = 16*1024 + int64(ld.HEADR)
+		if *ld.FlagTextAddr == -1 {
+			*ld.FlagTextAddr = 16*1024 + int64(ld.HEADR)
 		}
-		if ld.INITDAT == -1 {
-			ld.INITDAT = 0
+		if *ld.FlagDataAddr == -1 {
+			*ld.FlagDataAddr = 0
 		}
-		if ld.INITRND == -1 {
-			ld.INITRND = 16 * 1024
+		if *ld.FlagRound == -1 {
+			*ld.FlagRound = 16 * 1024
 		}
 
 	case obj.Hlinux: /* mips64 elf */
-		ld.Elfinit()
+		ld.Elfinit(ctxt)
 		ld.HEADR = ld.ELFRESERVE
-		if ld.INITTEXT == -1 {
-			ld.INITTEXT = 0x10000 + int64(ld.HEADR)
+		if *ld.FlagTextAddr == -1 {
+			*ld.FlagTextAddr = 0x10000 + int64(ld.HEADR)
 		}
-		if ld.INITDAT == -1 {
-			ld.INITDAT = 0
+		if *ld.FlagDataAddr == -1 {
+			*ld.FlagDataAddr = 0
 		}
-		if ld.INITRND == -1 {
-			ld.INITRND = 0x10000
+		if *ld.FlagRound == -1 {
+			*ld.FlagRound = 0x10000
 		}
 
 	case obj.Hnacl:
-		ld.Elfinit()
+		ld.Elfinit(ctxt)
 		ld.HEADR = 0x10000
 		ld.Funcalign = 16
-		if ld.INITTEXT == -1 {
-			ld.INITTEXT = 0x20000
+		if *ld.FlagTextAddr == -1 {
+			*ld.FlagTextAddr = 0x20000
 		}
-		if ld.INITDAT == -1 {
-			ld.INITDAT = 0
+		if *ld.FlagDataAddr == -1 {
+			*ld.FlagDataAddr = 0
 		}
-		if ld.INITRND == -1 {
-			ld.INITRND = 0x10000
+		if *ld.FlagRound == -1 {
+			*ld.FlagRound = 0x10000
 		}
 	}
 
-	if ld.INITDAT != 0 && ld.INITRND != 0 {
-		fmt.Printf("warning: -D0x%x is ignored because of -R0x%x\n", uint64(ld.INITDAT), uint32(ld.INITRND))
+	if *ld.FlagDataAddr != 0 && *ld.FlagRound != 0 {
+		fmt.Printf("warning: -D0x%x is ignored because of -R0x%x\n", uint64(*ld.FlagDataAddr), uint32(*ld.FlagRound))
 	}
 }

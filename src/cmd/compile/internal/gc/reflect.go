@@ -283,7 +283,7 @@ func methodfunc(f *Type, receiver *Type) *Type {
 // Generates stub functions as needed.
 func methods(t *Type) []*Sig {
 	// method type
-	mt := methtype(t, 0)
+	mt := methtype(t)
 
 	if mt == nil {
 		return nil
@@ -1305,6 +1305,15 @@ ok:
 		pkg := localpkg
 		if t.Sym != nil {
 			pkg = t.Sym.Pkg
+		} else {
+			// Unnamed type. Grab the package from the first field, if any.
+			for _, f := range t.Fields().Slice() {
+				if f.Embedded != 0 {
+					continue
+				}
+				pkg = f.Sym.Pkg
+				break
+			}
 		}
 		ot = dgopkgpath(s, ot, pkg)
 		ot = dsymptr(s, ot, s, ot+Widthptr+2*Widthint+uncommonSize(t))

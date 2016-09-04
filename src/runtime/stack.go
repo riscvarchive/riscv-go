@@ -90,7 +90,7 @@ const (
 
 	// The stack guard is a pointer this many bytes above the
 	// bottom of the stack.
-	_StackGuard = 720*sys.StackGuardMultiplier + _StackSystem
+	_StackGuard = 880*sys.StackGuardMultiplier + _StackSystem
 
 	// After a stack split check the SP is allowed to be this
 	// many bytes below the stack guard. This saves an instruction
@@ -598,7 +598,7 @@ func adjustpointers(scanp unsafe.Pointer, cbv *bitvector, adjinfo *adjustinfo, f
 				// Live analysis wrong?
 				getg().m.traceback = 2
 				print("runtime: bad pointer in frame ", funcname(f), " at ", pp, ": ", hex(p), "\n")
-				throw("invalid stack pointer")
+				throw("invalid pointer found on stack")
 			}
 			if minp <= p && p < maxp {
 				if stackDebug >= 3 {

@@ -88,7 +88,6 @@ func init() {
 		dx         = buildReg("DX")
 		gp         = buildReg("AX CX DX BX BP SI DI")
 		fp         = buildReg("X0 X1 X2 X3 X4 X5 X6 X7")
-		x7         = buildReg("X7")
 		gpsp       = gp | buildReg("SP")
 		gpspsb     = gpsp | buildReg("SB")
 		callerSave = gp | fp
@@ -106,8 +105,8 @@ func init() {
 		gp11sp    = regInfo{inputs: []regMask{gpsp}, outputs: gponly}
 		gp11sb    = regInfo{inputs: []regMask{gpspsb}, outputs: gponly}
 		gp21      = regInfo{inputs: []regMask{gp, gp}, outputs: gponly}
-		gp11carry = regInfo{inputs: []regMask{gp}, outputs: []regMask{0, gp}}
-		gp21carry = regInfo{inputs: []regMask{gp, gp}, outputs: []regMask{0, gp}}
+		gp11carry = regInfo{inputs: []regMask{gp}, outputs: []regMask{gp, 0}}
+		gp21carry = regInfo{inputs: []regMask{gp, gp}, outputs: []regMask{gp, 0}}
 		gp1carry1 = regInfo{inputs: []regMask{gp}, outputs: gponly}
 		gp2carry1 = regInfo{inputs: []regMask{gp, gp}, outputs: gponly}
 		gp21sp    = regInfo{inputs: []regMask{gpsp, gp}, outputs: gponly}
@@ -133,10 +132,8 @@ func init() {
 		gpstoreidx      = regInfo{inputs: []regMask{gpspsb, gpsp, gpsp, 0}}
 		gpstoreconstidx = regInfo{inputs: []regMask{gpspsb, gpsp, 0}}
 
-		fp01   = regInfo{inputs: nil, outputs: fponly}
-		fp21   = regInfo{inputs: []regMask{fp, fp}, outputs: fponly}
-		fp21x7 = regInfo{inputs: []regMask{fp &^ x7, fp &^ x7},
-			clobbers: x7, outputs: []regMask{fp &^ x7}}
+		fp01     = regInfo{inputs: nil, outputs: fponly}
+		fp21     = regInfo{inputs: []regMask{fp, fp}, outputs: fponly}
 		fpgp     = regInfo{inputs: fponly, outputs: gponly}
 		gpfp     = regInfo{inputs: gponly, outputs: fponly}
 		fp11     = regInfo{inputs: fponly, outputs: fponly}
@@ -153,12 +150,12 @@ func init() {
 		// fp ops
 		{name: "ADDSS", argLength: 2, reg: fp21, asm: "ADDSS", commutative: true, resultInArg0: true}, // fp32 add
 		{name: "ADDSD", argLength: 2, reg: fp21, asm: "ADDSD", commutative: true, resultInArg0: true}, // fp64 add
-		{name: "SUBSS", argLength: 2, reg: fp21x7, asm: "SUBSS", resultInArg0: true},                  // fp32 sub
-		{name: "SUBSD", argLength: 2, reg: fp21x7, asm: "SUBSD", resultInArg0: true},                  // fp64 sub
+		{name: "SUBSS", argLength: 2, reg: fp21, asm: "SUBSS", resultInArg0: true},                    // fp32 sub
+		{name: "SUBSD", argLength: 2, reg: fp21, asm: "SUBSD", resultInArg0: true},                    // fp64 sub
 		{name: "MULSS", argLength: 2, reg: fp21, asm: "MULSS", commutative: true, resultInArg0: true}, // fp32 mul
 		{name: "MULSD", argLength: 2, reg: fp21, asm: "MULSD", commutative: true, resultInArg0: true}, // fp64 mul
-		{name: "DIVSS", argLength: 2, reg: fp21x7, asm: "DIVSS", resultInArg0: true},                  // fp32 div
-		{name: "DIVSD", argLength: 2, reg: fp21x7, asm: "DIVSD", resultInArg0: true},                  // fp64 div
+		{name: "DIVSS", argLength: 2, reg: fp21, asm: "DIVSS", resultInArg0: true},                    // fp32 div
+		{name: "DIVSD", argLength: 2, reg: fp21, asm: "DIVSD", resultInArg0: true},                    // fp64 div
 
 		{name: "MOVSSload", argLength: 2, reg: fpload, asm: "MOVSS", aux: "SymOff"},            // fp32 load
 		{name: "MOVSDload", argLength: 2, reg: fpload, asm: "MOVSD", aux: "SymOff"},            // fp64 load

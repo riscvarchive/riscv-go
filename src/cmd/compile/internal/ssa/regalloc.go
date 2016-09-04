@@ -471,7 +471,7 @@ func (s *regAllocState) init(f *Func) {
 	}
 
 	// Figure out which registers we're allowed to use.
-	s.allocatable = s.f.Config.gpRegMask | s.f.Config.fpRegMask
+	s.allocatable = s.f.Config.gpRegMask | s.f.Config.fpRegMask | s.f.Config.specialRegMask
 	s.allocatable &^= 1 << s.SPReg
 	s.allocatable &^= 1 << s.SBReg
 	if s.f.Config.hasGReg {
@@ -480,12 +480,20 @@ func (s *regAllocState) init(f *Func) {
 	if s.f.Config.ctxt.Framepointer_enabled && s.f.Config.FPReg >= 0 {
 		s.allocatable &^= 1 << uint(s.f.Config.FPReg)
 	}
+	if s.f.Config.ctxt.Flag_shared {
+		switch s.f.Config.arch {
+		case "ppc64le": // R2 already reserved.
+			s.allocatable &^= 1 << 11 // R12 -- R0 is skipped in PPC64Ops.go
+		}
+	}
 	if s.f.Config.ctxt.Flag_dynlink {
 		switch s.f.Config.arch {
 		case "amd64":
 			s.allocatable &^= 1 << 15 // R15
 		case "arm":
 			s.allocatable &^= 1 << 9 // R9
+		case "ppc64le": // R2 already reserved.
+			s.allocatable &^= 1 << 11 // R12 -- R0 is skipped in PPC64Ops.go
 		case "arm64":
 			// nothing to do?
 		case "386":
@@ -1196,7 +1204,7 @@ func (s *regAllocState) regalloc(f *Func) {
 					if mask == 0 {
 						continue
 					}
-					if opcodeTable[v.Op].resultInArg0 && out.idx == len(regspec.outputs)-1 {
+					if opcodeTable[v.Op].resultInArg0 && out.idx == 0 {
 						if !opcodeTable[v.Op].commutative {
 							// Output must use the same register as input 0.
 							r := register(s.f.getHome(args[0].ID).(*Register).Num)
@@ -1294,7 +1302,7 @@ func (s *regAllocState) regalloc(f *Func) {
 			// We assume that a control input can be passed in any
 			// type-compatible register. If this turns out not to be true,
 			// we'll need to introduce a regspec for a block's control value.
-			s.allocValToReg(v, s.compatRegs(v.Type), false, b.Line)
+			b.Control = s.allocValToReg(v, s.compatRegs(v.Type), false, b.Line)
 			// Remove this use from the uses list.
 			vi := &s.values[v.ID]
 			u := vi.uses

@@ -30,10 +30,14 @@ const maxNanoSecondIntSize = 9
 // and then it can be treated as an io.Reader to access the file's data.
 type Reader struct {
 	r    io.Reader
-	err  error
 	pad  int64          // amount of padding (ignored) after current file entry
 	curr numBytesReader // reader for current file entry
 	blk  block          // buffer to use as temporary local storage
+
+	// err is a persistent error.
+	// It is only the responsibility of every exported method of Reader to
+	// ensure that this error is sticky.
+	err error
 }
 
 type parser struct {
@@ -108,8 +112,12 @@ func (tr *Reader) Next() (*Header, error) {
 	if tr.err != nil {
 		return nil, tr.err
 	}
+	hdr, err := tr.next()
+	tr.err = err
+	return hdr, err
+}
 
-	var hdr *Header
+func (tr *Reader) next() (*Header, error) {
 	var extHdrs map[string]string
 
 	// Externally, Next iterates through the tar archive as if it is a series of
@@ -119,29 +127,29 @@ func (tr *Reader) Next() (*Header, error) {
 	// one or more "header files" until it finds a "normal file".
 loop:
 	for {
-		tr.err = tr.skipUnread()
-		if tr.err != nil {
-			return nil, tr.err
+		if err := tr.skipUnread(); err != nil {
+			return nil, err
 		}
-
-		hdr = tr.readHeader()
-		if tr.err != nil {
-			return nil, tr.err
+		hdr, rawHdr, err := tr.readHeader()
+		if err != nil {
+			return nil, err
+		}
+		if err := tr.handleRegularFile(hdr); err != nil {
+			return nil, err
 		}
 
 		// Check for PAX/GNU special headers and files.
 		switch hdr.Typeflag {
 		case TypeXHeader:
-			extHdrs, tr.err = parsePAX(tr)
-			if tr.err != nil {
-				return nil, tr.err
+			extHdrs, err = parsePAX(tr)
+			if err != nil {
+				return nil, err
 			}
 			continue loop // This is a meta header affecting the next header
 		case TypeGNULongName, TypeGNULongLink:
-			var realname []byte
-			realname, tr.err = ioutil.ReadAll(tr)
-			if tr.err != nil {
-				return nil, tr.err
+			realname, err := ioutil.ReadAll(tr)
+			if err != nil {
+				return nil, err
 			}
 
 			// Convert GNU extensions to use PAX headers.
@@ -156,31 +164,79 @@ loop:
 				extHdrs[paxLinkpath] = p.parseString(realname)
 			}
 			if p.err != nil {
-				tr.err = p.err
-				return nil, tr.err
+				return nil, p.err
 			}
 			continue loop // This is a meta header affecting the next header
 		default:
-			mergePAX(hdr, extHdrs)
+			// The old GNU sparse format is handled here since it is technically
+			// just a regular file with additional attributes.
 
-			// Check for a PAX format sparse file
-			sp, err := tr.checkForGNUSparsePAXHeaders(hdr, extHdrs)
-			if err != nil {
-				tr.err = err
+			if err := mergePAX(hdr, extHdrs); err != nil {
 				return nil, err
 			}
-			if sp != nil {
-				// Current file is a PAX format GNU sparse file.
-				// Set the current file reader to a sparse file reader.
-				tr.curr, tr.err = newSparseFileReader(tr.curr, sp, hdr.Size)
-				if tr.err != nil {
-					return nil, tr.err
-				}
+
+			// The extended headers may have updated the size.
+			// Thus, setup the regFileReader again after merging PAX headers.
+			if err := tr.handleRegularFile(hdr); err != nil {
+				return nil, err
 			}
-			break loop // This is a file, so stop
+
+			// Sparse formats rely on being able to read from the logical data
+			// section; there must be a preceding call to handleRegularFile.
+			if err := tr.handleSparseFile(hdr, rawHdr, extHdrs); err != nil {
+				return nil, err
+			}
+			return hdr, nil // This is a file, so stop
 		}
 	}
-	return hdr, nil
+}
+
+// handleRegularFile sets up the current file reader and padding such that it
+// can only read the following logical data section. It will properly handle
+// special headers that contain no data section.
+func (tr *Reader) handleRegularFile(hdr *Header) error {
+	nb := hdr.Size
+	if isHeaderOnlyType(hdr.Typeflag) {
+		nb = 0
+	}
+	if nb < 0 {
+		return ErrHeader
+	}
+
+	tr.pad = -nb & (blockSize - 1) // blockSize is a power of two
+	tr.curr = &regFileReader{r: tr.r, nb: nb}
+	return nil
+}
+
+// handleSparseFile checks if the current file is a sparse format of any type
+// and sets the curr reader appropriately.
+func (tr *Reader) handleSparseFile(hdr *Header, rawHdr *block, extHdrs map[string]string) error {
+	var sp []sparseEntry
+	var err error
+	if hdr.Typeflag == TypeGNUSparse {
+		var p parser
+		hdr.Size = p.parseNumeric(rawHdr.GNU().RealSize())
+		if p.err != nil {
+			return p.err
+		}
+
+		sp, err = tr.readOldGNUSparseMap(rawHdr)
+		if err != nil {
+			return err
+		}
+	} else {
+		sp, err = tr.checkForGNUSparsePAXHeaders(hdr, extHdrs)
+		if err != nil {
+			return err
+		}
+	}
+
+	// If sp is non-nil, then this is a sparse file.
+	// Note that it is possible for len(sp) to be zero.
+	if sp != nil {
+		tr.curr, err = newSparseFileReader(tr.curr, sp, hdr.Size)
+	}
+	return err
 }
 
 // checkForGNUSparsePAXHeaders checks the PAX headers for GNU sparse headers. If they are found, then
@@ -249,53 +305,32 @@ func (tr *Reader) checkForGNUSparsePAXHeaders(hdr *Header, headers map[string]st
 // in the header struct overwrite those found in the header
 // struct with higher precision or longer values. Esp. useful
 // for name and linkname fields.
-func mergePAX(hdr *Header, headers map[string]string) error {
+func mergePAX(hdr *Header, headers map[string]string) (err error) {
+	var id64 int64
 	for k, v := range headers {
 		switch k {
 		case paxPath:
 			hdr.Name = v
 		case paxLinkpath:
 			hdr.Linkname = v
-		case paxGname:
-			hdr.Gname = v
 		case paxUname:
 			hdr.Uname = v
+		case paxGname:
+			hdr.Gname = v
 		case paxUid:
-			uid, err := strconv.ParseInt(v, 10, 0)
-			if err != nil {
-				return err
-			}
-			hdr.Uid = int(uid)
+			id64, err = strconv.ParseInt(v, 10, 0)
+			hdr.Uid = int(id64)
 		case paxGid:
-			gid, err := strconv.ParseInt(v, 10, 0)
-			if err != nil {
-				return err
-			}
-			hdr.Gid = int(gid)
+			id64, err = strconv.ParseInt(v, 10, 0)
+			hdr.Gid = int(id64)
 		case paxAtime:
-			t, err := parsePAXTime(v)
-			if err != nil {
-				return err
-			}
-			hdr.AccessTime = t
+			hdr.AccessTime, err = parsePAXTime(v)
 		case paxMtime:
-			t, err := parsePAXTime(v)
-			if err != nil {
-				return err
-			}
-			hdr.ModTime = t
+			hdr.ModTime, err = parsePAXTime(v)
 		case paxCtime:
-			t, err := parsePAXTime(v)
-			if err != nil {
-				return err
-			}
-			hdr.ChangeTime = t
+			hdr.ChangeTime, err = parsePAXTime(v)
 		case paxSize:
-			size, err := strconv.ParseInt(v, 10, 0)
-			if err != nil {
-				return err
-			}
-			hdr.Size = size
+			hdr.Size, err = strconv.ParseInt(v, 10, 0)
 		default:
 			if strings.HasPrefix(k, paxXattr) {
 				if hdr.Xattrs == nil {
@@ -303,6 +338,9 @@ func mergePAX(hdr *Header, headers map[string]string) error {
 				}
 				hdr.Xattrs[k[len(paxXattr):]] = v
 			}
+		}
+		if err != nil {
+			return ErrHeader
 		}
 	}
 	return nil
@@ -516,51 +554,46 @@ func (tr *Reader) skipUnread() error {
 			// Seek seems supported, so perform the real Seek.
 			pos2, err := sr.Seek(dataSkip-1, io.SeekCurrent)
 			if err != nil {
-				tr.err = err
-				return tr.err
+				return err
 			}
 			seekSkipped = pos2 - pos1
 		}
 	}
 
-	var copySkipped int64 // Number of bytes skipped via CopyN
-	copySkipped, tr.err = io.CopyN(ioutil.Discard, tr.r, totalSkip-seekSkipped)
-	if tr.err == io.EOF && seekSkipped+copySkipped < dataSkip {
-		tr.err = io.ErrUnexpectedEOF
+	copySkipped, err := io.CopyN(ioutil.Discard, tr.r, totalSkip-seekSkipped)
+	if err == io.EOF && seekSkipped+copySkipped < dataSkip {
+		err = io.ErrUnexpectedEOF
 	}
-	return tr.err
+	return err
 }
 
 // readHeader reads the next block header and assumes that the underlying reader
-// is already aligned to a block boundary.
+// is already aligned to a block boundary. It returns the raw block of the
+// header in case further processing is required.
 //
 // The err will be set to io.EOF only when one of the following occurs:
 //	* Exactly 0 bytes are read and EOF is hit.
 //	* Exactly 1 block of zeros is read and EOF is hit.
 //	* At least 2 blocks of zeros are read.
-func (tr *Reader) readHeader() *Header {
-	if _, tr.err = io.ReadFull(tr.r, tr.blk[:]); tr.err != nil {
-		return nil // io.EOF is okay here
-	}
-
+func (tr *Reader) readHeader() (*Header, *block, error) {
 	// Two blocks of zero bytes marks the end of the archive.
+	if _, err := io.ReadFull(tr.r, tr.blk[:]); err != nil {
+		return nil, nil, err // EOF is okay here; exactly 0 bytes read
+	}
 	if bytes.Equal(tr.blk[:], zeroBlock[:]) {
-		if _, tr.err = io.ReadFull(tr.r, tr.blk[:]); tr.err != nil {
-			return nil // io.EOF is okay here
+		if _, err := io.ReadFull(tr.r, tr.blk[:]); err != nil {
+			return nil, nil, err // EOF is okay here; exactly 1 block of zeros read
 		}
 		if bytes.Equal(tr.blk[:], zeroBlock[:]) {
-			tr.err = io.EOF
-		} else {
-			tr.err = ErrHeader // zero block and then non-zero block
+			return nil, nil, io.EOF // normal EOF; exactly 2 block of zeros read
 		}
-		return nil
+		return nil, nil, ErrHeader // Zero block and then non-zero block
 	}
 
 	// Verify the header matches a known format.
 	format := tr.blk.GetFormat()
 	if format == formatUnknown {
-		tr.err = ErrHeader
-		return nil
+		return nil, nil, ErrHeader
 	}
 
 	var p parser
@@ -604,54 +637,13 @@ func (tr *Reader) readHeader() *Header {
 			hdr.Name = prefix + "/" + hdr.Name
 		}
 	}
-
-	nb := hdr.Size
-	if isHeaderOnlyType(hdr.Typeflag) {
-		nb = 0
-	}
-	if nb < 0 {
-		tr.err = ErrHeader
-		return nil
-	}
-
-	// Set the current file reader.
-	tr.pad = -nb & (blockSize - 1) // blockSize is a power of two
-	tr.curr = &regFileReader{r: tr.r, nb: nb}
-
-	// Check for old GNU sparse format entry.
-	if hdr.Typeflag == TypeGNUSparse {
-		// Get the real size of the file.
-		hdr.Size = p.parseNumeric(tr.blk.GNU().RealSize())
-		if p.err != nil {
-			tr.err = p.err
-			return nil
-		}
-
-		// Read the sparse map.
-		sp := tr.readOldGNUSparseMap(&tr.blk)
-		if tr.err != nil {
-			return nil
-		}
-
-		// Current file is a GNU sparse file. Update the current file reader.
-		tr.curr, tr.err = newSparseFileReader(tr.curr, sp, hdr.Size)
-		if tr.err != nil {
-			return nil
-		}
-	}
-
-	if p.err != nil {
-		tr.err = p.err
-		return nil
-	}
-
-	return hdr
+	return hdr, &tr.blk, p.err
 }
 
 // readOldGNUSparseMap reads the sparse map as stored in the old GNU sparse format.
 // The sparse map is stored in the tar header if it's small enough. If it's larger than four entries,
 // then one or more extension headers are used to store the rest of the sparse map.
-func (tr *Reader) readOldGNUSparseMap(blk *block) []sparseEntry {
+func (tr *Reader) readOldGNUSparseMap(blk *block) ([]sparseEntry, error) {
 	var p parser
 	var s sparseArray = blk.GNU().Sparse()
 	var sp = make([]sparseEntry, 0, s.MaxEntries())
@@ -659,8 +651,7 @@ func (tr *Reader) readOldGNUSparseMap(blk *block) []sparseEntry {
 		offset := p.parseOctal(s.Entry(i).Offset())
 		numBytes := p.parseOctal(s.Entry(i).NumBytes())
 		if p.err != nil {
-			tr.err = p.err
-			return nil
+			return nil, p.err
 		}
 		if offset == 0 && numBytes == 0 {
 			break
@@ -671,8 +662,8 @@ func (tr *Reader) readOldGNUSparseMap(blk *block) []sparseEntry {
 	for s.IsExtended()[0] > 0 {
 		// There are more entries. Read an extension header and parse its entries.
 		var blk block
-		if _, tr.err = io.ReadFull(tr.r, blk[:]); tr.err != nil {
-			return nil
+		if _, err := io.ReadFull(tr.r, blk[:]); err != nil {
+			return nil, err
 		}
 		s = blk.Sparse()
 
@@ -680,8 +671,7 @@ func (tr *Reader) readOldGNUSparseMap(blk *block) []sparseEntry {
 			offset := p.parseOctal(s.Entry(i).Offset())
 			numBytes := p.parseOctal(s.Entry(i).NumBytes())
 			if p.err != nil {
-				tr.err = p.err
-				return nil
+				return nil, p.err
 			}
 			if offset == 0 && numBytes == 0 {
 				break
@@ -689,7 +679,7 @@ func (tr *Reader) readOldGNUSparseMap(blk *block) []sparseEntry {
 			sp = append(sp, sparseEntry{offset: offset, numBytes: numBytes})
 		}
 	}
-	return sp
+	return sp, nil
 }
 
 // readGNUSparseMap1x0 reads the sparse map as stored in GNU's PAX sparse format
@@ -817,7 +807,7 @@ func (tr *Reader) numBytes() int64 {
 // Calling Read on special types like TypeLink, TypeSymLink, TypeChar,
 // TypeBlock, TypeDir, and TypeFifo returns 0, io.EOF regardless of what
 // the Header.Size claims.
-func (tr *Reader) Read(b []byte) (n int, err error) {
+func (tr *Reader) Read(b []byte) (int, error) {
 	if tr.err != nil {
 		return 0, tr.err
 	}
@@ -825,11 +815,11 @@ func (tr *Reader) Read(b []byte) (n int, err error) {
 		return 0, io.EOF
 	}
 
-	n, err = tr.curr.Read(b)
+	n, err := tr.curr.Read(b)
 	if err != nil && err != io.EOF {
 		tr.err = err
 	}
-	return
+	return n, err
 }
 
 func (rfr *regFileReader) Read(b []byte) (n int, err error) {

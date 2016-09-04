@@ -51,13 +51,16 @@ they are automatically encoded with a known and fixed type index.
 
 2) Encoding format:
 
-The export data starts with a single byte indicating the encoding format
-(compact, or with debugging information), followed by a version string
-(so we can evolve the encoding if need be), and then the package object
-for the exported package (with an empty path).
+The export data starts with two newline-terminated strings: a version
+string and either an empty string, or "debug", when emitting the debug
+format. These strings are followed by version-specific encoding options.
 
-After this header, two lists of objects and the list of inlined function
-bodies follows.
+(The Go1.7 version starts with a couple of bytes specifying the format.
+That format encoding is no longer used but is supported to avoid spurious
+errors when importing old installed package files.)
+
+The header is followed by the package object for the exported package,
+two lists of objects, and the list of inlined function bodies.
 
 The encoding of objects is straight-forward: Constants, variables, and
 functions start with their name, type, and possibly a value. Named types
@@ -77,7 +80,8 @@ Strings are canonicalized similar to objects that may occur multiple times:
 If the string was exported already, it is represented by its index only.
 Otherwise, the export data starts with the negative string length (negative,
 so we can distinguish from string index), followed by the string bytes.
-The empty string is mapped to index 0.
+The empty string is mapped to index 0. (The initial format string is an
+exception; it is encoded as the string bytes followed by a newline).
 
 The exporter and importer are completely symmetric in implementation: For
 each encoding routine there is a matching and symmetric decoding routine.
@@ -153,9 +157,8 @@ const debugFormat = false // default: false
 // TODO(gri) disable and remove once there is only one export format again
 const forceObjFileStability = true
 
-// Current export format version.
-// TODO(gri) Make this more systematic (issue #16244).
-const exportVersion = "v1"
+// Current export format version. Increase with each format change.
+const exportVersion = 2
 
 // exportInlined enables the export of inlined function bodies and related
 // dependencies. The compiler should work w/o any loss of functionality with
@@ -212,42 +215,20 @@ func export(out *bufio.Writer, trace bool) int {
 		trace:         trace,
 	}
 
-	// TODO(gri) clean up the ad-hoc encoding of the file format below
-	// (we need this so we can read the builtin package export data
-	// easily w/o being affected by format changes)
-
-	// first byte indicates low-level encoding format
-	var format byte = 'c' // compact
+	// write version info
+	// The version string must start with "version %d" where %d is the version
+	// number. Additional debugging information may follow after a blank; that
+	// text is ignored by the importer.
+	p.rawStringln(fmt.Sprintf("version %d", exportVersion))
+	var debug string
 	if debugFormat {
-		format = 'd'
+		debug = "debug"
 	}
-	p.rawByte(format)
-
-	format = 'n' // track named types only
-	if trackAllTypes {
-		format = 'a'
-	}
-	p.rawByte(format)
-
-	// posInfo exported or not?
+	p.rawStringln(debug) // cannot use p.bool since it's affected by debugFormat; also want to see this clearly
+	p.bool(trackAllTypes)
 	p.bool(p.posInfoFormat)
 
 	// --- generic export data ---
-
-	if p.trace {
-		p.tracef("\n--- package ---\n")
-		if p.indent != 0 {
-			Fatalf("exporter: incorrect indentation %d", p.indent)
-		}
-	}
-
-	if p.trace {
-		p.tracef("version = ")
-	}
-	p.string(exportVersion)
-	if p.trace {
-		p.tracef("\n")
-	}
 
 	// populate type map with predeclared "known" types
 	predecl := predeclared()
@@ -831,9 +812,6 @@ func (p *exporter) typ(t *Type) {
 }
 
 func (p *exporter) qualifiedName(sym *Sym) {
-	if strings.Contains(sym.Name, ".") {
-		Fatalf("exporter: invalid symbol name: %s", sym.Name)
-	}
 	p.string(sym.Name)
 	p.pkg(sym.Pkg)
 }
@@ -855,7 +833,7 @@ func (p *exporter) fieldList(t *Type) {
 
 func (p *exporter) field(f *Field) {
 	p.pos(f.Nname)
-	p.fieldName(f.Sym, f)
+	p.fieldName(f)
 	p.typ(f.Type)
 	p.string(f.Note)
 }
@@ -877,37 +855,24 @@ func (p *exporter) methodList(t *Type) {
 
 func (p *exporter) method(m *Field) {
 	p.pos(m.Nname)
-	p.fieldName(m.Sym, m)
+	p.fieldName(m)
 	p.paramList(m.Type.Params(), false)
 	p.paramList(m.Type.Results(), false)
 }
 
-// fieldName is like qualifiedName but it doesn't record the package
-// for blank (_) or exported names.
-func (p *exporter) fieldName(sym *Sym, t *Field) {
-	if t != nil && sym != t.Sym {
-		Fatalf("exporter: invalid fieldName parameters")
-	}
-
-	name := sym.Name
-	if t != nil {
-		if t.Embedded == 0 {
-			name = sym.Name
-		} else if bname := basetypeName(t.Type); bname != "" && !exportname(bname) {
-			// anonymous field with unexported base type name: use "?" as field name
-			// (bname != "" per spec, but we are conservative in case of errors)
-			name = "?"
-		} else {
-			name = ""
+// fieldName is like qualifiedName but it doesn't record the package for exported names.
+func (p *exporter) fieldName(t *Field) {
+	name := t.Sym.Name
+	if t.Embedded != 0 {
+		name = "" // anonymous field
+		if bname := basetypeName(t.Type); bname != "" && !exportname(bname) {
+			// anonymous field with unexported base type name
+			name = "?" // unexported name to force export of package
 		}
 	}
-
-	if strings.Contains(name, ".") {
-		Fatalf("exporter: invalid symbol name: %s", name)
-	}
 	p.string(name)
-	if name == "?" || name != "_" && name != "" && !exportname(name) {
-		p.pkg(sym.Pkg)
+	if name != "" && !exportname(name) {
+		p.pkg(t.Sym.Pkg)
 	}
 }
 
@@ -916,10 +881,8 @@ func basetypeName(t *Type) string {
 	if s == nil && t.IsPtr() {
 		s = t.Elem().Sym // deref
 	}
+	// s should exist, but be conservative
 	if s != nil {
-		if strings.Contains(s.Name, ".") {
-			Fatalf("exporter: invalid symbol name: %s", s.Name)
-		}
 		return s.Name
 	}
 	return ""
@@ -1455,17 +1418,7 @@ func (p *exporter) stmt(n *Node) {
 	switch op := n.Op; op {
 	case ODCL:
 		p.op(ODCL)
-		switch n.Left.Class {
-		case PPARAM, PPARAMOUT, PAUTO, PAUTOHEAP:
-			// TODO(gri) when is this not PAUTO?
-			// Also, originally this didn't look like
-			// the default case. Investigate.
-			fallthrough
-		default:
-			// TODO(gri) Can we ever reach here?
-			p.bool(false)
-			p.sym(n.Left)
-		}
+		p.sym(n.Left)
 		p.typ(n.Left.Type)
 
 	// case ODCLFIELD:
@@ -1725,13 +1678,21 @@ func (p *exporter) marker(m byte) {
 	p.rawInt64(int64(p.written))
 }
 
-// rawInt64 should only be used by low-level encoders
+// rawInt64 should only be used by low-level encoders.
 func (p *exporter) rawInt64(x int64) {
 	var tmp [binary.MaxVarintLen64]byte
 	n := binary.PutVarint(tmp[:], x)
 	for i := 0; i < n; i++ {
 		p.rawByte(tmp[i])
 	}
+}
+
+// rawStringln should only be used to emit the initial version string.
+func (p *exporter) rawStringln(s string) {
+	for i := 0; i < len(s); i++ {
+		p.rawByte(s[i])
+	}
+	p.rawByte('\n')
 }
 
 // rawByte is the bottleneck interface to write to p.out.
