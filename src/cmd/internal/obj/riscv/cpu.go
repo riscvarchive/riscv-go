@@ -441,6 +441,7 @@ const (
 	// Fake instructions.  These get translated by the assembler into other
 	// instructions, based on their operands.
 	AFNEGS
+	AFNES
 	AMOV
 	AMOVB
 	AMOVBU
