@@ -133,3 +133,7 @@ start:
 	FCVTLS	FT0, T0				// d30220c0
 	MOVF	4(T0), FT0			// 07a04200
 	MOVF	FT0, 4(T0)			// 27a20200
+	FEQS	FT0, FT1, T2			// d3a300a0
+	FNES	FT0, FT1, T2			// d3a300a0
+	FLTS	FT0, FT1, T2			// d39300a0
+	FLES	FT0, FT1, T2			// d38300a0

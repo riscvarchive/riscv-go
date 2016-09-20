@@ -110,6 +110,12 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.AFCVTSW:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFCVTSL:  {Flags: gc.LeftRead | gc.RightWrite},
 	riscv.AFMVSX:   {Flags: gc.LeftRead | gc.RightWrite},
+
+	// 7.8: Single-Precision Floating-Point Compare Instructions
+	riscv.AFEQS: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFNES: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFLTS: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFLES: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 }
 
 func proginfo(p *obj.Prog) {

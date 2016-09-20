@@ -86,6 +86,7 @@ func init() {
 		fpgp    = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{gpMask}}
 		fpstore = regInfo{inputs: []regMask{gpspsbMask, fpMask, 0}}
 		fpload  = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{fpMask}}
+		fp2gp   = regInfo{inputs: []regMask{fpMask, fpMask}, outputs: []regMask{gpMask}}
 
 		call        = regInfo{clobbers: callerSave}
 		callClosure = regInfo{inputs: []regMask{gpspMask, regCtxt, 0}, clobbers: callerSave}
@@ -206,6 +207,10 @@ func init() {
 		{name: "FCVTLS", argLength: 1, reg: fpgp, asm: "FCVTLS", typ: "Int64"},                     // int64(arg0)
 		{name: "FLW", argLength: 2, reg: fpload, asm: "MOVF", aux: "SymOff", typ: "Float32"},       // load float32 from arg0+auxint+aux
 		{name: "FSW", argLength: 3, reg: fpstore, asm: "MOVF", aux: "SymOff", typ: "Mem"},          // store float32 to arg0+auxint+aux
+		{name: "FEQS", argLength: 2, reg: fp2gp, asm: "FEQS", commutative: true},                   // arg0 == arg1
+		{name: "FNES", argLength: 2, reg: fp2gp, asm: "FNES", commutative: true},                   // arg0 != arg1
+		{name: "FLTS", argLength: 2, reg: fp2gp, asm: "FLTS"},                                      // arg0 < arg1
+		{name: "FLES", argLength: 2, reg: fp2gp, asm: "FLES"},                                      // arg0 <= arg1
 	}
 
 	RISCVblocks := []blockData{

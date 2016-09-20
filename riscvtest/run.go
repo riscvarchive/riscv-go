@@ -23,6 +23,7 @@ var tests = [...]struct {
 	{name: "fmv", want: 5},
 	{name: "zero8", want: 3},
 	{name: "cmp"},
+	{name: "fcmp"},
 	{name: "bits"},
 	{name: "ext"},
 	{name: "bool"},

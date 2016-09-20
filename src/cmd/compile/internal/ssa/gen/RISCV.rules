@@ -235,7 +235,7 @@
 (Less16U x y) -> (SLTU (ZeroExt16to64 x) (ZeroExt16to64 y))
 (Less8U  x y) -> (SLTU (ZeroExt8to64  x) (ZeroExt8to64  y))
 //(Less64F x y) ->
-//(Less32F x y) ->
+(Less32F x y) -> (FLTS x y)
 
 // Convert x <= y to !(y > x).
 (Leq64  x y) -> (Not (Less64  y x))
@@ -247,7 +247,7 @@
 (Leq16U x y) -> (Not (Less16U y x))
 (Leq8U  x y) -> (Not (Less8U  y x))
 //(Leq64F x y) ->
-//(Leq32F x y) ->
+(Leq32F x y) -> (FLES x y)
 
 // Convert x > y to y < x.
 (Greater64  x y) -> (Less64  y x)
@@ -259,7 +259,7 @@
 (Greater16U x y) -> (Less16U y x)
 (Greater8U  x y) -> (Less8U  y x)
 //(Greater64F x y) ->
-//(Greater32F x y) ->
+(Greater32F x y) -> (FLTS y x)
 
 // Convert x >= y to !(x < y)
 (Geq64  x y) -> (Not (Less64  x y))
@@ -271,7 +271,7 @@
 (Geq16U x y) -> (Not (Less16U x y))
 (Geq8U  x y) -> (Not (Less8U  x y))
 //(Geq64F x y) ->
-//(Geq32F x y) ->
+(Geq32F x y) -> (FLES y x)
 
 (EqPtr <t> x y) -> (SEQZ (SUB <t> x y))
 (Eq64  <t> x y) -> (SEQZ (SUB <t> x y))
@@ -279,7 +279,7 @@
 (Eq16  <t> x y) -> (SEQZ (ZeroExt16to64 (SUB <t> x y)))
 (Eq8   <t> x y) -> (SEQZ (ZeroExt8to64  (SUB <t> x y)))
 //(Eq64F x y) ->
-//(Eq32F x y) ->
+(Eq32F x y) -> (FEQS x y)
 
 (NeqPtr <t> x y) -> (SNEZ (SUB <t> x y))
 (Neq64  <t> x y) -> (SNEZ (SUB <t> x y))
@@ -287,7 +287,7 @@
 (Neq16  <t> x y) -> (SNEZ (ZeroExt16to64 (SUB <t> x y)))
 (Neq8   <t> x y) -> (SNEZ (ZeroExt8to64  (SUB <t> x y)))
 //(Neq64F x y) ->
-//(Neq32F x y) ->
+(Neq32F x y) -> (FNES x y)
 
 // Loads
 (Load <t> ptr mem) &&  t.IsBoolean()                  -> (LBU ptr mem)

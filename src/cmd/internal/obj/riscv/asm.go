@@ -388,7 +388,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		// found, or disallow it entirely.
 	}
 
-	// Additional instruction rewriting.
+	// Additional instruction rewriting. Any rewrites that change the number
+	// of instructions must occur here (i.e., before jump target
+	// resolution).
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
 
@@ -533,6 +535,21 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
 			p.To.Type = obj.TYPE_REG
 			p.To.Reg = REG_ZERO
+
+		// Replace FNES with FEQS and NOT.
+		case AFNES:
+			if p.To.Type != obj.TYPE_REG {
+				ctxt.Diag("progedit: FNES needs an integer register output")
+			}
+			dst := p.To.Reg
+			p.As = AFEQS
+			p := obj.Appendp(ctxt, p)
+			p.As = AXORI // [bit] xor 1 = not [bit]
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = 1
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: dst}
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = dst
 		}
 	}
 
@@ -575,6 +592,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 
 	// Now that there are no long branches, resolve branch and jump targets.
+	// At this point, instruction rewriting which changes the number of
+	// instructions will break everything--don't do it!
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
 		case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU, AJAL:
@@ -712,16 +731,22 @@ func wantEvenJumpOffset(p *obj.Prog) {
 	}
 }
 
-func validateRII(p *obj.Prog) {
+func validateRIII(p *obj.Prog) {
 	wantIntReg(p, "from", p.From)
 	wantIntReg(p, "from3", *p.From3)
 	wantIntReg(p, "to", p.To)
 }
 
-func validateRFF(p *obj.Prog) {
+func validateRFFF(p *obj.Prog) {
 	wantFloatReg(p, "from", p.From)
 	wantFloatReg(p, "from3", *p.From3)
 	wantFloatReg(p, "to", p.To)
+}
+
+func validateRFFI(p *obj.Prog) {
+	wantFloatReg(p, "from", p.From)
+	wantFloatReg(p, "from3", *p.From3)
+	wantIntReg(p, "to", p.To)
 }
 
 func validateRFI(p *obj.Prog) {
@@ -746,12 +771,16 @@ func encodeR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
 	return i.funct7<<25 | i.rs2<<20 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
 }
 
-func encodeRII(p *obj.Prog) uint32 {
+func encodeRIII(p *obj.Prog) uint32 {
 	return encodeR(p, regi(*p.From3), regi(p.From), regi(p.To))
 }
 
-func encodeRFF(p *obj.Prog) uint32 {
+func encodeRFFF(p *obj.Prog) uint32 {
 	return encodeR(p, regf(*p.From3), regf(p.From), regf(p.To))
+}
+
+func encodeRFFI(p *obj.Prog) uint32 {
+	return encodeR(p, regf(*p.From3), regf(p.From), regi(p.To))
 }
 
 func encodeRFI(p *obj.Prog) uint32 {
@@ -936,14 +965,15 @@ var (
 	//	2. zero or more register operand identifiers (I = integer
 	//	   register, F = float register), in uppercase
 	//	3. the word "Encoding"
-	// For example, rIIEncoding indicates an R-type instruction with two
-	// integer register operands; sFEncoding indicates an S-type instruction
-	// with rs2 being a float register.
+	// For example, rIIIEncoding indicates an R-type instruction with two
+	// integer register inputs and an integer register output; sFEncoding
+	// indicates an S-type instruction with rs2 being a float register.
 
-	rIIEncoding = encoding{encode: encodeRII, validate: validateRII, length: 4}
-	rFFEncoding = encoding{encode: encodeRFF, validate: validateRFF, length: 4}
-	rFIEncoding = encoding{encode: encodeRFI, validate: validateRFI, length: 4}
-	rIFEncoding = encoding{encode: encodeRIF, validate: validateRIF, length: 4}
+	rIIIEncoding = encoding{encode: encodeRIII, validate: validateRIII, length: 4}
+	rFFFEncoding = encoding{encode: encodeRFFF, validate: validateRFFF, length: 4}
+	rFFIEncoding = encoding{encode: encodeRFFI, validate: validateRFFI, length: 4}
+	rFIEncoding  = encoding{encode: encodeRFI, validate: validateRFI, length: 4}
+	rIFEncoding  = encoding{encode: encodeRIF, validate: validateRIF, length: 4}
 
 	iIEncoding = encoding{encode: encodeII, validate: validateII, length: 4}
 	iFEncoding = encoding{encode: encodeIF, validate: validateIF, length: 4}
@@ -995,16 +1025,16 @@ var encodingForAs = [...]encoding{
 	ASRAI & obj.AMask:  iIEncoding,
 	ALUI & obj.AMask:   uEncoding,
 	AAUIPC & obj.AMask: uEncoding,
-	AADD & obj.AMask:   rIIEncoding,
-	ASLT & obj.AMask:   rIIEncoding,
-	ASLTU & obj.AMask:  rIIEncoding,
-	AAND & obj.AMask:   rIIEncoding,
-	AOR & obj.AMask:    rIIEncoding,
-	AXOR & obj.AMask:   rIIEncoding,
-	ASLL & obj.AMask:   rIIEncoding,
-	ASRL & obj.AMask:   rIIEncoding,
-	ASUB & obj.AMask:   rIIEncoding,
-	ASRA & obj.AMask:   rIIEncoding,
+	AADD & obj.AMask:   rIIIEncoding,
+	ASLT & obj.AMask:   rIIIEncoding,
+	ASLTU & obj.AMask:  rIIIEncoding,
+	AAND & obj.AMask:   rIIIEncoding,
+	AOR & obj.AMask:    rIIIEncoding,
+	AXOR & obj.AMask:   rIIIEncoding,
+	ASLL & obj.AMask:   rIIIEncoding,
+	ASRL & obj.AMask:   rIIIEncoding,
+	ASUB & obj.AMask:   rIIIEncoding,
+	ASRA & obj.AMask:   rIIIEncoding,
 
 	// 4.3: Load and Store Instructions
 	ALD & obj.AMask:  iIEncoding,
@@ -1025,40 +1055,45 @@ var encodingForAs = [...]encoding{
 	ARDINSTRET & obj.AMask: iIEncoding,
 
 	// 5.1: Multiplication Operations
-	AMUL & obj.AMask:    rIIEncoding,
-	AMULH & obj.AMask:   rIIEncoding,
-	AMULHU & obj.AMask:  rIIEncoding,
-	AMULHSU & obj.AMask: rIIEncoding,
-	AMULW & obj.AMask:   rIIEncoding,
-	ADIV & obj.AMask:    rIIEncoding,
-	ADIVU & obj.AMask:   rIIEncoding,
-	AREM & obj.AMask:    rIIEncoding,
-	AREMU & obj.AMask:   rIIEncoding,
-	ADIVW & obj.AMask:   rIIEncoding,
-	ADIVUW & obj.AMask:  rIIEncoding,
-	AREMW & obj.AMask:   rIIEncoding,
-	AREMUW & obj.AMask:  rIIEncoding,
+	AMUL & obj.AMask:    rIIIEncoding,
+	AMULH & obj.AMask:   rIIIEncoding,
+	AMULHU & obj.AMask:  rIIIEncoding,
+	AMULHSU & obj.AMask: rIIIEncoding,
+	AMULW & obj.AMask:   rIIIEncoding,
+	ADIV & obj.AMask:    rIIIEncoding,
+	ADIVU & obj.AMask:   rIIIEncoding,
+	AREM & obj.AMask:    rIIIEncoding,
+	AREMU & obj.AMask:   rIIIEncoding,
+	ADIVW & obj.AMask:   rIIIEncoding,
+	ADIVUW & obj.AMask:  rIIIEncoding,
+	AREMW & obj.AMask:   rIIIEncoding,
+	AREMUW & obj.AMask:  rIIIEncoding,
 
 	// 7.5: Single-Precision Load and Store Instructions
 	AFLW & obj.AMask: iFEncoding,
 	AFSW & obj.AMask: sFEncoding,
 
 	// 7.6: Single-Precision Floating-Point Computational Instructions
-	AFADDS & obj.AMask:  rFFEncoding,
-	AFSUBS & obj.AMask:  rFFEncoding,
-	AFMULS & obj.AMask:  rFFEncoding,
-	AFDIVS & obj.AMask:  rFFEncoding,
-	AFSQRTS & obj.AMask: rFFEncoding,
+	AFADDS & obj.AMask:  rFFFEncoding,
+	AFSUBS & obj.AMask:  rFFFEncoding,
+	AFMULS & obj.AMask:  rFFFEncoding,
+	AFDIVS & obj.AMask:  rFFFEncoding,
+	AFSQRTS & obj.AMask: rFFFEncoding,
 
 	// 7.7: Single-Precision Floating-Point Conversion and Move Instructions
 	AFCVTWS & obj.AMask:  rFIEncoding,
 	AFCVTLS & obj.AMask:  rFIEncoding,
 	AFCVTSW & obj.AMask:  rIFEncoding,
 	AFCVTSL & obj.AMask:  rIFEncoding,
-	AFSGNJS & obj.AMask:  rFFEncoding,
-	AFSGNJNS & obj.AMask: rFFEncoding,
-	AFSGNJXS & obj.AMask: rFFEncoding,
+	AFSGNJS & obj.AMask:  rFFFEncoding,
+	AFSGNJNS & obj.AMask: rFFFEncoding,
+	AFSGNJXS & obj.AMask: rFFFEncoding,
 	AFMVSX & obj.AMask:   rIFEncoding,
+
+	// 7.8: Single-Precision Floating-Point Compare Instructions
+	AFEQS & obj.AMask: rFFIEncoding,
+	AFLTS & obj.AMask: rFFIEncoding,
+	AFLES & obj.AMask: rFFIEncoding,
 
 	// Pseudo-operations
 	obj.AFUNCDATA: pseudoOpEncoding,
