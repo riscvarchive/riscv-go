@@ -221,7 +221,9 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		ssa.OpRISCVDIVUW, ssa.OpRISCVREM, ssa.OpRISCVREMU, ssa.OpRISCVREMW,
 		ssa.OpRISCVREMUW,
 		ssa.OpRISCVFADDS, ssa.OpRISCVFSUBS, ssa.OpRISCVFMULS, ssa.OpRISCVFDIVS,
-		ssa.OpRISCVFEQS, ssa.OpRISCVFNES, ssa.OpRISCVFLTS, ssa.OpRISCVFLES:
+		ssa.OpRISCVFEQS, ssa.OpRISCVFNES, ssa.OpRISCVFLTS, ssa.OpRISCVFLES,
+		ssa.OpRISCVFADDD, ssa.OpRISCVFSUBD, ssa.OpRISCVFMULD, ssa.OpRISCVFDIVD,
+		ssa.OpRISCVFEQD, ssa.OpRISCVFNED, ssa.OpRISCVFLTD, ssa.OpRISCVFLED:
 		r := gc.SSARegNum(v)
 		r1 := gc.SSARegNum(v.Args[0])
 		r2 := gc.SSARegNum(v.Args[1])
@@ -234,9 +236,10 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = r
-	case ssa.OpRISCVFSQRTS, ssa.OpRISCVFNEGS,
-		ssa.OpRISCVFMVSX,
-		ssa.OpRISCVFCVTSW, ssa.OpRISCVFCVTSL, ssa.OpRISCVFCVTWS, ssa.OpRISCVFCVTLS:
+	case ssa.OpRISCVFSQRTS, ssa.OpRISCVFNEGS, ssa.OpRISCVFSQRTD, ssa.OpRISCVFNEGD,
+		ssa.OpRISCVFMVSX, ssa.OpRISCVFMVDX,
+		ssa.OpRISCVFCVTSW, ssa.OpRISCVFCVTSL, ssa.OpRISCVFCVTWS, ssa.OpRISCVFCVTLS,
+		ssa.OpRISCVFCVTDW, ssa.OpRISCVFCVTDL, ssa.OpRISCVFCVTWD, ssa.OpRISCVFCVTLD, ssa.OpRISCVFCVTDS, ssa.OpRISCVFCVTSD:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = gc.SSARegNum(v.Args[0])
@@ -292,7 +295,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
 		}
 	case ssa.OpRISCVLB, ssa.OpRISCVLH, ssa.OpRISCVLW, ssa.OpRISCVLD, ssa.OpRISCVLBU, ssa.OpRISCVLHU, ssa.OpRISCVLWU,
-		ssa.OpRISCVFLW:
+		ssa.OpRISCVFLW, ssa.OpRISCVFLD:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
 		p.From.Reg = gc.SSARegNum(v.Args[0])
@@ -300,7 +303,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
 	case ssa.OpRISCVSB, ssa.OpRISCVSH, ssa.OpRISCVSW, ssa.OpRISCVSD,
-		ssa.OpRISCVFSW:
+		ssa.OpRISCVFSW, ssa.OpRISCVFSD:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = gc.SSARegNum(v.Args[1])
