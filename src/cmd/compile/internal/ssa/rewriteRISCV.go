@@ -2388,13 +2388,13 @@ func rewriteValueRISCV_OpLoad(v *Value, config *Config) bool {
 		return true
 	}
 	// match: (Load <t> ptr mem)
-	// cond: is64BitInt(t)
+	// cond: (is64BitInt(t) || isPtr(t))
 	// result: (LD  ptr mem)
 	for {
 		t := v.Type
 		ptr := v.Args[0]
 		mem := v.Args[1]
-		if !(is64BitInt(t)) {
+		if !(is64BitInt(t) || isPtr(t)) {
 			break
 		}
 		v.reset(OpRISCVLD)

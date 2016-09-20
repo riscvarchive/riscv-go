@@ -297,7 +297,7 @@
 (Load <t> ptr mem) && (is16BitInt(t) && !isSigned(t)) -> (LHU ptr mem)
 (Load <t> ptr mem) && (is32BitInt(t) &&  isSigned(t)) -> (LW  ptr mem)
 (Load <t> ptr mem) && (is32BitInt(t) && !isSigned(t)) -> (LWU ptr mem)
-(Load <t> ptr mem) &&  is64BitInt(t)                  -> (LD  ptr mem)
+(Load <t> ptr mem) && (is64BitInt(t) || isPtr(t))     -> (LD  ptr mem)
 (Load <t> ptr mem) &&  is32BitFloat(t)                -> (FLW ptr mem)
 (Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
 
