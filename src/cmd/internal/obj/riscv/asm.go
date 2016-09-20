@@ -113,6 +113,8 @@ func movtol(mnemonic obj.As) obj.As {
 		return ALWU
 	case AMOVF:
 		return AFLW
+	case AMOVD:
+		return AFLD
 	default:
 		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
 	}
@@ -131,6 +133,8 @@ func movtos(mnemonic obj.As) obj.As {
 		return ASW
 	case AMOVF:
 		return AFSW
+	case AMOVD:
+		return AFSD
 	default:
 		panic(fmt.Sprintf("%+v is not a MOV", mnemonic))
 	}
@@ -264,7 +268,11 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// FNEGS rs, rd -> FSGNJNS rs, rs, rd
 		p.As = AFSGNJNS
 		*p.From3 = p.From
-	case AFSQRTS:
+	case AFNEGD:
+		// FNEGD rs, rd -> FSGNJND rs, rs, rd
+		p.As = AFSGNJND
+		*p.From3 = p.From
+	case AFSQRTS, AFSQRTD:
 		*p.From3 = p.From
 
 		// This instruction expects a zero (i.e., float register 0) to
@@ -397,7 +405,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		// Rewrite MOV. This couldn't be done in progedit, as SP
 		// offsets needed to be applied before we split up some of the
 		// Addrs.
-		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU, AMOVF:
+		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU, AMOVF, AMOVD:
 			switch p.From.Type {
 			case obj.TYPE_MEM: // MOV c(Rs), Rd -> L $c, Rs, Rd
 				if p.To.Type != obj.TYPE_REG {
@@ -536,7 +544,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.To.Type = obj.TYPE_REG
 			p.To.Reg = REG_ZERO
 
-		// Replace FNES with FEQS and NOT.
+		// Replace FNE[SD] with FEQ[SD] and NOT.
 		case AFNES:
 			if p.To.Type != obj.TYPE_REG {
 				ctxt.Diag("progedit: FNES needs an integer register output")
@@ -545,6 +553,19 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.As = AFEQS
 			p := obj.Appendp(ctxt, p)
 			p.As = AXORI // [bit] xor 1 = not [bit]
+			p.From.Type = obj.TYPE_CONST
+			p.From.Offset = 1
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: dst}
+			p.To.Type = obj.TYPE_REG
+			p.To.Reg = dst
+		case AFNED:
+			if p.To.Type != obj.TYPE_REG {
+				ctxt.Diag("progedit: FNED needs an integer register output")
+			}
+			dst := p.To.Reg
+			p.As = AFEQD
+			p := obj.Appendp(ctxt, p)
+			p.As = AXORI
 			p.From.Type = obj.TYPE_CONST
 			p.From.Offset = 1
 			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: dst}
@@ -759,6 +780,11 @@ func validateRIF(p *obj.Prog) {
 	wantFloatReg(p, "to", p.To)
 }
 
+func validateRFF(p *obj.Prog) {
+	wantFloatReg(p, "from", p.From)
+	wantFloatReg(p, "to", p.To)
+}
+
 func encodeR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
 	i, ok := encode(p.As)
 	if !ok {
@@ -789,6 +815,10 @@ func encodeRFI(p *obj.Prog) uint32 {
 
 func encodeRIF(p *obj.Prog) uint32 {
 	return encodeR(p, regi(p.From), 0, regf(p.To))
+}
+
+func encodeRFF(p *obj.Prog) uint32 {
+	return encodeR(p, regf(p.From), 0, regf(p.To))
 }
 
 func validateII(p *obj.Prog) {
@@ -974,6 +1004,7 @@ var (
 	rFFIEncoding = encoding{encode: encodeRFFI, validate: validateRFFI, length: 4}
 	rFIEncoding  = encoding{encode: encodeRFI, validate: validateRFI, length: 4}
 	rIFEncoding  = encoding{encode: encodeRIF, validate: validateRIF, length: 4}
+	rFFEncoding  = encoding{encode: encodeRFF, validate: validateRFF, length: 4}
 
 	iIEncoding = encoding{encode: encodeII, validate: validateII, length: 4}
 	iFEncoding = encoding{encode: encodeIF, validate: validateIF, length: 4}
@@ -1094,6 +1125,34 @@ var encodingForAs = [...]encoding{
 	AFEQS & obj.AMask: rFFIEncoding,
 	AFLTS & obj.AMask: rFFIEncoding,
 	AFLES & obj.AMask: rFFIEncoding,
+
+	// 8.2: Double-Precision Load and Store Instructions
+	AFLD & obj.AMask: iFEncoding,
+	AFSD & obj.AMask: sFEncoding,
+
+	// 8.3: Double-Precision Floating-Point Computational Instructions
+	AFADDD & obj.AMask:  rFFFEncoding,
+	AFSUBD & obj.AMask:  rFFFEncoding,
+	AFMULD & obj.AMask:  rFFFEncoding,
+	AFDIVD & obj.AMask:  rFFFEncoding,
+	AFSQRTD & obj.AMask: rFFFEncoding,
+
+	// 8.4: Double-Precision Floating-Point Conversion and Move Instructions
+	AFCVTWD & obj.AMask:  rFIEncoding,
+	AFCVTLD & obj.AMask:  rFIEncoding,
+	AFCVTDW & obj.AMask:  rIFEncoding,
+	AFCVTDL & obj.AMask:  rIFEncoding,
+	AFCVTSD & obj.AMask:  rFFEncoding,
+	AFCVTDS & obj.AMask:  rFFEncoding,
+	AFSGNJD & obj.AMask:  rFFFEncoding,
+	AFSGNJND & obj.AMask: rFFFEncoding,
+	AFSGNJXD & obj.AMask: rFFFEncoding,
+	AFMVDX & obj.AMask:   rIFEncoding,
+
+	// 8.5: Double-Precision Floating-Point Compare Instructions
+	AFEQD & obj.AMask: rFFIEncoding,
+	AFLTD & obj.AMask: rFFIEncoding,
+	AFLED & obj.AMask: rFFIEncoding,
 
 	// Pseudo-operations
 	obj.AFUNCDATA: pseudoOpEncoding,

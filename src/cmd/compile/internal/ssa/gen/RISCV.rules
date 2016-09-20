@@ -23,7 +23,7 @@
 (Add16 x y) -> (ADD x y)
 (Add8 x y) -> (ADD x y)
 (Add32F x y) -> (FADDS x y)
-//(Add64F x y) ->
+(Add64F x y) -> (FADDD x y)
 
 (Sub64 x y) -> (SUB x y)
 (SubPtr x y) -> (SUB x y)
@@ -31,17 +31,17 @@
 (Sub16 x y) -> (SUB x y)
 (Sub8 x y) -> (SUB x y)
 (Sub32F x y) -> (FSUBS x y)
-//(Sub64F x y) ->
+(Sub64F x y) -> (FSUBD x y)
 
 (Mul64 x y) -> (MUL  x y)
 (Mul32 x y) -> (MULW x y)
 (Mul16 x y) -> (MULW (SignExt16to32 x) (SignExt16to32 y))
 (Mul8 x y)  -> (MULW (SignExt8to32 x)  (SignExt8to32 y))
 (Mul32F x y) -> (FMULS x y)
-//(Mul64F x y) ->
+(Mul64F x y) -> (FMULD x y)
 
 (Div32F x y) -> (FDIVS x y)
-//(Div64F x y) ->
+(Div64F x y) -> (FDIVD x y)
 
 (Div64 x y)  -> (DIV   x y)
 (Div64u x y) -> (DIVU  x y)
@@ -93,14 +93,14 @@
 (Neg16 x) -> (SUB (MOVWconst) x)
 (Neg8  x) -> (SUB (MOVBconst) x)
 (Neg32F x) -> (FNEGS x)
-//(Neg64F x) ->
+(Neg64F x) -> (FNEGD x)
 
 (Com64 x) -> (XORI [int64(-1)] x)
 (Com32 x) -> (XORI [int64(-1)] x)
 (Com16 x) -> (XORI [int64(-1)] x)
 (Com8  x) -> (XORI [int64(-1)] x)
 
-//(Sqrt x) ->
+(Sqrt x) -> (FSQRTD x)
 
 // Zero and sign extension
 // Shift left until the bits we want are at the top of the register.
@@ -123,17 +123,17 @@
 (ZeroExt32to64 <t> x) -> (SRLI [32] (SLLI <t> [32] x))
 
 (Cvt32to32F x) -> (FCVTSW x)
-//(Cvt32to64F x) ->
+(Cvt32to64F x) -> (FCVTDW x)
 (Cvt64to32F x) -> (FCVTSL x)
-//(Cvt64to64F x) ->
+(Cvt64to64F x) -> (FCVTDL x)
 
 (Cvt32Fto32 x) -> (FCVTWS x)
 (Cvt32Fto64 x) -> (FCVTLS x)
-//(Cvt64Fto32 x) ->
-//(Cvt64Fto64 x) ->
+(Cvt64Fto32 x) -> (FCVTWD x)
+(Cvt64Fto64 x) -> (FCVTLD x)
 
-//(Cvt32Fto64F x) ->
-//(Cvt64Fto32F x) ->
+(Cvt32Fto64F x) -> (FCVTDS x)
+(Cvt64Fto32F x) -> (FCVTSD x)
 
 // Truncations
 // We ignore the unused high parts of registers, so truncates are just copies.
@@ -234,7 +234,7 @@
 (Less32U x y) -> (SLTU (ZeroExt32to64 x) (ZeroExt32to64 y))
 (Less16U x y) -> (SLTU (ZeroExt16to64 x) (ZeroExt16to64 y))
 (Less8U  x y) -> (SLTU (ZeroExt8to64  x) (ZeroExt8to64  y))
-//(Less64F x y) ->
+(Less64F x y) -> (FLTD x y)
 (Less32F x y) -> (FLTS x y)
 
 // Convert x <= y to !(y > x).
@@ -246,7 +246,7 @@
 (Leq32U x y) -> (Not (Less32U y x))
 (Leq16U x y) -> (Not (Less16U y x))
 (Leq8U  x y) -> (Not (Less8U  y x))
-//(Leq64F x y) ->
+(Leq64F x y) -> (FLED x y)
 (Leq32F x y) -> (FLES x y)
 
 // Convert x > y to y < x.
@@ -258,7 +258,7 @@
 (Greater32U x y) -> (Less32U y x)
 (Greater16U x y) -> (Less16U y x)
 (Greater8U  x y) -> (Less8U  y x)
-//(Greater64F x y) ->
+(Greater64F x y) -> (FLTD y x)
 (Greater32F x y) -> (FLTS y x)
 
 // Convert x >= y to !(x < y)
@@ -270,7 +270,7 @@
 (Geq32U x y) -> (Not (Less32U x y))
 (Geq16U x y) -> (Not (Less16U x y))
 (Geq8U  x y) -> (Not (Less8U  x y))
-//(Geq64F x y) ->
+(Geq64F x y) -> (FLED y x)
 (Geq32F x y) -> (FLES y x)
 
 (EqPtr <t> x y) -> (SEQZ (SUB <t> x y))
@@ -278,7 +278,7 @@
 (Eq32  <t> x y) -> (SEQZ (ZeroExt32to64 (SUB <t> x y)))
 (Eq16  <t> x y) -> (SEQZ (ZeroExt16to64 (SUB <t> x y)))
 (Eq8   <t> x y) -> (SEQZ (ZeroExt8to64  (SUB <t> x y)))
-//(Eq64F x y) ->
+(Eq64F x y) -> (FEQD x y)
 (Eq32F x y) -> (FEQS x y)
 
 (NeqPtr <t> x y) -> (SNEZ (SUB <t> x y))
@@ -286,7 +286,7 @@
 (Neq32  <t> x y) -> (SNEZ (ZeroExt32to64 (SUB <t> x y)))
 (Neq16  <t> x y) -> (SNEZ (ZeroExt16to64 (SUB <t> x y)))
 (Neq8   <t> x y) -> (SNEZ (ZeroExt8to64  (SUB <t> x y)))
-//(Neq64F x y) ->
+(Neq64F x y) -> (FNED x y)
 (Neq32F x y) -> (FNES x y)
 
 // Loads
@@ -297,9 +297,9 @@
 (Load <t> ptr mem) && (is16BitInt(t) && !isSigned(t)) -> (LHU ptr mem)
 (Load <t> ptr mem) && (is32BitInt(t) &&  isSigned(t)) -> (LW  ptr mem)
 (Load <t> ptr mem) && (is32BitInt(t) && !isSigned(t)) -> (LWU ptr mem)
-(Load <t> ptr mem) && (is64BitInt(t) || isPtr(t))     -> (LD  ptr mem)
+(Load <t> ptr mem) &&  is64BitInt(t)                  -> (LD  ptr mem)
 (Load <t> ptr mem) &&  is32BitFloat(t)                -> (FLW ptr mem)
-//(Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
+(Load <t> ptr mem) &&  is64BitFloat(t)                -> (FLD ptr mem)
 
 // Stores
 (Store [1] ptr val mem)                            -> (SB ptr val mem)
@@ -307,7 +307,7 @@
 (Store [4] ptr val mem) && !is32BitFloat(val.Type) -> (SW ptr val mem)
 (Store [8] ptr val mem) && !is64BitFloat(val.Type) -> (SD ptr val mem)
 (Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
-//(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
+(Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
 // Zeroing
 // TODO: Implement larger and arbitrary zeroing
@@ -351,7 +351,7 @@
 (Const32 [val]) -> (MOVLconst [val])
 (Const64 [val]) -> (MOVQconst [val])
 (Const32F [val]) -> (FMVSX (MOVSconst [val]))
-//(Const64F [val]) ->
+(Const64F [val]) -> (FMVDX (MOVQconst [val]))
 (ConstNil) -> (MOVQconst [0])
 (ConstBool [b]) -> (MOVBconst [b])
 
