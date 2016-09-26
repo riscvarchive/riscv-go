@@ -167,7 +167,7 @@ func initRegisters() {
 	Registers["T6"] = REG_T6
 
 	// Golang runtime register names.
-	Registers["G"] = REG_G
+	Registers["g"] = REG_G
 	Registers["CTXT"] = REG_CTXT
 	Registers["TMP"] = REG_TMP
 
