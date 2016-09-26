@@ -63,8 +63,8 @@ var (
 		REG_A5: "A5",
 		REG_A6: "A6",
 		REG_A7: "A7",
-		// REG_S2 is REG_RT1.
-		// REG_S3 is REG_RT2.
+		REG_S2: "S2",
+		REG_S3: "S3",
 		// REG_S4 is REG_CTXT.
 		REG_S5:  "S5",
 		REG_S6:  "S6",
@@ -79,10 +79,8 @@ var (
 		// REG_T6 is REG_TMP.
 
 		// Go runtime register names.
-		REG_RT1:  "RT1",
-		REG_RT2:  "RT2",
-		REG_CTXT: "CTXT",
 		REG_G:    "g",
+		REG_CTXT: "CTXT",
 		REG_TMP:  "TMP",
 
 		// ABI names for floating point registers.
@@ -169,10 +167,8 @@ func initRegisters() {
 	Registers["T6"] = REG_T6
 
 	// Golang runtime register names.
-	Registers["RT1"] = REG_RT1
-	Registers["RT2"] = REG_RT2
-	Registers["CTXT"] = REG_CTXT
 	Registers["G"] = REG_G
+	Registers["CTXT"] = REG_CTXT
 	Registers["TMP"] = REG_TMP
 
 	// ABI names for floating point registers.

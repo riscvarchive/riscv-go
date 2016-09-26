@@ -141,9 +141,7 @@ const (
 	REG_T6   = REG_X31
 
 	// Go runtime register names.
-	REG_G    = REG_X4 // G pointer.
-	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy).
-	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy).
+	REG_G    = REG_TP // G pointer.
 	REG_CTXT = REG_S4 // Context for closures.
 	REG_TMP  = REG_T6 // Reserved for assembler use.
 
