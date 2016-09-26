@@ -40,6 +40,7 @@ var tests = [...]struct {
 	{name: "call"},
 	{name: "keepalive"},
 	{name: "global"},
+	{name: "live"},
 }
 
 func main() {

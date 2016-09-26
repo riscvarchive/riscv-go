@@ -145,6 +145,7 @@ const (
 	REG_RT1  = REG_S2 // Reserved for runtime (duffzero and duffcopy).
 	REG_RT2  = REG_S3 // Reserved for runtime (duffcopy).
 	REG_CTXT = REG_S4 // Context for closures.
+	REG_TMP  = REG_T6 // Reserved for assembler use.
 
 	// ABI names for floating point registers.
 	REG_FT0  = REG_F0
@@ -183,9 +184,15 @@ const (
 
 // Prog.Mark flags.
 const (
-	// NEED_PCREL_RELOC is set on AUIPC instructions to indicate that it
-	// is an AUIPC+ADDI pair that needs a R_PCRELRISCV relocation.
-	NEED_PCREL_RELOC = 1 << 0
+	// NEED_PCREL_ITYPE_RELOC is set on AUIPC instructions to indicate that
+	// it is the first instruction in an AUIPC + I-type pair that needs a
+	// R_RISCV_PCREL_ITYPE relocation.
+	NEED_PCREL_ITYPE_RELOC = 1 << 0
+
+	// NEED_PCREL_STYPE_RELOC is set on AUIPC instructions to indicate that
+	// it is the first instruction in an AUIPC + S-type pair that needs a
+	// R_RISCV_PCREL_STYPE relocation.
+	NEED_PCREL_STYPE_RELOC = 1 << 1
 )
 
 // RISC-V mnemonics, as defined in the "opcodes" and "opcodes-pseudo" files of
@@ -492,6 +499,10 @@ const (
 	// ITypeImmMask is a mask including only the immediate portion of
 	// I-type instructions.
 	ITypeImmMask = 0xfff00000
+
+	// STypeImmMask is a mask including only the immediate portion of
+	// S-type instructions.
+	STypeImmMask = 0xfe000f80
 
 	// UTypeImmMask is a mask including only the immediate portion of
 	// U-type instructions.

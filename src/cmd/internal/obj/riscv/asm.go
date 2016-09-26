@@ -408,12 +408,37 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		case AMOV, AMOVB, AMOVH, AMOVW, AMOVBU, AMOVHU, AMOVWU, AMOVF, AMOVD:
 			switch p.From.Type {
 			case obj.TYPE_MEM: // MOV c(Rs), Rd -> L $c, Rs, Rd
-				if p.To.Type != obj.TYPE_REG {
-					ctxt.Diag("progedit: unsupported load at %v", p)
+				switch p.From.Name {
+				case obj.NAME_AUTO, obj.NAME_PARAM, obj.NAME_NONE:
+					if p.To.Type != obj.TYPE_REG {
+						ctxt.Diag("progedit: unsupported load at %v", p)
+					}
+					p.As = movtol(p.As)
+					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.From)}
+					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
+				case obj.NAME_EXTERN:
+					// AUIPC $off_hi, R
+					// L $off_lo, R
+					as := p.As
+					to := p.To
+
+					p.As = AAUIPC
+					// This offset isn't really encoded
+					// with either instruction. It will be
+					// extracted for a relocation later.
+					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset, Sym: p.From.Sym}
+					p.From3 = &obj.Addr{}
+					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: to.Reg}
+					p.Mark |= NEED_PCREL_ITYPE_RELOC
+					p = obj.Appendp(ctxt, p)
+
+					p.As = movtol(as)
+					p.From = obj.Addr{Type: obj.TYPE_CONST}
+					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: to.Reg}
+					p.To = to
+				default:
+					ctxt.Diag("progedit: unsupported name %d for %v", p.From.Name, p)
 				}
-				p.As = movtol(p.As)
-				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.From)}
-				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
 			case obj.TYPE_REG:
 				switch p.To.Type {
 				case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
@@ -428,15 +453,40 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					case AMOVBU, AMOVHU, AMOVWU:
 						ctxt.Diag("progedit: unsupported unsigned store at %v", p)
 					}
-					p.As = movtos(p.As)
-					// The destination address goes in p.From and
-					// p.To here, with the offset in p.From and the
-					// register in p.To. The source register goes in
-					// p.From3.
-					p.From, *p.From3 = p.To, p.From
-					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
-					p.From3.Type = obj.TYPE_REG
-					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.To)}
+					switch p.To.Name {
+					case obj.NAME_AUTO, obj.NAME_PARAM, obj.NAME_NONE:
+						p.As = movtos(p.As)
+						// The destination address goes in p.From and
+						// p.To here, with the offset in p.From and the
+						// register in p.To. The source register goes in
+						// p.From3.
+						p.From, *p.From3 = p.To, p.From
+						p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
+						p.From3.Type = obj.TYPE_REG
+						p.To = obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.To)}
+					case obj.NAME_EXTERN:
+						// AUIPC $off_hi, TMP
+						// S $off_lo, TMP, R
+						as := p.As
+						from := p.From
+
+						p.As = AAUIPC
+						// This offset isn't really encoded
+						// with either instruction. It will be
+						// extracted for a relocation later.
+						p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.To.Offset, Sym: p.To.Sym}
+						p.From3 = &obj.Addr{}
+						p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+						p.Mark |= NEED_PCREL_STYPE_RELOC
+						p = obj.Appendp(ctxt, p)
+
+						p.As = movtos(as)
+						p.From = obj.Addr{Type: obj.TYPE_CONST}
+						p.From3 = &from
+						p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+					default:
+						ctxt.Diag("progedit: unsupported name %d for %v", p.From.Name, p)
+					}
 				default:
 					ctxt.Diag("progedit: unsupported MOV at %v", p)
 				}
@@ -496,7 +546,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset, Sym: p.From.Sym}
 					p.From3 = &obj.Addr{}
 					p.To = to
-					p.Mark |= NEED_PCREL_RELOC
+					p.Mark |= NEED_PCREL_ITYPE_RELOC
 					p = obj.Appendp(ctxt, p)
 
 					p.As = AADDI
@@ -864,6 +914,14 @@ func validateSF(p *obj.Prog) {
 	wantIntReg(p, "to", p.To)
 }
 
+func EncodeSImmediate(imm int64) (int64, error) {
+	if !immFits(imm, 12) {
+		return 0, fmt.Errorf("immediate %#x does not fit in 12 bits", imm)
+	}
+
+	return ((imm >> 5) << 25) | ((imm & 0x1f) << 7), nil
+}
+
 func encodeS(p *obj.Prog, rs2 uint32) uint32 {
 	imm := immi(p.From, 12)
 	rs1 := regi(p.To)
@@ -1197,7 +1255,12 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 				rel.Type = obj.R_CALLRISCV
 			}
 		case AAUIPC:
-			if p.Mark&NEED_PCREL_RELOC == 0 {
+			var t obj.RelocType
+			if p.Mark&NEED_PCREL_ITYPE_RELOC == NEED_PCREL_ITYPE_RELOC {
+				t = obj.R_RISCV_PCREL_ITYPE
+			} else if p.Mark&NEED_PCREL_STYPE_RELOC == NEED_PCREL_STYPE_RELOC {
+				t = obj.R_RISCV_PCREL_STYPE
+			} else {
 				break
 			}
 			if p.Link == nil {
@@ -1214,7 +1277,7 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 			rel.Siz = 8
 			rel.Sym = p.From.Sym
 			rel.Add = p.From.Offset
-			rel.Type = obj.R_PCRELRISCV
+			rel.Type = t
 		}
 
 		enc := encodingForP(p)

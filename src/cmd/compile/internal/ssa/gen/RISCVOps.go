@@ -39,8 +39,8 @@ func init() {
 
 		// Add general purpose registers to gpMask.
 		switch r {
-		// ZERO and g are not in any gp mask.
-		case riscv.REG_ZERO, riscv.REG_G:
+		// ZERO, g, and TMP are not in any gp mask.
+		case riscv.REG_ZERO, riscv.REG_G, riscv.REG_TMP:
 		case riscv.REG_SP:
 			gpspMask |= mask
 			gpspsbMask |= mask

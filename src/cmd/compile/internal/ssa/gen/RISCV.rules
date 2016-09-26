@@ -309,6 +309,36 @@
 (Store [4] ptr val mem) &&  is32BitFloat(val.Type) -> (FSW ptr val mem)
 (Store [8] ptr val mem) &&  is64BitFloat(val.Type) -> (FSD ptr val mem)
 
+// We need to fold MOVmem into the LD/SD ops so that the live variable analysis
+// knows what variables are being read/written by the ops.
+(LBU [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LBU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LB  [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LB  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LHU [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LHU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LH  [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LH  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LWU [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LWU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LW  [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LW  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+(LD  [off1] {sym1} (MOVmem [off2] {sym2} base) mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(LD  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+
+(SB [off1] {sym1} (MOVmem [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(SB [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+(SH [off1] {sym1} (MOVmem [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(SH [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+(SW [off1] {sym1} (MOVmem [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(SW [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+(SD [off1] {sym1} (MOVmem [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
+	(SD [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+
+// Similarly, fold ADDI into MOVmem to avoid confusing live variable analysis
+// with OffPtr -> ADDI.
+(ADDI [c] (MOVmem [d] {s} x)) && is32Bit(c+d) -> (MOVmem [c+d] {s} x)
+
 // Zeroing
 // TODO: Implement larger and arbitrary zeroing
 (Zero [s]   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
