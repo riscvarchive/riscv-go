@@ -88,36 +88,52 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		// immediate as whatever p.To.Offset. We need to replace that
 		// immediate with the relocated value.
 		*val = (*val &^ riscv.UJTypeImmMask) | int64(imm)
-	case obj.R_PCRELRISCV:
+
+	case obj.R_RISCV_PCREL_ITYPE, obj.R_RISCV_PCREL_STYPE:
 		pc := s.Value + int64(r.Off)
 		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
 
-		// Generate AUIPC and ADDI immediates.
+		// Generate AUIPC and second instruction immediates.
 		low, high, err := riscv.Split32BitImmediate(off)
 		if err != nil {
-			ctxt.Diag("R_PCRELRISCV relocation does not fit in 32-bits: %d", off)
+			ctxt.Diag("R_RISCV_PCREL_ relocation does not fit in 32-bits: %d", off)
 			return 0
 		}
 
 		auipcImm, err := riscv.EncodeUImmediate(high)
 		if err != nil {
-			ctxt.Diag("cannot encode R_PCRELRISCV AUIPC relocation offset for %s: %v", r.Sym.Name, err)
+			ctxt.Diag("cannot encode R_RISCV_PCREL_ AUIPC relocation offset for %s: %v", r.Sym.Name, err)
 			return 0
 		}
 
-		addImm, err := riscv.EncodeIImmediate(low)
-		if err != nil {
-			ctxt.Diag("cannot encode R_PCRELRISCV ADDI relocation offset for %s: %v", r.Sym.Name, err)
-			return 0
+		var secondImm, secondImmMask int64
+		switch r.Type {
+		case obj.R_RISCV_PCREL_ITYPE:
+			secondImmMask = riscv.ITypeImmMask
+			secondImm, err = riscv.EncodeIImmediate(low)
+			if err != nil {
+				ctxt.Diag("cannot encode R_RISCV_PCREL_ITYPE I-type instruction relocation offset for %s: %v", r.Sym.Name, err)
+				return 0
+			}
+		case obj.R_RISCV_PCREL_STYPE:
+			secondImmMask = riscv.STypeImmMask
+			secondImm, err = riscv.EncodeSImmediate(low)
+			if err != nil {
+				ctxt.Diag("cannot encode R_RISCV_PCREL_STYPE S-type instruction relocation offset for %s: %v", r.Sym.Name, err)
+				return 0
+			}
+		default:
+			panic(fmt.Sprintf("Unknown relocation type: %v", r.Type))
 		}
 
 		auipc := int64(uint32(*val))
-		add := int64(uint32(*val >> 32))
+		second := int64(uint32(*val >> 32))
 
 		auipc = (auipc &^ riscv.UTypeImmMask) | auipcImm
-		add = (add &^ riscv.ITypeImmMask) | addImm
+		second = (second &^ secondImmMask) | secondImm
 
-		*val = add<<32 | auipc
+		*val = second<<32 | auipc
+
 	default:
 		return -1
 	}

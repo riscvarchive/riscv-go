@@ -348,8 +348,32 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpOr8(v, config)
 	case OpOrB:
 		return rewriteValueRISCV_OpOrB(v, config)
+	case OpRISCVADDI:
+		return rewriteValueRISCV_OpRISCVADDI(v, config)
+	case OpRISCVLB:
+		return rewriteValueRISCV_OpRISCVLB(v, config)
+	case OpRISCVLBU:
+		return rewriteValueRISCV_OpRISCVLBU(v, config)
+	case OpRISCVLD:
+		return rewriteValueRISCV_OpRISCVLD(v, config)
+	case OpRISCVLH:
+		return rewriteValueRISCV_OpRISCVLH(v, config)
+	case OpRISCVLHU:
+		return rewriteValueRISCV_OpRISCVLHU(v, config)
+	case OpRISCVLW:
+		return rewriteValueRISCV_OpRISCVLW(v, config)
+	case OpRISCVLWU:
+		return rewriteValueRISCV_OpRISCVLWU(v, config)
 	case OpRISCVMOVQconst:
 		return rewriteValueRISCV_OpRISCVMOVQconst(v, config)
+	case OpRISCVSB:
+		return rewriteValueRISCV_OpRISCVSB(v, config)
+	case OpRISCVSD:
+		return rewriteValueRISCV_OpRISCVSD(v, config)
+	case OpRISCVSH:
+		return rewriteValueRISCV_OpRISCVSH(v, config)
+	case OpRISCVSW:
+		return rewriteValueRISCV_OpRISCVSW(v, config)
 	case OpRsh16Ux16:
 		return rewriteValueRISCV_OpRsh16Ux16(v, config)
 	case OpRsh16Ux32:
@@ -3615,6 +3639,235 @@ func rewriteValueRISCV_OpOrB(v *Value, config *Config) bool {
 		return true
 	}
 }
+func rewriteValueRISCV_OpRISCVADDI(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ADDI [c] (MOVmem [d] {s} x))
+	// cond: is32Bit(c+d)
+	// result: (MOVmem [c+d] {s} x)
+	for {
+		c := v.AuxInt
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		d := v_0.AuxInt
+		s := v_0.Aux
+		x := v_0.Args[0]
+		if !(is32Bit(c + d)) {
+			break
+		}
+		v.reset(OpRISCVMOVmem)
+		v.AuxInt = c + d
+		v.Aux = s
+		v.AddArg(x)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLB(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LB  [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LB  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLB)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLBU(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LBU [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LBU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLBU)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLD(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LD  [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LD  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLD)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLH(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LH  [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LH  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLH)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLHU(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LHU [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LHU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLHU)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLW(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LW  [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LW  [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLW)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVLWU(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (LWU [off1] {sym1} (MOVmem [off2] {sym2} base) mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (LWU [off1+off2] {mergeSym(sym1,sym2)} base mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		mem := v.Args[1]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVLWU)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
 func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
@@ -3658,6 +3911,130 @@ func rewriteValueRISCV_OpRISCVMOVQconst(v *Value, config *Config) bool {
 		v2 := b.NewValue0(v.Line, OpRISCVMOVQconst, config.fe.TypeUInt64())
 		v2.AuxInt = int64(int32(c))
 		v.AddArg(v2)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVSB(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SB [off1] {sym1} (MOVmem [off2] {sym2} base) val mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (SB [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVSB)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVSD(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SD [off1] {sym1} (MOVmem [off2] {sym2} base) val mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (SD [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVSD)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVSH(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SH [off1] {sym1} (MOVmem [off2] {sym2} base) val mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (SH [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVSH)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(val)
+		v.AddArg(mem)
+		return true
+	}
+	return false
+}
+func rewriteValueRISCV_OpRISCVSW(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (SW [off1] {sym1} (MOVmem [off2] {sym2} base) val mem)
+	// cond: is32Bit(off1+off2) && canMergeSym(sym1, sym2)
+	// result: (SW [off1+off2] {mergeSym(sym1,sym2)} base val mem)
+	for {
+		off1 := v.AuxInt
+		sym1 := v.Aux
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVmem {
+			break
+		}
+		off2 := v_0.AuxInt
+		sym2 := v_0.Aux
+		base := v_0.Args[0]
+		val := v.Args[1]
+		mem := v.Args[2]
+		if !(is32Bit(off1+off2) && canMergeSym(sym1, sym2)) {
+			break
+		}
+		v.reset(OpRISCVSW)
+		v.AuxInt = off1 + off2
+		v.Aux = mergeSym(sym1, sym2)
+		v.AddArg(base)
+		v.AddArg(val)
+		v.AddArg(mem)
 		return true
 	}
 	return false

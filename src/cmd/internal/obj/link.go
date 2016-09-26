@@ -481,9 +481,6 @@ const (
 	R_CALLRISCV
 	R_CONST
 	R_PCREL
-	// R_PCRELRISCV resolves a 32-bit PC-relative address using an AUIPC +
-	// ADDI instruction pair.
-	R_PCRELRISCV
 	// R_TLS_LE, used on 386, amd64, and ARM, resolves to the offset of the
 	// thread-local symbol from the thread local base and is used to implement the
 	// "local exec" model for tls access (r.Sym is not set on intel platforms but is
@@ -601,6 +598,16 @@ const (
 	// R_ADDRMIPSTLS (only used on mips64) resolves to the low 16 bits of a TLS
 	// address (offset from thread pointer), by encoding it into the instruction.
 	R_ADDRMIPSTLS
+
+	// RISC-V.
+
+	// R_RISCV_PCREL_ITYPE resolves a 32-bit PC-relative address using an AUIPC +
+	// I-type instruction pair.
+	R_RISCV_PCREL_ITYPE
+
+	// R_RISCV_PCREL_STYPE resolves a 32-bit PC-relative address using an AUIPC +
+	// S-type instruction pair.
+	R_RISCV_PCREL_STYPE
 )
 
 type Auto struct {
