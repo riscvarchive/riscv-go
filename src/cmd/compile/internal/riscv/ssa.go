@@ -254,7 +254,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: gc.SSARegNum(v.Args[0])}
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpRISCVMOVBconst, ssa.OpRISCVMOVWconst, ssa.OpRISCVMOVLconst, ssa.OpRISCVMOVQconst:
+	case ssa.OpRISCVMOVBconst, ssa.OpRISCVMOVHconst, ssa.OpRISCVMOVWconst, ssa.OpRISCVMOVDconst:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST
 		p.From.Offset = v.AuxInt
@@ -268,7 +268,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.From.Offset = int64(math.Float32bits(float32(math.Float64frombits(uint64(v.AuxInt)))))
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpRISCVMOVmem:
+	case ssa.OpRISCVMOVaddr:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_ADDR
 		p.To.Type = obj.TYPE_REG
@@ -294,16 +294,17 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		if reg := gc.SSAReg(v.Args[0]); reg.Name() != wantreg {
 			v.Fatalf("bad reg %s for symbol type %T, want %s", reg.Name(), v.Aux, wantreg)
 		}
-	case ssa.OpRISCVLB, ssa.OpRISCVLH, ssa.OpRISCVLW, ssa.OpRISCVLD, ssa.OpRISCVLBU, ssa.OpRISCVLHU, ssa.OpRISCVLWU,
-		ssa.OpRISCVFLW, ssa.OpRISCVFLD:
+	case ssa.OpRISCVMOVBload, ssa.OpRISCVMOVHload, ssa.OpRISCVMOVWload, ssa.OpRISCVMOVDload,
+		ssa.OpRISCVMOVBUload, ssa.OpRISCVMOVHUload, ssa.OpRISCVMOVWUload,
+		ssa.OpRISCVFMOVWload, ssa.OpRISCVFMOVDload:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_MEM
 		p.From.Reg = gc.SSARegNum(v.Args[0])
 		gc.AddAux(&p.From, v)
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = gc.SSARegNum(v)
-	case ssa.OpRISCVSB, ssa.OpRISCVSH, ssa.OpRISCVSW, ssa.OpRISCVSD,
-		ssa.OpRISCVFSW, ssa.OpRISCVFSD:
+	case ssa.OpRISCVMOVBstore, ssa.OpRISCVMOVHstore, ssa.OpRISCVMOVWstore, ssa.OpRISCVMOVDstore,
+		ssa.OpRISCVFMOVWstore, ssa.OpRISCVFMOVDstore:
 		p := gc.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = gc.SSARegNum(v.Args[1])

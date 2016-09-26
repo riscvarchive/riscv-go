@@ -1221,23 +1221,23 @@ const (
 	OpRISCVREMU
 	OpRISCVREMW
 	OpRISCVREMUW
-	OpRISCVMOVmem
+	OpRISCVMOVaddr
 	OpRISCVMOVBconst
+	OpRISCVMOVHconst
 	OpRISCVMOVWconst
-	OpRISCVMOVLconst
-	OpRISCVMOVQconst
+	OpRISCVMOVDconst
 	OpRISCVMOVSconst
-	OpRISCVLB
-	OpRISCVLH
-	OpRISCVLW
-	OpRISCVLD
-	OpRISCVLBU
-	OpRISCVLHU
-	OpRISCVLWU
-	OpRISCVSB
-	OpRISCVSH
-	OpRISCVSW
-	OpRISCVSD
+	OpRISCVMOVBload
+	OpRISCVMOVHload
+	OpRISCVMOVWload
+	OpRISCVMOVDload
+	OpRISCVMOVBUload
+	OpRISCVMOVHUload
+	OpRISCVMOVWUload
+	OpRISCVMOVBstore
+	OpRISCVMOVHstore
+	OpRISCVMOVWstore
+	OpRISCVMOVDstore
 	OpRISCVSLL
 	OpRISCVSRA
 	OpRISCVSRL
@@ -1282,8 +1282,8 @@ const (
 	OpRISCVFCVTSL
 	OpRISCVFCVTWS
 	OpRISCVFCVTLS
-	OpRISCVFLW
-	OpRISCVFSW
+	OpRISCVFMOVWload
+	OpRISCVFMOVWstore
 	OpRISCVFEQS
 	OpRISCVFNES
 	OpRISCVFLTS
@@ -1301,8 +1301,8 @@ const (
 	OpRISCVFCVTLD
 	OpRISCVFCVTDS
 	OpRISCVFCVTSD
-	OpRISCVFLD
-	OpRISCVFSD
+	OpRISCVFMOVDload
+	OpRISCVFMOVDstore
 	OpRISCVFEQD
 	OpRISCVFNED
 	OpRISCVFLTD
@@ -15086,7 +15086,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVmem",
+		name:    "MOVaddr",
 		auxType: auxSymOff,
 		argLen:  1,
 		asm:     riscv.AMOV,
@@ -15112,7 +15112,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:              "MOVWconst",
+		name:              "MOVHconst",
 		auxType:           auxInt16,
 		argLen:            0,
 		rematerializeable: true,
@@ -15124,7 +15124,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:              "MOVLconst",
+		name:              "MOVWconst",
 		auxType:           auxInt32,
 		argLen:            0,
 		rematerializeable: true,
@@ -15136,7 +15136,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:              "MOVQconst",
+		name:              "MOVDconst",
 		auxType:           auxInt64,
 		argLen:            0,
 		rematerializeable: true,
@@ -15160,7 +15160,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LB",
+		name:    "MOVBload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVB,
@@ -15174,7 +15174,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LH",
+		name:    "MOVHload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVH,
@@ -15188,7 +15188,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LW",
+		name:    "MOVWload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVW,
@@ -15202,7 +15202,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LD",
+		name:    "MOVDload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOV,
@@ -15216,7 +15216,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LBU",
+		name:    "MOVBUload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVBU,
@@ -15230,7 +15230,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LHU",
+		name:    "MOVHUload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVHU,
@@ -15244,7 +15244,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "LWU",
+		name:    "MOVWUload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVWU,
@@ -15258,7 +15258,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SB",
+		name:    "MOVBstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVB,
@@ -15270,7 +15270,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SH",
+		name:    "MOVHstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVH,
@@ -15282,7 +15282,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SW",
+		name:    "MOVWstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVW,
@@ -15294,7 +15294,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "SD",
+		name:    "MOVDstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOV,
@@ -15862,7 +15862,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FLW",
+		name:    "FMOVWload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVF,
@@ -15876,7 +15876,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FSW",
+		name:    "FMOVWstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVF,
@@ -16121,7 +16121,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FLD",
+		name:    "FMOVDload",
 		auxType: auxSymOff,
 		argLen:  2,
 		asm:     riscv.AMOVD,
@@ -16135,7 +16135,7 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FSD",
+		name:    "FMOVDstore",
 		auxType: auxSymOff,
 		argLen:  3,
 		asm:     riscv.AMOVD,
