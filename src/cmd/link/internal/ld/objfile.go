@@ -130,16 +130,17 @@ var emptyPkg = []byte(`"".`)
 
 // objReader reads Go object files.
 type objReader struct {
-	rd   *bufio.Reader
-	ctxt *Link
-	pkg  string
-	pn   string
-	// List of symbol references for the file being read.
-	dupSym *Symbol
+	rd              *bufio.Reader
+	ctxt            *Link
+	pkg             string
+	pn              string
+	dupSym          *Symbol
+	localSymVersion int
 
 	// rdBuf is used by readString and readSymName as scratch for reading strings.
 	rdBuf []byte
 
+	// List of symbol references for the file being read.
 	refs        []*Symbol
 	data        []byte
 	reloc       []Reloc
@@ -153,11 +154,12 @@ type objReader struct {
 func LoadObjFile(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 	start := f.Offset()
 	r := &objReader{
-		rd:     f.Reader,
-		pkg:    pkg,
-		ctxt:   ctxt,
-		pn:     pn,
-		dupSym: &Symbol{Name: ".dup"},
+		rd:              f.Reader,
+		pkg:             pkg,
+		ctxt:            ctxt,
+		pn:              pn,
+		dupSym:          &Symbol{Name: ".dup"},
+		localSymVersion: ctxt.Syms.IncVersion(),
 	}
 	r.loadObjFile()
 	if f.Offset() != start+length {
@@ -166,8 +168,6 @@ func LoadObjFile(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string)
 }
 
 func (r *objReader) loadObjFile() {
-	// Increment context version, versions are used to differentiate static files in different packages
-	r.ctxt.IncVersion()
 
 	// Magic header
 	var buf [8]uint8
@@ -254,7 +254,7 @@ func (r *objReader) readSym() {
 	if c, err := r.rd.ReadByte(); c != symPrefix || err != nil {
 		log.Fatalln("readSym out of sync")
 	}
-	t := r.readInt()
+	t := obj.SymKind(r.readInt())
 	s := r.readSymIndex()
 	flags := r.readInt()
 	dupok := flags&1 != 0
@@ -302,9 +302,9 @@ overwrite:
 		log.Fatalf("missing type for %s in %s", s.Name, r.pn)
 	}
 	if t == obj.SBSS && (s.Type == obj.SRODATA || s.Type == obj.SNOPTRBSS) {
-		t = int(s.Type)
+		t = s.Type
 	}
-	s.Type = int16(t)
+	s.Type = t
 	if s.Size < int64(size) {
 		s.Size = int64(size)
 	}
@@ -452,9 +452,9 @@ func (r *objReader) readRef() {
 		log.Fatalf("invalid symbol version %d", v)
 	}
 	if v == 1 {
-		v = r.ctxt.Version
+		v = r.localSymVersion
 	}
-	s := Linklookup(r.ctxt, name, v)
+	s := r.ctxt.Syms.Lookup(name, v)
 	r.refs = append(r.refs, s)
 
 	if s == nil || v != 0 {
@@ -585,7 +585,7 @@ func (r *objReader) readSymName() string {
 			}
 			r.rdBuf = adjName[:0] // in case 2*n wasn't enough
 
-			if r.ctxt.DynlinkingGo() {
+			if Buildmode == BuildmodeShared || *FlagLinkshared {
 				// These types are included in the symbol
 				// table when dynamically linking. To keep
 				// binary size down, we replace the names

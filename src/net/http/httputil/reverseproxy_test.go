@@ -148,6 +148,9 @@ func TestReverseProxyStripHeadersPresentInConnection(t *testing.T) {
 		if c := r.Header.Get("Upgrade"); c != "" {
 			t.Errorf("handler got header %q = %q; want empty", "Upgrade", c)
 		}
+		w.Header().Set("Connection", "Upgrade, "+fakeConnectionToken)
+		w.Header().Set("Upgrade", "should be deleted")
+		w.Header().Set(fakeConnectionToken, "should be deleted")
 		io.WriteString(w, backendResponse)
 	}))
 	defer backend.Close()
@@ -156,12 +159,17 @@ func TestReverseProxyStripHeadersPresentInConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	proxyHandler := NewSingleHostReverseProxy(backendURL)
-	frontend := httptest.NewServer(proxyHandler)
+	frontend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyHandler.ServeHTTP(w, r)
+		if c := r.Header.Get("Upgrade"); c != "original value" {
+			t.Errorf("handler modified header %q = %q; want %q", "Upgrade", c, "original value")
+		}
+	}))
 	defer frontend.Close()
 
 	getReq, _ := http.NewRequest("GET", frontend.URL, nil)
 	getReq.Header.Set("Connection", "Upgrade, "+fakeConnectionToken)
-	getReq.Header.Set("Upgrade", "foo")
+	getReq.Header.Set("Upgrade", "original value")
 	getReq.Header.Set(fakeConnectionToken, "should be deleted")
 	res, err := http.DefaultClient.Do(getReq)
 	if err != nil {
@@ -174,6 +182,12 @@ func TestReverseProxyStripHeadersPresentInConnection(t *testing.T) {
 	}
 	if got, want := string(bodyBytes), backendResponse; got != want {
 		t.Errorf("got body %q; want %q", got, want)
+	}
+	if c := res.Header.Get("Upgrade"); c != "" {
+		t.Errorf("handler got header %q = %q; want empty", "Upgrade", c)
+	}
+	if c := res.Header.Get(fakeConnectionToken); c != "" {
+		t.Errorf("handler got header %q = %q; want empty", fakeConnectionToken, c)
 	}
 }
 
@@ -342,7 +356,7 @@ func TestReverseProxyCancelation(t *testing.T) {
 	}()
 	res, err := http.DefaultClient.Do(getReq)
 	if res != nil {
-		t.Error("got response %v; want nil", res.Status)
+		t.Errorf("got response %v; want nil", res.Status)
 	}
 	if err == nil {
 		// This should be an error like:

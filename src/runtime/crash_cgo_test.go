@@ -100,9 +100,18 @@ func TestCgoExternalThreadSIGPROF(t *testing.T) {
 		// ppc64 (issue #8912)
 		t.Skipf("no external linking on ppc64")
 	}
-	got := runTestProg(t, "testprogcgo", "CgoExternalThreadSIGPROF")
-	want := "OK\n"
-	if got != want {
+
+	exe, err := buildTestProg(t, "testprogcgo", "-tags=threadprof")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := testEnv(exec.Command(exe, "CgoExternalThreadSIGPROF")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("exit status: %v\n%s", err, got)
+	}
+
+	if want := "OK\n"; string(got) != want {
 		t.Fatalf("expected %q, but got:\n%s", want, got)
 	}
 }
@@ -113,9 +122,19 @@ func TestCgoExternalThreadSignal(t *testing.T) {
 	case "plan9", "windows":
 		t.Skipf("no pthreads on %s", runtime.GOOS)
 	}
-	got := runTestProg(t, "testprogcgo", "CgoExternalThreadSignal")
-	want := "OK\n"
-	if got != want {
+
+	exe, err := buildTestProg(t, "testprogcgo", "-tags=threadprof")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := testEnv(exec.Command(exe, "CgoExternalThreadSIGPROF")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("exit status: %v\n%s", err, got)
+	}
+
+	want := []byte("OK\n")
+	if !bytes.Equal(got, want) {
 		t.Fatalf("expected %q, but got:\n%s", want, got)
 	}
 }
@@ -290,4 +309,61 @@ func TestCgoPprofPIE(t *testing.T) {
 
 func TestCgoPprofThread(t *testing.T) {
 	testCgoPprof(t, "", "CgoPprofThread")
+}
+
+func TestRaceProf(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skipf("not yet supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	testenv.MustHaveGoRun(t)
+
+	// This test requires building various packages with -race, so
+	// it's somewhat slow.
+	if testing.Short() {
+		t.Skip("skipping test in -short mode")
+	}
+
+	exe, err := buildTestProg(t, "testprogcgo", "-race")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := testEnv(exec.Command(exe, "CgoRaceprof")).CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "OK\n"
+	if string(got) != want {
+		t.Errorf("expected %q got %s", want, got)
+	}
+}
+
+func TestRaceSignal(t *testing.T) {
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
+		t.Skipf("not yet supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	testenv.MustHaveGoRun(t)
+
+	// This test requires building various packages with -race, so
+	// it's somewhat slow.
+	if testing.Short() {
+		t.Skip("skipping test in -short mode")
+	}
+
+	exe, err := buildTestProg(t, "testprogcgo", "-race")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := testEnv(exec.Command(exe, "CgoRaceSignal")).CombinedOutput()
+	if err != nil {
+		t.Logf("%s\n", got)
+		t.Fatal(err)
+	}
+	want := "OK\n"
+	if string(got) != want {
+		t.Errorf("expected %q got %s", want, got)
+	}
 }

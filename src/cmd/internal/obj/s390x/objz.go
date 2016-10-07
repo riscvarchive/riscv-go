@@ -109,13 +109,13 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	// Rewrite SUB constants into ADD.
 	switch p.As {
 	case ASUBC:
-		if p.From.Type == obj.TYPE_CONST {
+		if p.From.Type == obj.TYPE_CONST && isint32(-p.From.Offset) {
 			p.From.Offset = -p.From.Offset
 			p.As = AADDC
 		}
 
 	case ASUB:
-		if p.From.Type == obj.TYPE_CONST {
+		if p.From.Type == obj.TYPE_CONST && isint32(-p.From.Offset) {
 			p.From.Offset = -p.From.Offset
 			p.As = AADD
 		}
@@ -258,14 +258,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.Link.Mark |= LABEL
 			}
 
-		case ANOR:
-			q = p
-			if p.To.Type == obj.TYPE_REG {
-				if p.To.Reg == REGZERO {
-					p.Mark |= LABEL | SYNC
-				}
-			}
-
 		case ASYNC,
 			AWORD:
 			q = p
@@ -312,6 +304,8 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			ABGT,
 			ABLE,
 			ABLT,
+			ABLEU,
+			ABLTU,
 			ABNE,
 			ABR,
 			ABVC,
@@ -401,7 +395,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 			q = p
 
-			if p.From3.Offset&obj.NOSPLIT == 0 {
+			if p.From3.Offset&obj.NOSPLIT == 0 && p.From3.Offset&obj.NOFRAME == 0 {
 				p, pPreempt = stacksplitPre(ctxt, p, autosize) // emit pre part of split check
 				pPre = p
 				wasSplit = true //need post part of split
@@ -440,7 +434,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				// if(g->panic != nil && g->panic->argp == FP) g->panic->argp = bottom-of-frame
 				//
 				//	MOVD g_panic(g), R3
-				//	CMP R0, R3
+				//	CMP R3, $0
 				//	BEQ end
 				//	MOVD panic_argp(R3), R4
 				//	ADD $(autosize+8), R1, R5
@@ -466,9 +460,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				q = obj.Appendp(ctxt, q)
 				q.As = ACMP
 				q.From.Type = obj.TYPE_REG
-				q.From.Reg = REG_R0
-				q.To.Type = obj.TYPE_REG
-				q.To.Reg = REG_R3
+				q.From.Reg = REG_R3
+				q.To.Type = obj.TYPE_CONST
+				q.To.Offset = 0
 
 				q = obj.Appendp(ctxt, q)
 				q.As = ABEQ
@@ -605,7 +599,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		}
 	}
 	if wasSplit {
-		pLast = stacksplitPost(ctxt, pLast, pPre, pPreempt) // emit post part of split check
+		pLast = stacksplitPost(ctxt, pLast, pPre, pPreempt, autosize) // emit post part of split check
 	}
 }
 
@@ -781,10 +775,25 @@ func stacksplitPre(ctxt *obj.Link, p *obj.Prog, framesize int32) (*obj.Prog, *ob
 	return p, q
 }
 
-func stacksplitPost(ctxt *obj.Link, p *obj.Prog, pPre *obj.Prog, pPreempt *obj.Prog) *obj.Prog {
+func stacksplitPost(ctxt *obj.Link, p *obj.Prog, pPre *obj.Prog, pPreempt *obj.Prog, framesize int32) *obj.Prog {
+	// Now we are at the end of the function, but logically
+	// we are still in function prologue. We need to fix the
+	// SP data and PCDATA.
+	spfix := obj.Appendp(ctxt, p)
+	spfix.As = obj.ANOP
+	spfix.Spadj = -framesize
+
+	pcdata := obj.Appendp(ctxt, spfix)
+	pcdata.Lineno = ctxt.Cursym.Text.Lineno
+	pcdata.Mode = ctxt.Cursym.Text.Mode
+	pcdata.As = obj.APCDATA
+	pcdata.From.Type = obj.TYPE_CONST
+	pcdata.From.Offset = obj.PCDATA_StackMapIndex
+	pcdata.To.Type = obj.TYPE_CONST
+	pcdata.To.Offset = -1 // pcdata starts at -1 at function entry
 
 	// MOVD	LR, R5
-	p = obj.Appendp(ctxt, p)
+	p = obj.Appendp(ctxt, pcdata)
 	pPre.Pcond = p
 	p.As = AMOVD
 	p.From.Type = obj.TYPE_REG
@@ -993,6 +1002,7 @@ var unaryDst = map[obj.As]bool{
 	ASTCKE: true,
 	ASTCKF: true,
 	ANEG:   true,
+	ANEGW:  true,
 	AVONE:  true,
 	AVZERO: true,
 }

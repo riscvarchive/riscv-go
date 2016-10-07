@@ -15,11 +15,6 @@ import (
 	"unsafe"
 )
 
-// File represents an open file descriptor.
-type File struct {
-	*file
-}
-
 // file is the real representation of *File.
 // The extra level of indirection ensures that no clients of os
 // can overwrite this data, which could cause the finalizer
@@ -222,14 +217,16 @@ func (f *File) readConsole(b []byte) (n int, err error) {
 			if len(b) > 0 {
 				pmb = &mbytes[0]
 			}
-			acp := windows.GetACP()
-			nwc, err := windows.MultiByteToWideChar(acp, 2, pmb, int32(nmb), nil, 0)
+			ccp := windows.GetConsoleCP()
+			// Convert from 8-bit console encoding to UTF16.
+			// MultiByteToWideChar defaults to Unicode NFC form, which is the expected one.
+			nwc, err := windows.MultiByteToWideChar(ccp, 0, pmb, int32(nmb), nil, 0)
 			if err != nil {
 				return 0, err
 			}
 			wchars := make([]uint16, nwc)
 			pwc := &wchars[0]
-			nwc, err = windows.MultiByteToWideChar(acp, 2, pmb, int32(nmb), pwc, nwc)
+			nwc, err = windows.MultiByteToWideChar(ccp, 0, pmb, int32(nmb), pwc, nwc)
 			if err != nil {
 				return 0, err
 			}

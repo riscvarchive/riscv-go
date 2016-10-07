@@ -77,7 +77,6 @@ type Node struct {
 
 const (
 	hasBreak = 1 << iota
-	notLiveAtEnd
 	isClosureVar
 	isOutputParamHeapAddr
 	noInline // used internally by inliner to indicate that a function call should not be inlined; set for OCALLFUNC and OCALLMETH only
@@ -91,16 +90,6 @@ func (n *Node) SetHasBreak(b bool) {
 		n.flags |= hasBreak
 	} else {
 		n.flags &^= hasBreak
-	}
-}
-func (n *Node) NotLiveAtEnd() bool {
-	return n.flags&notLiveAtEnd != 0
-}
-func (n *Node) SetNotLiveAtEnd(b bool) {
-	if b {
-		n.flags |= notLiveAtEnd
-	} else {
-		n.flags &^= notLiveAtEnd
 	}
 }
 func (n *Node) isClosureVar() bool {
@@ -362,7 +351,8 @@ const (
 	OCOMPLIT         // Right{List} (composite literal, not yet lowered to specific form)
 	OMAPLIT          // Type{List} (composite literal, Type is map)
 	OSTRUCTLIT       // Type{List} (composite literal, Type is struct)
-	OARRAYLIT        // Type{List} (composite literal, Type is array or slice)
+	OARRAYLIT        // Type{List} (composite literal, Type is array)
+	OSLICELIT        // Type{List} (composite literal, Type is slice)
 	OPTRLIT          // &Left (left is composite literal)
 	OCONV            // Type(Left) (type conversion)
 	OCONVIFACE       // Type(Left) (type conversion, to interface)
@@ -583,12 +573,26 @@ func (n Nodes) Addr(i int) **Node {
 // Append appends entries to Nodes.
 // If a slice is passed in, this will take ownership of it.
 func (n *Nodes) Append(a ...*Node) {
+	if len(a) == 0 {
+		return
+	}
 	if n.slice == nil {
-		if len(a) > 0 {
-			n.slice = &a
-		}
+		n.slice = &a
 	} else {
 		*n.slice = append(*n.slice, a...)
+	}
+}
+
+// Prepend prepends entries to Nodes.
+// If a slice is passed in, this will take ownership of it.
+func (n *Nodes) Prepend(a ...*Node) {
+	if len(a) == 0 {
+		return
+	}
+	if n.slice == nil {
+		n.slice = &a
+	} else {
+		*n.slice = append(a, *n.slice...)
 	}
 }
 

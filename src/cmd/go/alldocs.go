@@ -17,6 +17,7 @@
 // 	clean       remove object files
 // 	doc         show documentation for package or symbol
 // 	env         print Go environment information
+// 	bug         print information for bug reports
 // 	fix         run go tool fix on packages
 // 	fmt         run gofmt on package sources
 // 	generate    generate Go files by processing source
@@ -323,6 +324,17 @@
 // each named variable on its own line.
 //
 //
+// Print information for bug reports
+//
+// Usage:
+//
+// 	go bug
+//
+// Bug prints information that helps file effective bug reports.
+//
+// Bugs may be reported at https://golang.org/issue/new.
+//
+//
 // Run go tool fix on packages
 //
 // Usage:
@@ -502,7 +514,7 @@
 //
 // When checking out a new package, get creates the target directory
 // GOPATH/src/<import-path>. If the GOPATH contains multiple entries,
-// get uses the first one. See 'go help gopath'.
+// get uses the first one. For more details see: 'go help gopath'.
 //
 // When checking out or updating a package, get looks for a branch or tag
 // that matches the locally installed version of Go. The most important
@@ -854,6 +866,10 @@
 // 		position independent executables (PIE). Packages not named
 // 		main are ignored.
 //
+// 	-buildmode=plugin
+// 		Build the listed main packages, plus all packages that they
+// 		import, into a Go plugin. Packages not named main are ignored.
+//
 //
 // File types
 //
@@ -1062,7 +1078,7 @@
 // 		The operating system for which to compile code.
 // 		Examples are linux, darwin, windows, netbsd.
 // 	GOPATH
-// 		See 'go help gopath'.
+// 		For more details see: 'go help gopath'.
 // 	GORACE
 // 		Options for the race detector.
 // 		See https://golang.org/doc/articles/race_detector.html.
@@ -1088,6 +1104,8 @@
 // 		Flags that cgo will pass to the compiler when linking.
 // 	CXX
 // 		The command to use to compile C++ code.
+// 	PKG_CONFIG
+// 		Path to pkg-config tool.
 //
 // Architecture-specific environment variables:
 //
@@ -1109,14 +1127,18 @@
 // 		Whether the linker should use external linking mode
 // 		when using -linkmode=auto with code that uses cgo.
 // 		Set to 0 to disable external linking mode, 1 to enable it.
+// 	GIT_ALLOW_PROTOCOL
+// 		Defined by Git. A colon-separated list of schemes that are allowed to be used
+// 		with git fetch/clone. If set, any scheme not explicitly mentioned will be
+// 		considered insecure by 'go get'.
 //
 //
 // Import path syntax
 //
-// An import path (see 'go help packages') denotes a package
-// stored in the local file system.  In general, an import path denotes
-// either a standard package (such as "unicode/utf8") or a package
-// found in one of the work spaces (see 'go help gopath').
+// An import path (see 'go help packages') denotes a package stored in the local
+// file system.  In general, an import path denotes either a standard package (such
+// as "unicode/utf8") or a package found in one of the work spaces (For more
+// details see: 'go help gopath').
 //
 // Relative import paths
 //
@@ -1208,6 +1230,11 @@
 // each is tried in turn when downloading.  For example, a Git
 // download tries https://, then git+ssh://.
 //
+// By default, downloads are restricted to known secure protocols
+// (e.g. https, ssh). To override this setting for Git downloads, the
+// GIT_ALLOW_PROTOCOL environment variable can be set (For more details see:
+// 'go help environment').
+//
 // If the import path is not a known code hosting site and also lacks a
 // version control qualifier, the go tool attempts to fetch the import
 // over https/http and looks for a <meta> tag in the document's HTML
@@ -1248,8 +1275,8 @@
 // same meta tag and then git clone https://code.org/r/p/exproj into
 // GOPATH/src/example.org.
 //
-// New downloaded packages are written to the first directory
-// listed in the GOPATH environment variable (see 'go help gopath').
+// New downloaded packages are written to the first directory listed in the GOPATH
+// environment variable (For more details see: 'go help gopath').
 //
 // The go command attempts to download the version of the
 // package appropriate for the Go release being used.
@@ -1293,7 +1320,7 @@
 //
 // Otherwise, the import path P denotes the package found in
 // the directory DIR/src/P for some DIR listed in the GOPATH
-// environment variable (see 'go help gopath').
+// environment variable (For more details see: 'go help gopath').
 //
 // If no import paths are given, the action applies to the
 // package in the current directory.
@@ -1368,27 +1395,10 @@
 // 	    By default, no benchmarks run. To run all benchmarks,
 // 	    use '-bench .' or '-bench=.'.
 //
-// 	-benchmem
-// 	    Print memory allocation statistics for benchmarks.
-//
 // 	-benchtime t
 // 	    Run enough iterations of each benchmark to take t, specified
 // 	    as a time.Duration (for example, -benchtime 1h30s).
 // 	    The default is 1 second (1s).
-//
-// 	-blockprofile block.out
-// 	    Write a goroutine blocking profile to the specified file
-// 	    when all tests are complete.
-// 	    Writes test binary as -c would.
-//
-// 	-blockprofilerate n
-// 	    Control the detail provided in goroutine blocking profiles by
-// 	    calling runtime.SetBlockProfileRate with n.
-// 	    See 'go doc runtime.SetBlockProfileRate'.
-// 	    The profiler aims to sample, on average, one blocking event every
-// 	    n nanoseconds the program spends blocked.  By default,
-// 	    if -test.blockprofile is set without this flag, all blocking events
-// 	    are recorded, equivalent to -test.blockprofilerate=1.
 //
 // 	-count n
 // 	    Run each test and benchmark n times (default 1).
@@ -1415,32 +1425,10 @@
 // 	    Packages are specified as import paths.
 // 	    Sets -cover.
 //
-// 	-coverprofile cover.out
-// 	    Write a coverage profile to the file after all tests have passed.
-// 	    Sets -cover.
-//
 // 	-cpu 1,2,4
 // 	    Specify a list of GOMAXPROCS values for which the tests or
 // 	    benchmarks should be executed.  The default is the current value
 // 	    of GOMAXPROCS.
-//
-// 	-cpuprofile cpu.out
-// 	    Write a CPU profile to the specified file before exiting.
-// 	    Writes test binary as -c would.
-//
-// 	-memprofile mem.out
-// 	    Write a memory profile to the file after all tests have passed.
-// 	    Writes test binary as -c would.
-//
-// 	-memprofilerate n
-// 	    Enable more precise (and expensive) memory profiles by setting
-// 	    runtime.MemProfileRate.  See 'go doc runtime.MemProfileRate'.
-// 	    To profile all memory allocations, use -test.memprofilerate=1
-// 	    and pass --alloc_space flag to the pprof tool.
-//
-// 	-outputdir directory
-// 	    Place output files from profiling in the specified directory,
-// 	    by default the directory in which "go test" is running.
 //
 // 	-parallel n
 // 	    Allow parallel execution of test functions that call t.Parallel.
@@ -1467,12 +1455,54 @@
 // 	    If a test runs longer than t, panic.
 // 	    The default is 10 minutes (10m).
 //
-// 	-trace trace.out
-// 	    Write an execution trace to the specified file before exiting.
-//
 // 	-v
 // 	    Verbose output: log all tests as they are run. Also print all
 // 	    text from Log and Logf calls even if the test succeeds.
+//
+// The following flags are also recognized by 'go test' and can be used to
+// profile the tests during execution::
+//
+// 	-benchmem
+// 	    Print memory allocation statistics for benchmarks.
+//
+// 	-blockprofile block.out
+// 	    Write a goroutine blocking profile to the specified file
+// 	    when all tests are complete.
+// 	    Writes test binary as -c would.
+//
+// 	-blockprofilerate n
+// 	    Control the detail provided in goroutine blocking profiles by
+// 	    calling runtime.SetBlockProfileRate with n.
+// 	    See 'go doc runtime.SetBlockProfileRate'.
+// 	    The profiler aims to sample, on average, one blocking event every
+// 	    n nanoseconds the program spends blocked.  By default,
+// 	    if -test.blockprofile is set without this flag, all blocking events
+// 	    are recorded, equivalent to -test.blockprofilerate=1.
+//
+// 	-coverprofile cover.out
+// 	    Write a coverage profile to the file after all tests have passed.
+// 	    Sets -cover.
+//
+// 	-cpuprofile cpu.out
+// 	    Write a CPU profile to the specified file before exiting.
+// 	    Writes test binary as -c would.
+//
+// 	-memprofile mem.out
+// 	    Write a memory profile to the file after all tests have passed.
+// 	    Writes test binary as -c would.
+//
+// 	-memprofilerate n
+// 	    Enable more precise (and expensive) memory profiles by setting
+// 	    runtime.MemProfileRate.  See 'go doc runtime.MemProfileRate'.
+// 	    To profile all memory allocations, use -test.memprofilerate=1
+// 	    and pass --alloc_space flag to the pprof tool.
+//
+// 	-outputdir directory
+// 	    Place output files from profiling in the specified directory,
+// 	    by default the directory in which "go test" is running.
+//
+// 	-trace trace.out
+// 	    Write an execution trace to the specified file before exiting.
 //
 // Each of these flags is also recognized with an optional 'test.' prefix,
 // as in -test.v. When invoking the generated test binary (the result of

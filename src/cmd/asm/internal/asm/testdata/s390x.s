@@ -13,6 +13,13 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	MOVDBR	R1, R2                // b90f0021
 	MOVWBR	R3, R4                // b91f0043
 
+	MOVDEQ	R0, R1                // b9e28010
+	MOVDGE	R2, R3                // b9e2a032
+	MOVDGT	R4, R5                // b9e22054
+	MOVDLE	R6, R7                // b9e2c076
+	MOVDLT	R8, R9                // b9e24098
+	MOVDNE	R10, R11              // b9e270ba
+
 	MOVD	(R15), R1             // e310f0000004
 	MOVW	(R15), R2             // e320f0000014
 	MOVH	(R15), R3             // e330f0000015
@@ -45,24 +52,34 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 
 	ADD	R1, R2                // b9e81022
 	ADD	R1, R2, R3            // b9e81032
-	ADD	$8192, R1             // c21800002000
+	ADD	$8192, R1             // a71b2000
 	ADD	$8192, R1, R2         // ec21200000d9
+	ADD	$32768, R1            // c21800008000
+	ADD	$32768, R1, R2        // b9040021c22800008000
 	ADDC	R1, R2                // b9ea1022
-	ADDC	$1, R1, R2            // b9040021c22a00000001
+	ADDC	$1, R1, R2            // ec21000100db
 	ADDC	R1, R2, R3            // b9ea1032
+	ADDW	R1, R2                // 1a21
+	ADDW	R1, R2, R3            // b9f81032
+	ADDW	$8192, R1             // a71a2000
+	ADDW	$8192, R1, R2         // ec21200000d8
 	SUB	R3, R4                // b9090043
 	SUB	R3, R4, R5            // b9e93054
-	SUB	$8192, R3             // c238ffffe000
+	SUB	$8192, R3             // a73be000
 	SUB	$8192, R3, R4         // ec43e00000d9
 	SUBC	R1, R2                // b90b0021
-	SUBC	$1, R1, R2            // b9040021c22affffffff
+	SUBC	$1, R1, R2            // ec21ffff00db
 	SUBC	R2, R3, R4            // b9eb2043
+	SUBW	R3, R4                // 1b43
+	SUBW	R3, R4, R5            // b9f93054
+	SUBW	$8192, R1             // c21500002000
+	SUBW	$8192, R1, R2         // 1821c22500002000
 	MULLW	R6, R7                // b91c0076
 	MULLW	R6, R7, R8            // b9040087b91c0086
-	MULLW	$8192, R6             // a76d2000
-	MULLW	$8192, R6, R7         // b9040076a77d2000
-	MULLW	$-65537, R8           // c280fffeffff
-	MULLW   $-65537, R8, R9       // b9040098c290fffeffff
+	MULLW	$8192, R6             // a76c2000
+	MULLW	$8192, R6, R7         // 1876a77c2000
+	MULLW	$-32769, R8           // c281ffff7fff
+	MULLW   $-32769, R8, R9       // 1898c291ffff7fff
 	MULLD	$-2147483648, R1      // c21080000000
 	MULLD   $-2147483648, R1, R2  // b9040021c22080000000
 	MULHD	R9, R8                // b90400b8b98600a9ebb9003f000ab98000b8b90900abebb8003f000ab98000b9b9e9b08a
@@ -73,10 +90,59 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	DIVD	R1, R2, R3            // b90400b2b90d00a1b904003b
 	DIVW	R4, R5                // b90400b5b91d00a4b904005b
 	DIVW	R4, R5, R6            // b90400b5b91d00a4b904006b
-	DIVDU	R7, R8                // b90400a0b90400b8b98700a7b904008b
-	DIVDU	R7, R8, R9            // b90400a0b90400b8b98700a7b904009b
-	DIVWU	R1, R2                // b90400a0b90400b2b99700a1b904002b
-	DIVWU	R1, R2, R3            // b90400a0b90400b2b99700a1b904003b
+	DIVDU	R7, R8                // a7a90000b90400b8b98700a7b904008b
+	DIVDU	R7, R8, R9            // a7a90000b90400b8b98700a7b904009b
+	DIVWU	R1, R2                // a7a90000b90400b2b99700a1b904002b
+	DIVWU	R1, R2, R3            // a7a90000b90400b2b99700a1b904003b
+	MODD	R1, R2                // b90400b2b90d00a1b904002a
+	MODD	R1, R2, R3            // b90400b2b90d00a1b904003a
+	MODW	R4, R5                // b90400b5b91d00a4b904005a
+	MODW	R4, R5, R6            // b90400b5b91d00a4b904006a
+	MODDU	R7, R8                // a7a90000b90400b8b98700a7b904008a
+	MODDU	R7, R8, R9            // a7a90000b90400b8b98700a7b904009a
+	MODWU	R1, R2                // a7a90000b90400b2b99700a1b904002a
+	MODWU	R1, R2, R3            // a7a90000b90400b2b99700a1b904003a
+	NEG	R1                    // b9030011
+	NEG	R1, R2                // b9030021
+	NEGW	R1                    // b9130011
+	NEGW	R1, R2                // b9130021
+	FLOGR	R2, R2                // b9830022
+
+	AND	R1, R2                // b9800021
+	AND	R1, R2, R3            // b9e42031
+	AND	$-2, R1               // a517fffe
+	AND	$-65536, R1           // c01bffff0000
+	AND	$1, R1                // c0a100000001b980001a
+	ANDW	R1, R2                // 1421
+	ANDW	R1, R2, R3            // b9f42031
+	ANDW	$1, R1                // c01b00000001
+	ANDW	$131071, R1           // a5160001
+	ANDW	$65536, R1            // c01b00010000
+	ANDW	$-2, R1               // a517fffe
+	OR	R1, R2                // b9810021
+	OR	R1, R2, R3            // b9e62031
+	OR	$1, R1                // a51b0001
+	OR	$131071, R1           // c01d0001ffff
+	OR	$65536, R1            // c01d00010000
+	OR	$-2, R1               // c0a1fffffffeb981001a
+	ORW	R1, R2                // 1621
+	ORW	R1, R2, R3            // b9f62031
+	ORW	$1, R1                // a51b0001
+	ORW	$131071, R1           // c01d0001ffff
+	ORW	$65536, R1            // a51a0001
+	ORW	$-2, R1               // c01dfffffffe
+	XOR	R1, R2                // b9820021
+	XOR	R1, R2, R3            // b9e72031
+	XOR	$1, R1                // c01700000001
+	XOR	$131071, R1           // c0170001ffff
+	XOR	$65536, R1            // c01700010000
+	XOR	$-2, R1               // c0a1fffffffeb982001a
+	XORW	R1, R2                // 1721
+	XORW	R1, R2, R3            // b9f72031
+	XORW	$1, R1                // c01700000001
+	XORW	$131071, R1           // c0170001ffff
+	XORW	$65536, R1            // c01700010000
+	XORW	$-2, R1               // c017fffffffe
 
 	LAA	R1, R2, 524287(R3)    // eb213fff7ff8
 	LAAG	R4, R5, -524288(R6)   // eb54600080e8
@@ -112,6 +178,8 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	BLE	0(PC)                  // a7c40000
 	BGT	0(PC)                  // a7240000
 	BGE	0(PC)                  // a7a40000
+	BLTU	0(PC)                  // a7540000
+	BLEU	0(PC)                  // a7d40000
 
 	CMPBNE	R1, R2, 0(PC)          // ec1200007064
 	CMPBEQ	R3, R4, 0(PC)          // ec3400008064
@@ -225,6 +293,11 @@ TEXT main·foo(SB),7,$16-0 // TEXT main.foo(SB), 7, $16-0
 	WFMSDB	V2, V25, V24, V31       // WFMSDB  V25, V24, V2, V31       // e7f298038b8e
 	VPERM	V31, V0, V2, V3         // VPERM   V0, V2, V31, V3         // e73f0000248c
 	VPDI	$1, V2, V31, V1         // VPDI    V2, V31, $1, V1         // e712f0001284
+	VLEG	$1, (R3), V1            // VLEG    (R3), $1, V1            // e71030001002
+	VLEF	$2, (R0), V31           // VLEF    (R0), $2, V31           // e7f000002803
+	VLEH	$3, (R12), V16          // VLEH    (R12), $3, V16          // e700c0003801
+	VLEB	$15, 4095(R9), V15      // VLEB    4095(R9), $15, V15      // e7f09ffff000
+
 
 	RET
 

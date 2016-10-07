@@ -126,7 +126,7 @@ func addpctab(ctxt *Link, ftab *Symbol, off int32, d *Pcdata) int32 {
 	var start int32
 	if len(d.P) > 0 {
 		start = int32(len(ftab.P))
-		Addbytes(ctxt, ftab, d.P)
+		Addbytes(ftab, d.P)
 	}
 	return int32(setuint32(ctxt, ftab, int64(off), uint32(start)))
 }
@@ -134,7 +134,7 @@ func addpctab(ctxt *Link, ftab *Symbol, off int32, d *Pcdata) int32 {
 func ftabaddstring(ctxt *Link, ftab *Symbol, s string) int32 {
 	n := int32(len(s)) + 1
 	start := int32(len(ftab.P))
-	Symgrow(ctxt, ftab, int64(start)+int64(n)+1)
+	Symgrow(ftab, int64(start)+int64(n)+1)
 	copy(ftab.P[start:], s)
 	return start
 }
@@ -208,7 +208,7 @@ var pclntabLastFunc *Symbol
 
 func (ctxt *Link) pclntab() {
 	funcdataBytes := int64(0)
-	ftab := Linklookup(ctxt, "runtime.pclntab", 0)
+	ftab := ctxt.Syms.Lookup("runtime.pclntab", 0)
 	ftab.Type = obj.SPCLNTAB
 	ftab.Attr |= AttrReachable
 
@@ -234,7 +234,7 @@ func (ctxt *Link) pclntab() {
 	}
 
 	pclntabNfunc = nfunc
-	Symgrow(ctxt, ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize)+int64(SysArch.PtrSize)+4)
+	Symgrow(ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize)+int64(SysArch.PtrSize)+4)
 	setuint32(ctxt, ftab, 0, 0xfffffffb)
 	setuint8(ctxt, ftab, 6, uint8(SysArch.MinLC))
 	setuint8(ctxt, ftab, 7, uint8(SysArch.PtrSize))
@@ -243,24 +243,24 @@ func (ctxt *Link) pclntab() {
 
 	nfunc = 0
 	var last *Symbol
-	for _, ctxt.Cursym = range ctxt.Textp {
-		last = ctxt.Cursym
-		if container(ctxt.Cursym) != 0 {
+	for _, s := range ctxt.Textp {
+		last = s
+		if container(s) != 0 {
 			continue
 		}
-		pcln := ctxt.Cursym.FuncInfo
+		pcln := s.FuncInfo
 		if pcln == nil {
 			pcln = &pclntabZpcln
 		}
 
 		if pclntabFirstFunc == nil {
-			pclntabFirstFunc = ctxt.Cursym
+			pclntabFirstFunc = s
 		}
 
 		funcstart := int32(len(ftab.P))
 		funcstart += int32(-len(ftab.P)) & (int32(SysArch.PtrSize) - 1)
 
-		setaddr(ctxt, ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize), ctxt.Cursym)
+		setaddr(ctxt, ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize), s)
 		setuintxx(ctxt, ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize)+int64(SysArch.PtrSize), uint64(funcstart), int64(SysArch.PtrSize))
 
 		// fixed size of struct, checked below
@@ -270,19 +270,19 @@ func (ctxt *Link) pclntab() {
 		if len(pcln.Funcdata) > 0 && (end&int32(SysArch.PtrSize-1) != 0) {
 			end += 4
 		}
-		Symgrow(ctxt, ftab, int64(end))
+		Symgrow(ftab, int64(end))
 
 		// entry uintptr
-		off = int32(setaddr(ctxt, ftab, int64(off), ctxt.Cursym))
+		off = int32(setaddr(ctxt, ftab, int64(off), s))
 
 		// name int32
-		off = int32(setuint32(ctxt, ftab, int64(off), uint32(ftabaddstring(ctxt, ftab, ctxt.Cursym.Name))))
+		off = int32(setuint32(ctxt, ftab, int64(off), uint32(ftabaddstring(ctxt, ftab, s.Name))))
 
 		// args int32
 		// TODO: Move into funcinfo.
 		args := uint32(0)
-		if ctxt.Cursym.FuncInfo != nil {
-			args = uint32(ctxt.Cursym.FuncInfo.Args)
+		if s.FuncInfo != nil {
+			args = uint32(s.FuncInfo.Args)
 		}
 		off = int32(setuint32(ctxt, ftab, int64(off), args))
 
@@ -300,7 +300,7 @@ func (ctxt *Link) pclntab() {
 				var it Pciter
 				for pciterinit(ctxt, &it, &pcln.Pcfile); it.done == 0; pciternext(&it) {
 					if it.value < 1 || it.value > int32(len(ctxt.Filesyms)) {
-						ctxt.Diag("bad file number in pcfile: %d not in range [1, %d]\n", it.value, len(ctxt.Filesyms))
+						Errorf(s, "bad file number in pcfile: %d not in range [1, %d]\n", it.value, len(ctxt.Filesyms))
 						errorexit()
 					}
 				}
@@ -339,7 +339,7 @@ func (ctxt *Link) pclntab() {
 		}
 
 		if off != end {
-			ctxt.Diag("bad math in functab: funcstart=%d off=%d but end=%d (npcdata=%d nfuncdata=%d ptrsize=%d)", funcstart, off, end, len(pcln.Pcdata), len(pcln.Funcdata), SysArch.PtrSize)
+			Errorf(s, "bad math in functab: funcstart=%d off=%d but end=%d (npcdata=%d nfuncdata=%d ptrsize=%d)", funcstart, off, end, len(pcln.Pcdata), len(pcln.Funcdata), SysArch.PtrSize)
 			errorexit()
 		}
 
@@ -357,8 +357,8 @@ func (ctxt *Link) pclntab() {
 	pclntabFiletabOffset = start
 	setuint32(ctxt, ftab, 8+int64(SysArch.PtrSize)+int64(nfunc)*2*int64(SysArch.PtrSize)+int64(SysArch.PtrSize), uint32(start))
 
-	Symgrow(ctxt, ftab, int64(start)+(int64(len(ctxt.Filesyms))+1)*4)
-	setuint32(ctxt, ftab, int64(start), uint32(len(ctxt.Filesyms)))
+	Symgrow(ftab, int64(start)+(int64(len(ctxt.Filesyms))+1)*4)
+	setuint32(ctxt, ftab, int64(start), uint32(len(ctxt.Filesyms)+1))
 	for i := len(ctxt.Filesyms) - 1; i >= 0; i-- {
 		s := ctxt.Filesyms[i]
 		setuint32(ctxt, ftab, int64(start)+s.Value*4, uint32(ftabaddstring(ctxt, ftab, s.Name)))
@@ -374,7 +374,7 @@ func (ctxt *Link) pclntab() {
 func expandGoroot(s string) string {
 	const n = len("$GOROOT")
 	if len(s) >= n+1 && s[:n] == "$GOROOT" && (s[n] == '/' || s[n] == '\\') {
-		root := goroot
+		root := obj.GOROOT
 		if final := os.Getenv("GOROOT_FINAL"); final != "" {
 			root = final
 		}
@@ -393,7 +393,7 @@ const (
 // findfunctab generates a lookup table to quickly find the containing
 // function for a pc. See src/runtime/symtab.go:findfunc for details.
 func (ctxt *Link) findfunctab() {
-	t := Linklookup(ctxt, "runtime.findfunctab", 0)
+	t := ctxt.Syms.Lookup("runtime.findfunctab", 0)
 	t.Type = obj.SRODATA
 	t.Attr |= AttrReachable
 	t.Attr |= AttrLocal
@@ -451,22 +451,22 @@ func (ctxt *Link) findfunctab() {
 	// allocate table
 	nbuckets := int32((max - min + BUCKETSIZE - 1) / BUCKETSIZE)
 
-	Symgrow(ctxt, t, 4*int64(nbuckets)+int64(n))
+	Symgrow(t, 4*int64(nbuckets)+int64(n))
 
 	// fill in table
 	for i := int32(0); i < nbuckets; i++ {
 		base := indexes[i*SUBBUCKETS]
 		if base == NOIDX {
-			ctxt.Diag("hole in findfunctab")
+			Errorf(nil, "hole in findfunctab")
 		}
 		setuint32(ctxt, t, int64(i)*(4+SUBBUCKETS), uint32(base))
 		for j := int32(0); j < SUBBUCKETS && i*SUBBUCKETS+j < n; j++ {
 			idx = indexes[i*SUBBUCKETS+j]
 			if idx == NOIDX {
-				ctxt.Diag("hole in findfunctab")
+				Errorf(nil, "hole in findfunctab")
 			}
 			if idx-base >= 256 {
-				ctxt.Diag("too many functions in a findfunc bucket! %d/%d %d %d", i, nbuckets, j, idx-base)
+				Errorf(nil, "too many functions in a findfunc bucket! %d/%d %d %d", i, nbuckets, j, idx-base)
 			}
 
 			setuint8(ctxt, t, int64(i)*(4+SUBBUCKETS)+4+int64(j), uint8(idx-base))

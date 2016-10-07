@@ -136,7 +136,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 	}
 
 	var sect *PeSect
-	ctxt.IncVersion()
+	localSymVersion := ctxt.Syms.IncVersion()
 	base := f.Offset()
 
 	peobj := new(PeObj)
@@ -246,7 +246,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 		}
 
 		name = fmt.Sprintf("%s(%s)", pkg, sect.name)
-		s = Linklookup(ctxt, name, ctxt.Version)
+		s = ctxt.Syms.Lookup(name, localSymVersion)
 
 		switch sect.sh.Characteristics & (IMAGE_SCN_CNT_UNINITIALIZED_DATA | IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE | IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE) {
 		case IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ: //.rdata
@@ -300,7 +300,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 			rva := Le32(symbuf[0:])
 			symindex := Le32(symbuf[4:])
 			type_ := Le16(symbuf[8:])
-			if err = readpesym(ctxt, peobj, int(symindex), &sym); err != nil {
+			if err = readpesym(ctxt, peobj, int(symindex), &sym, localSymVersion); err != nil {
 				goto bad
 			}
 			if sym.sym == nil {
@@ -313,7 +313,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 			rp.Off = int32(rva)
 			switch type_ {
 			default:
-				ctxt.Diag("%s: unknown relocation type %d;", pn, type_)
+				Errorf(rsect.sym, "%s: unknown relocation type %d;", pn, type_)
 				fallthrough
 
 			case IMAGE_REL_I386_REL32, IMAGE_REL_AMD64_REL32,
@@ -371,7 +371,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 			}
 		}
 
-		if err = readpesym(ctxt, peobj, i, &sym); err != nil {
+		if err = readpesym(ctxt, peobj, i, &sym, localSymVersion); err != nil {
 			goto bad
 		}
 
@@ -389,10 +389,10 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 		} else if sym.sectnum > 0 && uint(sym.sectnum) <= peobj.nsect {
 			sect = &peobj.sect[sym.sectnum-1]
 			if sect.sym == nil {
-				ctxt.Diag("%s: %s sym == 0!", pn, s.Name)
+				Errorf(s, "%s: missing sect.sym", pn)
 			}
 		} else {
-			ctxt.Diag("%s: %s sectnum < 0!", pn, s.Name)
+			Errorf(s, "%s: sectnum < 0!", pn)
 		}
 
 		if sect == nil {
@@ -414,7 +414,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 		s.Outer = sect.sym
 		if sect.sym.Type == obj.STEXT {
 			if s.Attr.External() && !s.Attr.DuplicateOK() {
-				ctxt.Diag("%s: duplicate definition of %s", pn, s.Name)
+				Errorf(s, "%s: duplicate symbol definition", pn)
 			}
 			s.Attr |= AttrExternal
 		}
@@ -449,7 +449,7 @@ func ldpe(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 	return
 
 bad:
-	ctxt.Diag("%s: malformed pe file: %v", pn, err)
+	Errorf(nil, "%s: malformed pe file: %v", pn, err)
 }
 
 func pemap(peobj *PeObj, sect *PeSect) int {
@@ -475,7 +475,7 @@ func issect(s *PeSym) bool {
 	return s.sclass == IMAGE_SYM_CLASS_STATIC && s.type_ == 0 && s.name[0] == '.'
 }
 
-func readpesym(ctxt *Link, peobj *PeObj, i int, y **PeSym) (err error) {
+func readpesym(ctxt *Link, peobj *PeObj, i int, y **PeSym, localSymVersion int) (err error) {
 	if uint(i) >= peobj.npesym || i < 0 {
 		err = fmt.Errorf("invalid pe symbol index")
 		return err
@@ -511,10 +511,10 @@ func readpesym(ctxt *Link, peobj *PeObj, i int, y **PeSym) (err error) {
 	case IMAGE_SYM_DTYPE_FUNCTION, IMAGE_SYM_DTYPE_NULL:
 		switch sym.sclass {
 		case IMAGE_SYM_CLASS_EXTERNAL: //global
-			s = Linklookup(ctxt, name, 0)
+			s = ctxt.Syms.Lookup(name, 0)
 
 		case IMAGE_SYM_CLASS_NULL, IMAGE_SYM_CLASS_STATIC, IMAGE_SYM_CLASS_LABEL:
-			s = Linklookup(ctxt, name, ctxt.Version)
+			s = ctxt.Syms.Lookup(name, localSymVersion)
 			s.Attr |= AttrDuplicateOK
 
 		default:

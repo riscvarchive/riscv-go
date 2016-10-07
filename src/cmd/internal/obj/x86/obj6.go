@@ -55,7 +55,8 @@ func CanUse1InsnTLS(ctxt *obj.Link) bool {
 		case obj.Hlinux,
 			obj.Hnacl,
 			obj.Hplan9,
-			obj.Hwindows:
+			obj.Hwindows,
+			obj.Hwindowsgui:
 			return false
 		}
 
@@ -63,8 +64,7 @@ func CanUse1InsnTLS(ctxt *obj.Link) bool {
 	}
 
 	switch ctxt.Headtype {
-	case obj.Hplan9,
-		obj.Hwindows:
+	case obj.Hplan9, obj.Hwindows, obj.Hwindowsgui:
 		return false
 	case obj.Hlinux:
 		return !ctxt.Flag_shared
@@ -181,7 +181,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	}
 
 	// TODO: Remove.
-	if ctxt.Headtype == obj.Hwindows && p.Mode == 64 || ctxt.Headtype == obj.Hplan9 {
+	if (ctxt.Headtype == obj.Hwindows || ctxt.Headtype == obj.Hwindowsgui) && p.Mode == 64 || ctxt.Headtype == obj.Hplan9 {
 		if p.From.Scale == 1 && p.From.Index == REG_TLS {
 			p.From.Scale = 2
 		}
@@ -660,8 +660,13 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		for q := p; q != nil; q = q.Link {
 			switch q.As {
 			case obj.ACALL:
-				leaf = false
-				break LeafSearch
+				// Treat common runtime calls that take no arguments
+				// the same as duffcopy and duffzero.
+				if !isZeroArgRuntimeCall(q.To.Sym) {
+					leaf = false
+					break LeafSearch
+				}
+				fallthrough
 			case obj.ADUFFCOPY, obj.ADUFFZERO:
 				if autoffset >= obj.StackSmall-8 {
 					leaf = false
@@ -928,6 +933,17 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
+func isZeroArgRuntimeCall(s *obj.LSym) bool {
+	if s == nil {
+		return false
+	}
+	switch s.Name {
+	case "runtime.panicindex", "runtime.panicslice", "runtime.panicdivide":
+		return true
+	}
+	return false
+}
+
 func indir_cx(ctxt *obj.Link, p *obj.Prog, a *obj.Addr) {
 	if ctxt.Headtype == obj.Hnacl && p.Mode == 64 {
 		a.Type = obj.TYPE_MEM
@@ -1097,11 +1113,23 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32, textarg int32) *ob
 	for last = ctxt.Cursym.Text; last.Link != nil; last = last.Link {
 	}
 
+	// Now we are at the end of the function, but logically
+	// we are still in function prologue. We need to fix the
+	// SP data and PCDATA.
 	spfix := obj.Appendp(ctxt, last)
 	spfix.As = obj.ANOP
 	spfix.Spadj = -framesize
 
-	call := obj.Appendp(ctxt, spfix)
+	pcdata := obj.Appendp(ctxt, spfix)
+	pcdata.Lineno = ctxt.Cursym.Text.Lineno
+	pcdata.Mode = ctxt.Cursym.Text.Mode
+	pcdata.As = obj.APCDATA
+	pcdata.From.Type = obj.TYPE_CONST
+	pcdata.From.Offset = obj.PCDATA_StackMapIndex
+	pcdata.To.Type = obj.TYPE_CONST
+	pcdata.To.Offset = -1 // pcdata starts at -1 at function entry
+
+	call := obj.Appendp(ctxt, pcdata)
 	call.Lineno = ctxt.Cursym.Text.Lineno
 	call.Mode = ctxt.Cursym.Text.Mode
 	call.As = obj.ACALL

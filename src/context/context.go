@@ -159,9 +159,9 @@ var DeadlineExceeded error = deadlineExceededError{}
 
 type deadlineExceededError struct{}
 
-func (deadlineExceededError) Error() string { return "context deadline exceeded" }
-
-func (deadlineExceededError) Timeout() bool { return true }
+func (deadlineExceededError) Error() string   { return "context deadline exceeded" }
+func (deadlineExceededError) Timeout() bool   { return true }
+func (deadlineExceededError) Temporary() bool { return true }
 
 // An emptyCtx is never canceled, has no values, and has no deadline. It is not
 // struct{}, since vars of this type must have distinct addresses.
@@ -252,9 +252,9 @@ func propagateCancel(parent Context, child canceler) {
 			child.cancel(false, p.err)
 		} else {
 			if p.children == nil {
-				p.children = make(map[canceler]bool)
+				p.children = make(map[canceler]struct{})
 			}
-			p.children[child] = true
+			p.children[child] = struct{}{}
 		}
 		p.mu.Unlock()
 	} else {
@@ -314,8 +314,8 @@ type cancelCtx struct {
 	done chan struct{} // closed by the first cancel call.
 
 	mu       sync.Mutex
-	children map[canceler]bool // set to nil by the first cancel call
-	err      error             // set to non-nil by the first cancel call
+	children map[canceler]struct{} // set to nil by the first cancel call
+	err      error                 // set to non-nil by the first cancel call
 }
 
 func (c *cancelCtx) Done() <-chan struct{} {
@@ -443,7 +443,9 @@ func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc) {
 // Use context Values only for request-scoped data that transits processes and
 // APIs, not for passing optional parameters to functions.
 //
-// The provided key must be comparable.
+// The provided key must be comparable and should not be
+// of type string or any other built-in type.
+// Users of WithValue should define their own types for keys.
 func WithValue(parent Context, key, val interface{}) Context {
 	if key == nil {
 		panic("nil key")

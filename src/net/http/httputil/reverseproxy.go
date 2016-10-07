@@ -152,11 +152,20 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	p.Director(outreq)
 	outreq.Close = false
 
-	// Remove headers with the same name as the connection-tokens.
+	// We are modifying the same underlying map from req (shallow
+	// copied above) so we only copy it if necessary.
+	copiedHeaders := false
+
+	// Remove hop-by-hop headers listed in the "Connection" header.
 	// See RFC 2616, section 14.10.
 	if c := outreq.Header.Get("Connection"); c != "" {
 		for _, f := range strings.Split(c, ",") {
 			if f = strings.TrimSpace(f); f != "" {
+				if !copiedHeaders {
+					outreq.Header = make(http.Header)
+					copyHeader(outreq.Header, req.Header)
+					copiedHeaders = true
+				}
 				outreq.Header.Del(f)
 			}
 		}
@@ -164,10 +173,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	// Remove hop-by-hop headers to the backend. Especially
 	// important is "Connection" because we want a persistent
-	// connection, regardless of what the client sent to us. This
-	// is modifying the same underlying map from req (shallow
-	// copied above) so we only copy it if necessary.
-	copiedHeaders := false
+	// connection, regardless of what the client sent to us.
 	for _, h := range hopHeaders {
 		if outreq.Header.Get(h) != "" {
 			if !copiedHeaders {
@@ -196,6 +202,16 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Remove hop-by-hop headers listed in the
+	// "Connection" header of the response.
+	if c := res.Header.Get("Connection"); c != "" {
+		for _, f := range strings.Split(c, ",") {
+			if f = strings.TrimSpace(f); f != "" {
+				res.Header.Del(f)
+			}
+		}
+	}
+
 	for _, h := range hopHeaders {
 		res.Header.Del(h)
 	}
@@ -205,7 +221,7 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// The "Trailer" header isn't included in the Transport's response,
 	// at least for *http.Transport. Build it up from Trailer.
 	if len(res.Trailer) > 0 {
-		var trailerKeys []string
+		trailerKeys := make([]string, 0, len(res.Trailer))
 		for k := range res.Trailer {
 			trailerKeys = append(trailerKeys, k)
 		}

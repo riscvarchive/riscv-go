@@ -5,13 +5,16 @@ compile: SSA for 386, arm, arm64, ppc64le, ... (many CLs)
 yacc: "go tool yacc" is removed. now at golang.org/x/tools/cmd/goyacc (CL 27324, CL 27325)
 go: -buildmode=c-archive now builds PIC on ELF (CL 24180)
 go: mobile pkg dir change, recommend using go list in scripts (CL 24930, CL 27929)
+go, dist: can set default pkg-config tool using PKG_CONFIG env var (CL 29991)
+go: can set secure/insecure GIT schemes using GIT_ALLOW_PROTOCOL env var (CL 30135)
 
 Ports:
 
-
+dragonfly: go1.8 requires DragonFly BSD 4.4.4 or above (CL 29491)
 
 API additions and behavior changes:
 
+cmd/compile: args no longer live until end of function - use runtime.KeepAlive instead (CL 28310)
 crypto/tls: set Conn.ConnectionState.ServerName unconditionally (CL 22862)
 crypto/tls: support AES-128-CBC cipher suites with SHA-256 (CL 27315)
 crypto/tls: don't generate random ticket keys if already set (CL 27317)
@@ -21,6 +24,7 @@ crypto/x509: support PSS signatures (CL 24743)
 net/http: make Transport retry non-idempotent requests if no bytes written (CL 27117)
 net: support "option ndots:0" in resolv.conf (CL 24901)
 net: use libresolv rules for ndots range and validation (CL 24901)
+testing: add Name method to *T and *B
 runtime: fix map iterator concurrent map check (CL 23711)
 
 Optimizations:

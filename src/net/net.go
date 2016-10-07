@@ -137,8 +137,9 @@ type Conn interface {
 	//
 	// A deadline is an absolute time after which I/O operations
 	// fail with a timeout (see type Error) instead of
-	// blocking. The deadline applies to all future I/O, not just
-	// the immediately following call to Read or Write.
+	// blocking. The deadline applies to all future and pending
+	// I/O, not just the immediately following call to Read or
+	// Write.
 	//
 	// An idle timeout can be implemented by repeatedly extending
 	// the deadline after successful Read or Write calls.
@@ -146,11 +147,13 @@ type Conn interface {
 	// A zero value for t means I/O operations will not time out.
 	SetDeadline(t time.Time) error
 
-	// SetReadDeadline sets the deadline for future Read calls.
+	// SetReadDeadline sets the deadline for future Read calls
+	// and any currently-blocked Read call.
 	// A zero value for t means Read will not time out.
 	SetReadDeadline(t time.Time) error
 
-	// SetWriteDeadline sets the deadline for future Write calls.
+	// SetWriteDeadline sets the deadline for future Write calls
+	// and any currently-blocked Write call.
 	// Even if write times out, it may return n > 0, indicating that
 	// some of the data was successfully written.
 	// A zero value for t means Write will not time out.
@@ -603,4 +606,67 @@ func acquireThread() {
 
 func releaseThread() {
 	<-threadLimit
+}
+
+// buffersWriter is the interface implemented by Conns that support a
+// "writev"-like batch write optimization.
+// writeBuffers should fully consume and write all chunks from the
+// provided Buffers, else it should report a non-nil error.
+type buffersWriter interface {
+	writeBuffers(*Buffers) (int64, error)
+}
+
+var testHookDidWritev = func(wrote int) {}
+
+// Buffers contains zero or more runs of bytes to write.
+//
+// On certain machines, for certain types of connections, this is
+// optimized into an OS-specific batch write operation (such as
+// "writev").
+type Buffers [][]byte
+
+var (
+	_ io.WriterTo = (*Buffers)(nil)
+	_ io.Reader   = (*Buffers)(nil)
+)
+
+func (v *Buffers) WriteTo(w io.Writer) (n int64, err error) {
+	if wv, ok := w.(buffersWriter); ok {
+		return wv.writeBuffers(v)
+	}
+	for _, b := range *v {
+		nb, err := w.Write(b)
+		n += int64(nb)
+		if err != nil {
+			v.consume(n)
+			return n, err
+		}
+	}
+	v.consume(n)
+	return n, nil
+}
+
+func (v *Buffers) Read(p []byte) (n int, err error) {
+	for len(p) > 0 && len(*v) > 0 {
+		n0 := copy(p, (*v)[0])
+		v.consume(int64(n0))
+		p = p[n0:]
+		n += n0
+	}
+	if len(*v) == 0 {
+		err = io.EOF
+	}
+	return
+}
+
+func (v *Buffers) consume(n int64) {
+	for len(*v) > 0 {
+		ln0 := int64(len((*v)[0]))
+		if ln0 > n {
+			(*v)[0] = (*v)[0][n:]
+			return
+		}
+		n -= ln0
+		*v = (*v)[1:]
+	}
 }

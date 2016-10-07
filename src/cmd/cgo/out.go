@@ -19,7 +19,10 @@ import (
 	"strings"
 )
 
-var conf = printer.Config{Mode: printer.SourcePos, Tabwidth: 8}
+var (
+	conf         = printer.Config{Mode: printer.SourcePos, Tabwidth: 8}
+	noSourceConf = printer.Config{Tabwidth: 8}
+)
 
 // writeDefs creates output files to be compiled by gc and gcc.
 func (p *Package) writeDefs() {
@@ -95,7 +98,19 @@ func (p *Package) writeDefs() {
 	for _, name := range typedefNames {
 		def := typedef[name]
 		fmt.Fprintf(fgo2, "type %s ", name)
-		conf.Fprint(fgo2, fset, def.Go)
+		// We don't have source info for these types, so write them out without source info.
+		// Otherwise types would look like:
+		//
+		// type _Ctype_struct_cb struct {
+		// //line :1
+		//        on_test *[0]byte
+		// //line :1
+		// }
+		//
+		// Which is not useful. Moreover we never override source info,
+		// so subsequent source code uses the same source info.
+		// Moreover, empty file name makes compile emit no source debug info at all.
+		noSourceConf.Fprint(fgo2, fset, def.Go)
 		fmt.Fprintf(fgo2, "\n\n")
 	}
 	if *gccgo {
@@ -1217,8 +1232,8 @@ var goTypes = map[string]*Type{
 	"uint64":     {Size: 8, Align: 8, C: c("GoUint64")},
 	"float32":    {Size: 4, Align: 4, C: c("GoFloat32")},
 	"float64":    {Size: 8, Align: 8, C: c("GoFloat64")},
-	"complex64":  {Size: 8, Align: 8, C: c("GoComplex64")},
-	"complex128": {Size: 16, Align: 16, C: c("GoComplex128")},
+	"complex64":  {Size: 8, Align: 4, C: c("GoComplex64")},
+	"complex128": {Size: 16, Align: 8, C: c("GoComplex128")},
 }
 
 // Map an ast type to a Type.

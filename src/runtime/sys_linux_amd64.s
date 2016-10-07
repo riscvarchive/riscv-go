@@ -197,7 +197,7 @@ fallback:
 	RET
 
 TEXT runtime·rtsigprocmask(SB),NOSPLIT,$0-28
-	MOVL	sig+0(FP), DI
+	MOVL	how+0(FP), DI
 	MOVQ	new+8(FP), SI
 	MOVQ	old+16(FP), DX
 	MOVL	size+24(FP), R10
@@ -445,8 +445,8 @@ nog:
 	JMP	-3(PC)	// keep exiting
 
 TEXT runtime·sigaltstack(SB),NOSPLIT,$-8
-	MOVQ	new+8(SP), DI
-	MOVQ	old+16(SP), SI
+	MOVQ	new+0(FP), DI
+	MOVQ	old+8(FP), SI
 	MOVQ	$131, AX
 	SYSCALL
 	CMPQ	AX, $0xfffffffffffff001

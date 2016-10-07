@@ -5,6 +5,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -245,6 +246,64 @@ func TestQuery(t *testing.T) {
 		{age: 1, name: "Alice"},
 		{age: 2, name: "Bob"},
 		{age: 3, name: "Chris"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch.\n got: %#v\nwant: %#v", got, want)
+	}
+
+	// And verify that the final rows.Next() call, which hit EOF,
+	// also closed the rows connection.
+	if n := db.numFreeConns(); n != 1 {
+		t.Fatalf("free conns after query hitting EOF = %d; want 1", n)
+	}
+	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
+		t.Errorf("executed %d Prepare statements; want 1", prepares)
+	}
+}
+
+func TestQueryContext(t *testing.T) {
+	db := newTestDB(t, "people")
+	defer closeDB(t, db)
+	prepares0 := numPrepares(t, db)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	rows, err := db.QueryContext(ctx, "SELECT|people|age,name|")
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	type row struct {
+		age  int
+		name string
+	}
+	got := []row{}
+	index := 0
+	for rows.Next() {
+		if index == 2 {
+			cancel()
+			time.Sleep(10 * time.Millisecond)
+		}
+		var r row
+		err = rows.Scan(&r.age, &r.name)
+		if err != nil {
+			if index == 2 {
+				break
+			}
+			t.Fatalf("Scan: %v", err)
+		}
+		if index == 2 && err == nil {
+			t.Fatal("expected an error on last scan")
+		}
+		got = append(got, r)
+		index++
+	}
+	err = rows.Err()
+	if err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	want := []row{
+		{age: 1, name: "Alice"},
+		{age: 2, name: "Bob"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("mismatch.\n got: %#v\nwant: %#v", got, want)
@@ -1159,17 +1218,19 @@ func TestMaxOpenConnsOnBusy(t *testing.T) {
 
 	db.SetMaxOpenConns(3)
 
-	conn0, err := db.conn(cachedOrNewConn)
+	ctx := context.Background()
+
+	conn0, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}
 
-	conn1, err := db.conn(cachedOrNewConn)
+	conn1, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}
 
-	conn2, err := db.conn(cachedOrNewConn)
+	conn2, err := db.conn(ctx, cachedOrNewConn)
 	if err != nil {
 		t.Fatalf("db open conn fail: %v", err)
 	}

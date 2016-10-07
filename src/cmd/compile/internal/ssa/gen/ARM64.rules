@@ -86,6 +86,12 @@
 
 (Sqrt x) -> (FSQRTD x)
 
+(Ctz64 <t> x) -> (CLZ (RBIT <t> x))
+(Ctz32 <t> x) -> (CLZW (RBITW <t> x))
+
+(Bswap64 x) -> (REV x)
+(Bswap32 x) -> (REVW x)
+
 // boolean ops -- booleans are represented with 0=false, 1=true
 (AndB x y) -> (AND x y)
 (OrB x y) -> (OR x y)
@@ -425,8 +431,14 @@
 		(OffPtr <src.Type> src [SizeAndAlign(s).Size()-SizeAndAlign(s).Size()%8])
 		(Move [MakeSizeAndAlign(SizeAndAlign(s).Size()-SizeAndAlign(s).Size()%8, 1).Int64()] dst src mem))
 
+// medium move uses a duff device
+// 8 and 128 are magic constants, see runtime/mkduff.go
+(Move [s] dst src mem)
+	&& SizeAndAlign(s).Size()%8 == 0 && SizeAndAlign(s).Size() > 24 && SizeAndAlign(s).Size() <= 8*128
+	&& !config.noDuffDevice ->
+	(DUFFCOPY [8 * (128 - int64(SizeAndAlign(s).Size()/8))] dst src mem)
+
 // large move uses a loop
-// DUFFCOPY is not implemented on ARM64 (TODO)
 (Move [s] dst src mem)
 	&& SizeAndAlign(s).Size() > 24 && SizeAndAlign(s).Size()%8 == 0 ->
 	(LoweredMove
@@ -464,21 +476,48 @@
 (If (GreaterEqual cc) yes no) -> (GE cc yes no)
 (If (GreaterEqualU cc) yes no) -> (UGE cc yes no)
 
-(If cond yes no) -> (NE (CMPconst [0] cond) yes no)
+(If cond yes no) -> (NZ cond yes no)
+
+// atomic intrinsics
+// Note: these ops do not accept offset.
+(AtomicLoad32  ptr mem) -> (LDARW ptr mem)
+(AtomicLoad64  ptr mem) -> (LDAR  ptr mem)
+(AtomicLoadPtr ptr mem) -> (LDAR  ptr mem)
+
+(AtomicStore32      ptr val mem) -> (STLRW ptr val mem)
+(AtomicStore64      ptr val mem) -> (STLR  ptr val mem)
+(AtomicStorePtrNoWB ptr val mem) -> (STLR  ptr val mem)
+
+(AtomicExchange32 ptr val mem) -> (LoweredAtomicExchange32 ptr val mem)
+(AtomicExchange64 ptr val mem) -> (LoweredAtomicExchange64 ptr val mem)
+
+(AtomicAdd32 ptr val mem) -> (LoweredAtomicAdd32 ptr val mem)
+(AtomicAdd64 ptr val mem) -> (LoweredAtomicAdd64 ptr val mem)
+
+(AtomicCompareAndSwap32 ptr old new_ mem) -> (LoweredAtomicCas32 ptr old new_ mem)
+(AtomicCompareAndSwap64 ptr old new_ mem) -> (LoweredAtomicCas64 ptr old new_ mem)
+
+(AtomicAnd8 ptr val mem) -> (LoweredAtomicAnd8 ptr val mem)
+(AtomicOr8  ptr val mem) -> (LoweredAtomicOr8  ptr val mem)
 
 // Optimizations
 
 // Absorb boolean tests into block
-(NE (CMPconst [0] (Equal cc)) yes no) -> (EQ cc yes no)
-(NE (CMPconst [0] (NotEqual cc)) yes no) -> (NE cc yes no)
-(NE (CMPconst [0] (LessThan cc)) yes no) -> (LT cc yes no)
-(NE (CMPconst [0] (LessThanU cc)) yes no) -> (ULT cc yes no)
-(NE (CMPconst [0] (LessEqual cc)) yes no) -> (LE cc yes no)
-(NE (CMPconst [0] (LessEqualU cc)) yes no) -> (ULE cc yes no)
-(NE (CMPconst [0] (GreaterThan cc)) yes no) -> (GT cc yes no)
-(NE (CMPconst [0] (GreaterThanU cc)) yes no) -> (UGT cc yes no)
-(NE (CMPconst [0] (GreaterEqual cc)) yes no) -> (GE cc yes no)
-(NE (CMPconst [0] (GreaterEqualU cc)) yes no) -> (UGE cc yes no)
+(NZ (Equal cc) yes no) -> (EQ cc yes no)
+(NZ (NotEqual cc) yes no) -> (NE cc yes no)
+(NZ (LessThan cc) yes no) -> (LT cc yes no)
+(NZ (LessThanU cc) yes no) -> (ULT cc yes no)
+(NZ (LessEqual cc) yes no) -> (LE cc yes no)
+(NZ (LessEqualU cc) yes no) -> (ULE cc yes no)
+(NZ (GreaterThan cc) yes no) -> (GT cc yes no)
+(NZ (GreaterThanU cc) yes no) -> (UGT cc yes no)
+(NZ (GreaterEqual cc) yes no) -> (GE cc yes no)
+(NZ (GreaterEqualU cc) yes no) -> (UGE cc yes no)
+
+(EQ (CMPconst [0] x) yes no) -> (Z x yes no)
+(NE (CMPconst [0] x) yes no) -> (NZ x yes no)
+(EQ (CMPWconst [0] x) yes no) -> (ZW x yes no)
+(NE (CMPWconst [0] x) yes no) -> (NZW x yes no)
 
 // fold offset into address
 (ADDconst [off1] (MOVDaddr [off2] {sym} ptr)) -> (MOVDaddr [off1+off2] {sym} ptr)
@@ -890,6 +929,15 @@
 (UGE (FlagLT_UGT) yes no) -> (First nil yes no)
 (UGE (FlagGT_ULT) yes no) -> (First nil no yes)
 (UGE (FlagGT_UGT) yes no) -> (First nil yes no)
+
+(Z (MOVDconst [0]) yes no) -> (First nil yes no)
+(Z (MOVDconst [c]) yes no) && c != 0 -> (First nil no yes)
+(NZ (MOVDconst [0]) yes no) -> (First nil no yes)
+(NZ (MOVDconst [c]) yes no) && c != 0 -> (First nil yes no)
+(ZW (MOVDconst [c]) yes no) && int32(c) == 0 -> (First nil yes no)
+(ZW (MOVDconst [c]) yes no) && int32(c) != 0 -> (First nil no yes)
+(NZW (MOVDconst [c]) yes no) && int32(c) == 0 -> (First nil no yes)
+(NZW (MOVDconst [c]) yes no) && int32(c) != 0 -> (First nil yes no)
 
 // absorb InvertFlags into branches
 (LT (InvertFlags cmp) yes no) -> (GT cmp yes no)

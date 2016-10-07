@@ -42,8 +42,9 @@ func adddynrela(ctxt *ld.Link, rel *ld.Symbol, s *ld.Symbol, r *ld.Reloc) {
 	log.Fatalf("adddynrela not implemented")
 }
 
-func adddynrel(ctxt *ld.Link, s *ld.Symbol, r *ld.Reloc) {
+func adddynrel(ctxt *ld.Link, s *ld.Symbol, r *ld.Reloc) bool {
 	log.Fatalf("adddynrel not implemented")
+	return false
 }
 
 func elfreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
@@ -56,7 +57,7 @@ func elfsetupplt(ctxt *ld.Link) {
 	return
 }
 
-func machoreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
+func machoreloc1(s *ld.Symbol, r *ld.Reloc, sectoff int64) int {
 	log.Fatalf("machoreloc1 not implemented")
 	return -1
 }
@@ -65,14 +66,14 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 	switch r.Type {
 	case obj.R_CALLRISCV:
 		pc := s.Value + int64(r.Off)
-		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
+		off := ld.Symaddr(r.Sym) + r.Add - pc
 
 		// This is always a JAL instruction, we just need
 		// to replace the immediate.
 		//
 		// TODO(prattmic): sanity check the opcode.
 		if off&1 != 0 {
-			ctxt.Diag("R_CALLRISCV relocation for %s is not aligned: %#x", r.Sym.Name, off)
+			ctxt.Logf("R_CALLRISCV relocation for %s is not aligned: %#x", r.Sym.Name, off)
 			return 0
 		}
 
@@ -80,7 +81,7 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		if err != nil {
 			// TODO(mpratt): We can only fit 1MB offsets in the
 			// immediate, which we will quickly outgrow.
-			ctxt.Diag("cannot encode R_CALLRISCV relocation offset for %s: %v", r.Sym.Name, err)
+			ctxt.Logf("cannot encode R_CALLRISCV relocation offset for %s: %v", r.Sym.Name, err)
 			return 0
 		}
 
@@ -91,18 +92,18 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 
 	case obj.R_RISCV_PCREL_ITYPE, obj.R_RISCV_PCREL_STYPE:
 		pc := s.Value + int64(r.Off)
-		off := ld.Symaddr(ctxt, r.Sym) + r.Add - pc
+		off := ld.Symaddr(r.Sym) + r.Add - pc
 
 		// Generate AUIPC and second instruction immediates.
 		low, high, err := riscv.Split32BitImmediate(off)
 		if err != nil {
-			ctxt.Diag("R_RISCV_PCREL_ relocation does not fit in 32-bits: %d", off)
+			ctxt.Logf("R_RISCV_PCREL_ relocation does not fit in 32-bits: %d", off)
 			return 0
 		}
 
 		auipcImm, err := riscv.EncodeUImmediate(high)
 		if err != nil {
-			ctxt.Diag("cannot encode R_RISCV_PCREL_ AUIPC relocation offset for %s: %v", r.Sym.Name, err)
+			ctxt.Logf("cannot encode R_RISCV_PCREL_ AUIPC relocation offset for %s: %v", r.Sym.Name, err)
 			return 0
 		}
 
@@ -112,14 +113,14 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 			secondImmMask = riscv.ITypeImmMask
 			secondImm, err = riscv.EncodeIImmediate(low)
 			if err != nil {
-				ctxt.Diag("cannot encode R_RISCV_PCREL_ITYPE I-type instruction relocation offset for %s: %v", r.Sym.Name, err)
+				ctxt.Logf("cannot encode R_RISCV_PCREL_ITYPE I-type instruction relocation offset for %s: %v", r.Sym.Name, err)
 				return 0
 			}
 		case obj.R_RISCV_PCREL_STYPE:
 			secondImmMask = riscv.STypeImmMask
 			secondImm, err = riscv.EncodeSImmediate(low)
 			if err != nil {
-				ctxt.Diag("cannot encode R_RISCV_PCREL_STYPE S-type instruction relocation offset for %s: %v", r.Sym.Name, err)
+				ctxt.Logf("cannot encode R_RISCV_PCREL_STYPE S-type instruction relocation offset for %s: %v", r.Sym.Name, err)
 				return 0
 			}
 		default:
@@ -155,7 +156,7 @@ func asmb(ctxt *ld.Link) {
 	ctxt.Bso.Flush()
 
 	if ld.Iself {
-		ld.Asmbelfsetup(ctxt)
+		ld.Asmbelfsetup()
 	}
 
 	sect := ld.Segtext.Sect
@@ -197,7 +198,7 @@ func asmb(ctxt *ld.Link) {
 			fmt.Fprintf(ctxt.Bso, "%5.2f sym\n", obj.Cputime())
 		}
 		ctxt.Bso.Flush()
-		switch ld.HEADTYPE {
+		switch ld.Headtype {
 		default:
 			if ld.Iself {
 				symo = uint32(ld.Segdwarf.Fileoff + ld.Segdata.Filelen)
@@ -209,7 +210,7 @@ func asmb(ctxt *ld.Link) {
 		}
 
 		ld.Cseek(int64(symo))
-		switch ld.HEADTYPE {
+		switch ld.Headtype {
 		default:
 			if ld.Iself {
 				if ctxt.Debugvlog != 0 {
@@ -229,15 +230,14 @@ func asmb(ctxt *ld.Link) {
 		}
 	}
 
-	ctxt.Cursym = nil
 	if ctxt.Debugvlog != 0 {
 		fmt.Fprintf(ctxt.Bso, "%5.2f header\n", obj.Cputime())
 	}
 	ctxt.Bso.Flush()
 	ld.Cseek(0)
-	switch ld.HEADTYPE {
+	switch ld.Headtype {
 	default:
-		log.Fatalf("Unsupported OS: %v", ld.HEADTYPE)
+		log.Fatalf("Unsupported OS: %v", ld.Headtype)
 
 	case obj.Hlinux,
 		obj.Hfreebsd,

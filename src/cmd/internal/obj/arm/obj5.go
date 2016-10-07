@@ -66,7 +66,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				ctxt.Diag("%v: TLS MRC instruction must write to R0 as it might get translated into a BL instruction", p.Line())
 			}
 
-			if ctxt.Goarm < 7 {
+			if obj.GOARM < 7 {
 				// Replace it with BL runtime.read_tls_fallback(SB) for ARM CPUs that lack the tls extension.
 				if progedit_tlsfallback == nil {
 					progedit_tlsfallback = obj.Linklookup(ctxt, "runtime.read_tls_fallback", 0)
@@ -626,7 +626,7 @@ func isfloatreg(a *obj.Addr) bool {
 }
 
 func softfloat(ctxt *obj.Link, cursym *obj.LSym) {
-	if ctxt.Goarm > 5 {
+	if obj.GOARM > 5 {
 		return
 	}
 
@@ -803,12 +803,24 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32) *obj.Prog {
 	for last = ctxt.Cursym.Text; last.Link != nil; last = last.Link {
 	}
 
+	// Now we are at the end of the function, but logically
+	// we are still in function prologue. We need to fix the
+	// SP data and PCDATA.
 	spfix := obj.Appendp(ctxt, last)
 	spfix.As = obj.ANOP
 	spfix.Spadj = -framesize
 
+	pcdata := obj.Appendp(ctxt, spfix)
+	pcdata.Lineno = ctxt.Cursym.Text.Lineno
+	pcdata.Mode = ctxt.Cursym.Text.Mode
+	pcdata.As = obj.APCDATA
+	pcdata.From.Type = obj.TYPE_CONST
+	pcdata.From.Offset = obj.PCDATA_StackMapIndex
+	pcdata.To.Type = obj.TYPE_CONST
+	pcdata.To.Offset = -1 // pcdata starts at -1 at function entry
+
 	// MOVW	LR, R3
-	movw := obj.Appendp(ctxt, spfix)
+	movw := obj.Appendp(ctxt, pcdata)
 	movw.As = AMOVW
 	movw.From.Type = obj.TYPE_REG
 	movw.From.Reg = REGLINK

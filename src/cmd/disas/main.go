@@ -18,7 +18,7 @@ import (
 )
 
 func getobjdumpcmd(fname string) (*exec.Cmd, error) {
-	GOARCH := obj.Getgoarch()
+	GOARCH := obj.GOARCH
 	switch GOARCH {
 	case "arm":
 		return exec.Command(

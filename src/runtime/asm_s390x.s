@@ -20,6 +20,7 @@ TEXT runtime·checkvectorfacility(SB),NOSPLIT,$32-0
 	MOVD    $2, R0
 	MOVD	R1, tmp-32(SP)
 	MOVD    $x-24(SP), R1
+	XC	$24, 0(R1), 0(R1)
 //      STFLE   0(R1)
 	WORD    $0xB2B01000
 	MOVBZ   z-8(SP), R1
@@ -109,22 +110,22 @@ nocgo:
 	MOVD	$runtime·mainPC(SB), R2		// entry
 	SUB     $24, R15
 	MOVD 	R2, 16(R15)
-	MOVD 	R0, 8(R15)
-	MOVD 	R0, 0(R15)
+	MOVD 	$0, 8(R15)
+	MOVD 	$0, 0(R15)
 	BL	runtime·newproc(SB)
 	ADD	$24, R15
 
 	// start this M
 	BL	runtime·mstart(SB)
 
-	MOVD	R0, 1(R0)
+	MOVD	$0, 1(R0)
 	RET
 
 DATA	runtime·mainPC+0(SB)/8,$runtime·main(SB)
 GLOBL	runtime·mainPC(SB),RODATA,$8
 
 TEXT runtime·breakpoint(SB),NOSPLIT|NOFRAME,$0-0
-	MOVD	R0, 2(R0)
+	MOVD	$0, 2(R0)
 	RET
 
 TEXT runtime·asminit(SB),NOSPLIT|NOFRAME,$0-0
@@ -174,7 +175,7 @@ TEXT runtime·mcall(SB), NOSPLIT, $-8-8
 	// Save caller state in g->sched
 	MOVD	R15, (g_sched+gobuf_sp)(g)
 	MOVD	LR, (g_sched+gobuf_pc)(g)
-	MOVD	R0, (g_sched+gobuf_lr)(g)
+	MOVD	$0, (g_sched+gobuf_lr)(g)
 	MOVD	g, (g_sched+gobuf_g)(g)
 
 	// Switch to m->g0 & its stack, call fn.
@@ -231,7 +232,7 @@ switch:
 	ADD	$16, R6	// get past prologue
 	MOVD	R6, (g_sched+gobuf_pc)(g)
 	MOVD	R15, (g_sched+gobuf_sp)(g)
-	MOVD	R0, (g_sched+gobuf_lr)(g)
+	MOVD	$0, (g_sched+gobuf_lr)(g)
 	MOVD	g, (g_sched+gobuf_g)(g)
 
 	// switch to g0
@@ -386,53 +387,55 @@ TEXT ·reflectcall(SB), NOSPLIT, $-8-32
 TEXT NAME(SB), WRAPPER, $MAXSIZE-24;		\
 	NO_LOCAL_POINTERS;			\
 	/* copy arguments to stack */		\
-	MOVD	arg+16(FP), R3;			\
-	MOVWZ	argsize+24(FP), R4;			\
-	MOVD	R15, R5;				\
-	ADD	$(8-1), R5;			\
-	SUB	$1, R3;				\
-	ADD	R5, R4;				\
-	CMP	R5, R4;				\
-	BEQ	6(PC);				\
-	ADD	$1, R3;				\
-	ADD	$1, R5;				\
-	MOVBZ	0(R3), R6;			\
-	MOVBZ	R6, 0(R5);			\
-	BR	-6(PC);				\
-	/* call function */			\
+	MOVD	arg+16(FP), R4;			\
+	MOVWZ	argsize+24(FP), R5;		\
+	MOVD	$stack-MAXSIZE(SP), R6;		\
+loopArgs: /* copy 256 bytes at a time */	\
+	CMP	R5, $256;			\
+	BLT	tailArgs;			\
+	SUB	$256, R5;			\
+	MVC	$256, 0(R4), 0(R6);		\
+	MOVD	$256(R4), R4;			\
+	MOVD	$256(R6), R6;			\
+	BR	loopArgs;			\
+tailArgs: /* copy remaining bytes */		\
+	CMP	R5, $0;				\
+	BEQ	callFunction;			\
+	SUB	$1, R5;				\
+	EXRL	$callfnMVC<>(SB), R5;		\
+callFunction:					\
 	MOVD	f+8(FP), R12;			\
 	MOVD	(R12), R8;			\
 	PCDATA  $PCDATA_StackMapIndex, $0;	\
 	BL	(R8);				\
 	/* copy return values back */		\
-	MOVD	arg+16(FP), R3;			\
-	MOVWZ	n+24(FP), R4;			\
-	MOVWZ	retoffset+28(FP), R6;		\
-	MOVD	R15, R5;				\
-	ADD	R6, R5; 			\
-	ADD	R6, R3;				\
-	SUB	R6, R4;				\
-	ADD	$(8-1), R5;			\
-	SUB	$1, R3;				\
-	ADD	R5, R4;				\
-loop:						\
-	CMP	R5, R4;				\
-	BEQ	end;				\
-	ADD	$1, R5;				\
-	ADD	$1, R3;				\
-	MOVBZ	0(R5), R6;			\
-	MOVBZ	R6, 0(R3);			\
-	BR	loop;				\
-end:						\
+	MOVD	arg+16(FP), R6;			\
+	MOVWZ	n+24(FP), R5;			\
+	MOVD	$stack-MAXSIZE(SP), R4;		\
+	MOVWZ	retoffset+28(FP), R1;		\
+	ADD	R1, R4;				\
+	ADD	R1, R6;				\
+	SUB	R1, R5;				\
+loopRets: /* copy 256 bytes at a time */	\
+	CMP	R5, $256;			\
+	BLT	tailRets;			\
+	SUB	$256, R5;			\
+	MVC	$256, 0(R4), 0(R6);		\
+	MOVD	$256(R4), R4;			\
+	MOVD	$256(R6), R6;			\
+	BR	loopRets;			\
+tailRets: /* copy remaining bytes */		\
+	CMP	R5, $0;				\
+	BEQ	writeBarrierUpdates;		\
+	SUB	$1, R5;				\
+	EXRL	$callfnMVC<>(SB), R5;		\
+writeBarrierUpdates:				\
 	/* execute write barrier updates */	\
-	MOVD	argtype+0(FP), R7;		\
-	MOVD	arg+16(FP), R3;			\
-	MOVWZ	n+24(FP), R4;			\
-	MOVWZ	retoffset+28(FP), R6;		\
-	MOVD	R7, 8(R15);			\
-	MOVD	R3, 16(R15);			\
-	MOVD	R4, 24(R15);			\
-	MOVD	R6, 32(R15);			\
+	MOVD	argtype+0(FP), R1;		\
+	MOVD	arg+16(FP), R2;			\
+	MOVWZ	n+24(FP), R3;			\
+	MOVWZ	retoffset+28(FP), R4;		\
+	STMG	R1, R4, stack-MAXSIZE(SP);	\
 	BL	runtime·callwritebarrier(SB);	\
 	RET
 
@@ -462,6 +465,10 @@ CALLFN(·call134217728, 134217728)
 CALLFN(·call268435456, 268435456)
 CALLFN(·call536870912, 536870912)
 CALLFN(·call1073741824, 1073741824)
+
+// Not a function: target for EXRL (execute relative long) instruction.
+TEXT callfnMVC<>(SB),NOSPLIT|NOFRAME,$0-0
+	MVC	$1, 0(R4), 0(R6)
 
 TEXT runtime·procyield(SB),NOSPLIT,$0-0
 	RET
@@ -525,7 +532,7 @@ g0:
 	MOVD	(g_stack+stack_hi)(R5), R5
 	SUB	R2, R5
 	MOVD	R5, 160(R15)             // save depth in old g stack (can't just save SP, as stack might be copied during a callback)
-	MOVD	R0, 0(R15)              // clear back chain pointer (TODO can we give it real back trace information?)
+	MOVD	$0, 0(R15)              // clear back chain pointer (TODO can we give it real back trace information?)
 	MOVD	R4, R2                  // arg in R2
 	BL	R3                      // can clobber: R0-R5, R14, F0-F3, F5, F7-F15
 
@@ -712,12 +719,6 @@ setbar:
 	// Set the stack barrier return PC.
 	MOVD	R3, 8(R15)
 	BL	runtime·setNextBarrierPC(SB)
-	RET
-
-TEXT runtime·getcallersp(SB),NOSPLIT,$0-16
-	MOVD	argp+0(FP), R3
-	SUB	$8, R3
-	MOVD	R3, ret+8(FP)
 	RET
 
 TEXT runtime·abort(SB),NOSPLIT|NOFRAME,$0-0

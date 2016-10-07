@@ -82,6 +82,13 @@ func BenchmarkCompareStringBig(b *testing.B) {
 	b.SetBytes(int64(len(s1)))
 }
 
+func BenchmarkConcatStringAndBytes(b *testing.B) {
+	s1 := []byte("Gophers!")
+	for i := 0; i < b.N; i++ {
+		_ = "Hello " + string(s1)
+	}
+}
+
 var stringdata = []struct{ name, data string }{
 	{"ASCII", "01234567890"},
 	{"Japanese", "日本語日本語日本語"},
@@ -159,19 +166,6 @@ func TestLargeStringConcat(t *testing.T) {
 		strings.Repeat("2", 1<<10) + strings.Repeat("3", 1<<10)
 	if !strings.HasPrefix(output, want) {
 		t.Fatalf("output does not start with %q:\n%s", want, output)
-	}
-}
-
-func TestGostringnocopy(t *testing.T) {
-	max := *runtime.Maxstring
-	b := make([]byte, max+10)
-	for i := uintptr(0); i < max+9; i++ {
-		b[i] = 'a'
-	}
-	_ = runtime.Gostringnocopy(&b[0])
-	newmax := *runtime.Maxstring
-	if newmax != max+9 {
-		t.Errorf("want %d, got %d", max+9, newmax)
 	}
 }
 

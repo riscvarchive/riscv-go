@@ -281,7 +281,7 @@ func (r *Rets) SetReturnValuesCode() string {
 func (r *Rets) useLongHandleErrorCode(retvar string) string {
 	const code = `if %s {
 		if e1 != 0 {
-			err = error(e1)
+			err = errnoErr(e1)
 		} else {
 			err = %sEINVAL
 		}
@@ -828,6 +828,27 @@ import (
 )
 
 var _ unsafe.Pointer
+
+// Do the interface allocations only once for common
+// Errno values.
+var (
+	errERROR_IO_PENDING error = {{syscalldot}}Errno(ERROR_IO_PENDING)
+)
+
+// errnoErr returns common boxed Errno values, to prevent
+// allocations at runtime.
+func errnoErr(e {{syscalldot}}Errno) error {
+	switch e {
+	case 0:
+		return nil
+	case ERROR_IO_PENDING:
+		return errERROR_IO_PENDING
+	}
+	// TODO: add more here, after collecting data on the common
+	// error values see on Windows. (perhaps when running
+	// all.bat?)
+	return e
+}
 
 var (
 {{template "dlls" .}}

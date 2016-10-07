@@ -12,14 +12,13 @@ import (
 //
 // NOTE(prattmic): I believe that the gc.Size flags are used only for non-SSA
 // peephole optimizations, and can thus be omitted for RISCV.
-var progmap = map[obj.As]obj.ProgInfo{
+var progmap = map[obj.As]gc.ProgInfo{
 	obj.ATYPE:     {Flags: gc.Pseudo | gc.Skip},
 	obj.ATEXT:     {Flags: gc.Pseudo},
 	obj.AFUNCDATA: {Flags: gc.Pseudo},
 	obj.APCDATA:   {Flags: gc.Pseudo},
 	obj.AUNDEF:    {Flags: gc.Break},
 	obj.AUSEFIELD: {Flags: gc.OK},
-	obj.ACHECKNIL: {Flags: gc.LeftRead},
 	obj.AVARDEF:   {Flags: gc.Pseudo | gc.RightWrite},
 	obj.AVARKILL:  {Flags: gc.Pseudo | gc.RightWrite},
 	obj.AVARLIVE:  {Flags: gc.Pseudo | gc.LeftRead},
@@ -143,12 +142,11 @@ var progmap = map[obj.As]obj.ProgInfo{
 	riscv.AFLED: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
 }
 
-func proginfo(p *obj.Prog) {
+func proginfo(p *obj.Prog) gc.ProgInfo {
 	info, ok := progmap[p.As]
 	if !ok {
-		p.Ctxt.Diag("proginfo missing prog %v", p.As)
-		return
+		gc.Fatalf("proginfo missing prog %v", p.As)
 	}
 
-	p.Info = info
+	return info
 }

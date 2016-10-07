@@ -35,18 +35,10 @@ import (
 	"cmd/internal/sys"
 	"cmd/link/internal/ld"
 	"fmt"
-	"log"
 )
 
-// Reading object files.
-
-func Main() {
-	linkarchinit()
-	ld.Main()
-}
-
-func linkarchinit() {
-	if obj.Getgoarch() == "mips64le" {
+func Init() {
+	if obj.GOARCH == "mips64le" {
 		ld.SysArch = sys.ArchMIPS64LE
 	} else {
 		ld.SysArch = sys.ArchMIPS64
@@ -93,28 +85,9 @@ func linkarchinit() {
 }
 
 func archinit(ctxt *ld.Link) {
-	// getgoextlinkenabled is based on GO_EXTLINK_ENABLED when
-	// Go was built; see ../../make.bash.
-	if ld.Linkmode == ld.LinkAuto && obj.Getgoextlinkenabled() == "0" {
-		ld.Linkmode = ld.LinkInternal
-	}
-
-	switch ld.HEADTYPE {
+	switch ld.Headtype {
 	default:
-		if ld.Linkmode == ld.LinkAuto {
-			ld.Linkmode = ld.LinkInternal
-		}
-		if ld.Linkmode == ld.LinkExternal && obj.Getgoextlinkenabled() != "1" {
-			log.Fatalf("cannot use -linkmode=external with -H %s", ld.Headstr(int(ld.HEADTYPE)))
-		}
-
-	case obj.Hlinux:
-		break
-	}
-
-	switch ld.HEADTYPE {
-	default:
-		ld.Exitf("unknown -H option: %v", ld.HEADTYPE)
+		ld.Exitf("unknown -H option: %v", ld.Headtype)
 
 	case obj.Hplan9: /* plan 9 */
 		ld.HEADR = 32

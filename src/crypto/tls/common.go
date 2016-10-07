@@ -637,15 +637,25 @@ func (c *Config) BuildNameToCertificate() {
 	}
 }
 
-// writeKeyLog logs client random and master secret if logging enabled
-// by setting KeyLogWriter.
+// writeKeyLog logs client random and master secret if logging was enabled by
+// setting c.KeyLogWriter.
 func (c *Config) writeKeyLog(clientRandom, masterSecret []byte) error {
 	if c.KeyLogWriter == nil {
 		return nil
 	}
-	_, err := fmt.Fprintf(c.KeyLogWriter, "CLIENT_RANDOM %x %x\n", clientRandom, masterSecret)
+
+	logLine := []byte(fmt.Sprintf("CLIENT_RANDOM %x %x\n", clientRandom, masterSecret))
+
+	writerMutex.Lock()
+	_, err := c.KeyLogWriter.Write(logLine)
+	writerMutex.Unlock()
+
 	return err
 }
+
+// writerMutex protects all KeyLogWriters globally. It is rarely enabled,
+// and is only for debugging, so a global mutex saves space.
+var writerMutex sync.Mutex
 
 // A Certificate is a chain of one or more certificates, leaf first.
 type Certificate struct {

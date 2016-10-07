@@ -53,7 +53,7 @@ func dumpobj1(outfile string, mode int) {
 	var err error
 	bout, err = bio.Create(outfile)
 	if err != nil {
-		Flusherrors()
+		flusherrors()
 		fmt.Printf("can't create %s: %v\n", outfile, err)
 		errorexit()
 	}
@@ -68,7 +68,7 @@ func dumpobj1(outfile string, mode int) {
 	}
 
 	printheader := func() {
-		fmt.Fprintf(bout, "go object %s %s %s %s\n", obj.Getgoos(), obj.Getgoarch(), obj.Getgoversion(), obj.Expstring())
+		fmt.Fprintf(bout, "go object %s %s %s %s\n", obj.GOOS, obj.GOARCH, obj.Version, obj.Expstring())
 		if buildid != "" {
 			fmt.Fprintf(bout, "build id %q\n", buildid)
 		}
@@ -130,6 +130,7 @@ func dumpobj1(outfile string, mode int) {
 	externs := len(externdcl)
 
 	dumpglobls()
+	dumpptabs()
 	dumptypestructs()
 
 	// Dump extra globals.
@@ -146,7 +147,6 @@ func dumpobj1(outfile string, mode int) {
 		ggloblsym(zero, int32(zerosize), obj.DUPOK|obj.RODATA)
 	}
 
-	dumpdata()
 	obj.Writeobjdirect(Ctxt, bout.Writer)
 
 	if writearchive {
@@ -161,6 +161,35 @@ func dumpobj1(outfile string, mode int) {
 	}
 
 	bout.Close()
+}
+
+func dumpptabs() {
+	if !Ctxt.Flag_dynlink || localpkg.Name != "main" {
+		return
+	}
+	for _, exportn := range exportlist {
+		s := exportn.Sym
+		n := s.Def
+		if n == nil {
+			continue
+		}
+		if n.Op != ONAME {
+			continue
+		}
+		if !exportname(s.Name) {
+			continue
+		}
+		if s.Pkg.Name != "main" {
+			continue
+		}
+		if n.Type.Etype == TFUNC && n.Class == PFUNC {
+			// function
+			ptabs = append(ptabs, ptabEntry{s: s, t: s.Def.Type})
+		} else {
+			// variable
+			ptabs = append(ptabs, ptabEntry{s: s, t: typPtr(s.Def.Type)})
+		}
+	}
 }
 
 func dumpglobls() {
@@ -319,22 +348,12 @@ func slicebytes(nam *Node, s string, len int) {
 	duintxx(nam.Sym, off, uint64(len), Widthint)
 }
 
-func Datastring(s string, a *obj.Addr) {
-	_, symdata := stringsym(s)
-	a.Type = obj.TYPE_MEM
-	a.Name = obj.NAME_EXTERN
-	a.Sym = symdata
-	a.Offset = 0
-	a.Etype = uint8(Simtype[TINT])
-}
-
 func datagostring(sval string, a *obj.Addr) {
 	symhdr, _ := stringsym(sval)
 	a.Type = obj.TYPE_MEM
 	a.Name = obj.NAME_EXTERN
 	a.Sym = symhdr
 	a.Offset = 0
-	a.Etype = uint8(TSTRING)
 }
 
 func dsname(s *Sym, off int, t string) int {
@@ -403,7 +422,7 @@ func gdata(nam *Node, nr *Node, wid int) {
 
 	case OADDR:
 		if nr.Left.Op != ONAME {
-			Fatalf("gdata ADDR left op %s", nr.Left.Op)
+			Fatalf("gdata ADDR left op %v", nr.Left.Op)
 		}
 		to := nr.Left
 		Linksym(nam.Sym).WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(to.Sym), to.Xoffset)

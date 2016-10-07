@@ -18,12 +18,17 @@ import (
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http/httptrace"
 	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang_org/x/net/idna"
+	"golang_org/x/text/unicode/norm"
+	"golang_org/x/text/width"
 )
 
 const (
@@ -150,7 +155,8 @@ type Request struct {
 	// The value -1 indicates that the length is unknown.
 	// Values >= 0 indicate that the given number of bytes may
 	// be read from Body.
-	// For client requests, a value of 0 means unknown if Body is not nil.
+	// For client requests, a value of 0 with a non-nil Body is
+	// also treated as unknown.
 	ContentLength int64
 
 	// TransferEncoding lists the transfer encodings from outermost to
@@ -175,11 +181,15 @@ type Request struct {
 	// For server requests Host specifies the host on which the
 	// URL is sought. Per RFC 2616, this is either the value of
 	// the "Host" header or the host name given in the URL itself.
-	// It may be of the form "host:port".
+	// It may be of the form "host:port". For international domain
+	// names, Host may be in Punycode or Unicode form. Use
+	// golang.org/x/net/idna to convert it to either format if
+	// needed.
 	//
 	// For client requests Host optionally overrides the Host
 	// header to send. If empty, the Request.Write method uses
-	// the value of URL.Host.
+	// the value of URL.Host. Host may contain an international
+	// domain name.
 	Host string
 
 	// Form contains the parsed form data, including both the URL
@@ -319,6 +329,8 @@ var ErrNoCookie = errors.New("http: named cookie not present")
 
 // Cookie returns the named cookie provided in the request or
 // ErrNoCookie if not found.
+// If multiple cookies match the given name, only one cookie will
+// be returned.
 func (r *Request) Cookie(name string) (*Cookie, error) {
 	for _, c := range readCookies(r.Header, name) {
 		return c, nil
@@ -573,7 +585,24 @@ func (req *Request) write(w io.Writer, usingProxy bool, extraHeaders Header, wai
 	return nil
 }
 
-// cleanHost strips anything after '/' or ' '.
+func idnaASCII(v string) (string, error) {
+	if isASCII(v) {
+		return v, nil
+	}
+	// The idna package doesn't do everything from
+	// https://tools.ietf.org/html/rfc5895 so we do it here.
+	// TODO(bradfitz): should the idna package do this instead?
+	v = strings.ToLower(v)
+	v = width.Fold.String(v)
+	v = norm.NFC.String(v)
+	return idna.ToASCII(v)
+}
+
+// cleanHost cleans up the host sent in request's Host header.
+//
+// It both strips anything after '/' or ' ', and puts the value
+// into Punycode form, if necessary.
+//
 // Ideally we'd clean the Host header according to the spec:
 //   https://tools.ietf.org/html/rfc7230#section-5.4 (Host = uri-host [ ":" port ]")
 //   https://tools.ietf.org/html/rfc7230#section-2.7 (uri-host -> rfc3986's host)
@@ -584,9 +613,21 @@ func (req *Request) write(w io.Writer, usingProxy bool, extraHeaders Header, wai
 // first offending character.
 func cleanHost(in string) string {
 	if i := strings.IndexAny(in, " /"); i != -1 {
-		return in[:i]
+		in = in[:i]
 	}
-	return in
+	host, port, err := net.SplitHostPort(in)
+	if err != nil { // input was just a host
+		a, err := idnaASCII(in)
+		if err != nil {
+			return in // garbage in, garbage out
+		}
+		return a
+	}
+	a, err := idnaASCII(host)
+	if err != nil {
+		return in // garbage in, garbage out
+	}
+	return net.JoinHostPort(a, port)
 }
 
 // removeZone removes IPv6 zone identifier from host.
@@ -1173,4 +1214,51 @@ func (r *Request) isReplayable() bool {
 		}
 	}
 	return false
+}
+
+// bodyAndLength reports the request's body and content length, with
+// the difference from r.ContentLength being that 0 means actually
+// zero, and -1 means unknown.
+func (r *Request) bodyAndLength() (body io.Reader, contentLen int64) {
+	body = r.Body
+	if body == nil {
+		return nil, 0
+	}
+	if r.ContentLength != 0 {
+		return body, r.ContentLength
+	}
+
+	// Don't try to sniff the request body if,
+	// * they're using a custom transfer encoding (or specified
+	//   chunked themselves)
+	// * they're not using HTTP/1.1 and can't chunk anyway (even
+	//   though this is basically irrelevant, since this package
+	//   only sends minimum 1.1 requests)
+	// * they're sending an "Expect: 100-continue" request, because
+	//   they might get denied or redirected and try to use the same
+	//   body elsewhere, so we shoudn't consume it.
+	if len(r.TransferEncoding) != 0 ||
+		!r.ProtoAtLeast(1, 1) ||
+		r.Header.Get("Expect") == "100-continue" {
+		return body, -1
+	}
+
+	// Test to see if it's actually zero or just unset.
+	var buf [1]byte
+	n, err := io.ReadFull(body, buf[:])
+	if err != nil && err != io.EOF {
+		return errorReader{err}, -1
+	}
+
+	if n == 1 {
+		// Oh, guess there is data in this Body Reader after all.
+		// The ContentLength field just wasn't set.
+		// Stich the Body back together again, re-attaching our
+		// consumed byte.
+		// TODO(bradfitz): switch to stitchByteAndReader
+		return io.MultiReader(bytes.NewReader(buf[:]), body), -1
+	}
+
+	// Body is actually empty.
+	return nil, 0
 }

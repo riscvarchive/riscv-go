@@ -7,8 +7,10 @@ package bytes_test
 import (
 	. "bytes"
 	"fmt"
+	"internal/testenv"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 	"unicode"
 	"unicode/utf8"
@@ -354,6 +356,20 @@ func TestIndexRune(t *testing.T) {
 			t.Errorf(`IndexRune(%q, '%c') = %v`, tt.a, r, pos)
 		}
 	}
+
+	haystack := []byte("test世界")
+
+	allocs := testing.AllocsPerRun(1000, func() {
+		if i := IndexRune(haystack, 's'); i != 2 {
+			t.Fatalf("'s' at %d; want 2", i)
+		}
+		if i := IndexRune(haystack, '世'); i != 4 {
+			t.Fatalf("'世' at %d; want 4", i)
+		}
+	})
+	if allocs != 0 {
+		t.Errorf(`expected no allocations, got %f`, allocs)
+	}
 }
 
 var bmbuf []byte
@@ -370,6 +386,9 @@ func valName(x int) string {
 
 func benchBytes(b *testing.B, sizes []int, f func(b *testing.B, n int)) {
 	for _, n := range sizes {
+		if isRaceBuilder && n > 4<<10 {
+			continue
+		}
 		b.Run(valName(n), func(b *testing.B) {
 			if len(bmbuf) < n {
 				bmbuf = make([]byte, n)
@@ -381,6 +400,8 @@ func benchBytes(b *testing.B, sizes []int, f func(b *testing.B, n int)) {
 }
 
 var indexSizes = []int{10, 32, 4 << 10, 4 << 20, 64 << 20}
+
+var isRaceBuilder = strings.HasSuffix(testenv.Builder(), "-race")
 
 func BenchmarkIndexByte(b *testing.B) {
 	benchBytes(b, indexSizes, bmIndexByte(IndexByte))
@@ -400,6 +421,44 @@ func bmIndexByte(index func([]byte, byte) int) func(b *testing.B, n int) {
 				b.Fatal("bad index", j)
 			}
 		}
+		buf[n-1] = '\x00'
+	}
+}
+
+func BenchmarkIndexRune(b *testing.B) {
+	benchBytes(b, indexSizes, bmIndexRune(IndexRune))
+}
+
+func BenchmarkIndexRuneASCII(b *testing.B) {
+	benchBytes(b, indexSizes, bmIndexRuneASCII(IndexRune))
+}
+
+func bmIndexRuneASCII(index func([]byte, rune) int) func(b *testing.B, n int) {
+	return func(b *testing.B, n int) {
+		buf := bmbuf[0:n]
+		buf[n-1] = 'x'
+		for i := 0; i < b.N; i++ {
+			j := index(buf, 'x')
+			if j != n-1 {
+				b.Fatal("bad index", j)
+			}
+		}
+		buf[n-1] = '\x00'
+	}
+}
+
+func bmIndexRune(index func([]byte, rune) int) func(b *testing.B, n int) {
+	return func(b *testing.B, n int) {
+		buf := bmbuf[0:n]
+		utf8.EncodeRune(buf[n-3:], '世')
+		for i := 0; i < b.N; i++ {
+			j := index(buf, '世')
+			if j != n-3 {
+				b.Fatal("bad index", j)
+			}
+		}
+		buf[n-3] = '\x00'
+		buf[n-2] = '\x00'
 		buf[n-1] = '\x00'
 	}
 }
@@ -840,6 +899,54 @@ func TestRepeat(t *testing.T) {
 		if !Equal(a, tout) {
 			t.Errorf("Repeat(%q, %d) = %q; want %q", tin, tt.count, a, tout)
 			continue
+		}
+	}
+}
+
+func repeat(b []byte, count int) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch v := r.(type) {
+			case error:
+				err = v
+			default:
+				err = fmt.Errorf("%s", v)
+			}
+		}
+	}()
+
+	Repeat(b, count)
+
+	return
+}
+
+// See Issue golang.org/issue/16237
+func TestRepeatCatchesOverflow(t *testing.T) {
+	tests := [...]struct {
+		s      string
+		count  int
+		errStr string
+	}{
+		0: {"--", -2147483647, "negative"},
+		1: {"", int(^uint(0) >> 1), ""},
+		2: {"-", 10, ""},
+		3: {"gopher", 0, ""},
+		4: {"-", -1, "negative"},
+		5: {"--", -102, "negative"},
+		6: {string(make([]byte, 255)), int((^uint(0))/255 + 1), "overflow"},
+	}
+
+	for i, tt := range tests {
+		err := repeat([]byte(tt.s), tt.count)
+		if tt.errStr == "" {
+			if err != nil {
+				t.Errorf("#%d panicked %v", i, err)
+			}
+			continue
+		}
+
+		if err == nil || !strings.Contains(err.Error(), tt.errStr) {
+			t.Errorf("#%d expected %q got %q", i, tt.errStr, err)
 		}
 	}
 }

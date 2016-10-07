@@ -29,10 +29,14 @@ type Conn struct {
 
 	// constant after handshake; protected by handshakeMutex
 	handshakeMutex sync.Mutex // handshakeMutex < in.Mutex, out.Mutex, errMutex
-	handshakeErr   error      // error resulting from handshake
-	vers           uint16     // TLS version
-	haveVers       bool       // version has been negotiated
-	config         *Config    // configuration passed to constructor
+	// handshakeCond, if not nil, indicates that a goroutine is committed
+	// to running the handshake for this Conn. Other goroutines that need
+	// to wait for the handshake can wait on this, under handshakeMutex.
+	handshakeCond *sync.Cond
+	handshakeErr  error   // error resulting from handshake
+	vers          uint16  // TLS version
+	haveVers      bool    // version has been negotiated
+	config        *Config // configuration passed to constructor
 	// handshakeComplete is true if the connection is currently transfering
 	// application data (i.e. is not currently processing a handshake).
 	handshakeComplete bool
@@ -189,18 +193,18 @@ func (hc *halfConn) incSeq() {
 	panic("TLS: sequence number wraparound")
 }
 
-// removePadding returns an unpadded slice, in constant time, which is a prefix
-// of the input. It also returns a byte which is equal to 255 if the padding
-// was valid and 0 otherwise. See RFC 2246, section 6.2.3.2
-func removePadding(payload []byte) ([]byte, byte) {
+// extractPadding returns, in constant time, the length of the padding to remove
+// from the end of payload. It also returns a byte which is equal to 255 if the
+// padding was valid and 0 otherwise. See RFC 2246, section 6.2.3.2
+func extractPadding(payload []byte) (toRemove int, good byte) {
 	if len(payload) < 1 {
-		return payload, 0
+		return 0, 0
 	}
 
 	paddingLen := payload[len(payload)-1]
 	t := uint(len(payload)-1) - uint(paddingLen)
 	// if len(payload) >= (paddingLen - 1) then the MSB of t is zero
-	good := byte(int32(^t) >> 31)
+	good = byte(int32(^t) >> 31)
 
 	toCheck := 255 // the maximum possible padding length
 	// The length of the padded data is public, so we can use an if here
@@ -223,24 +227,24 @@ func removePadding(payload []byte) ([]byte, byte) {
 	good &= good << 1
 	good = uint8(int8(good) >> 7)
 
-	toRemove := good&paddingLen + 1
-	return payload[:len(payload)-int(toRemove)], good
+	toRemove = int(paddingLen) + 1
+	return
 }
 
-// removePaddingSSL30 is a replacement for removePadding in the case that the
+// extractPaddingSSL30 is a replacement for extractPadding in the case that the
 // protocol version is SSLv3. In this version, the contents of the padding
 // are random and cannot be checked.
-func removePaddingSSL30(payload []byte) ([]byte, byte) {
+func extractPaddingSSL30(payload []byte) (toRemove int, good byte) {
 	if len(payload) < 1 {
-		return payload, 0
+		return 0, 0
 	}
 
 	paddingLen := int(payload[len(payload)-1]) + 1
 	if paddingLen > len(payload) {
-		return payload, 0
+		return 0, 0
 	}
 
-	return payload[:len(payload)-paddingLen], 255
+	return paddingLen, 255
 }
 
 func roundUp(a, b int) int {
@@ -266,6 +270,7 @@ func (hc *halfConn) decrypt(b *block) (ok bool, prefixLen int, alertValue alert)
 	}
 
 	paddingGood := byte(255)
+	paddingLen := 0
 	explicitIVLen := 0
 
 	// decrypt
@@ -308,22 +313,17 @@ func (hc *halfConn) decrypt(b *block) (ok bool, prefixLen int, alertValue alert)
 			}
 			c.CryptBlocks(payload, payload)
 			if hc.version == VersionSSL30 {
-				payload, paddingGood = removePaddingSSL30(payload)
+				paddingLen, paddingGood = extractPaddingSSL30(payload)
 			} else {
-				payload, paddingGood = removePadding(payload)
-			}
-			b.resize(recordHeaderLen + explicitIVLen + len(payload))
+				paddingLen, paddingGood = extractPadding(payload)
 
-			// note that we still have a timing side-channel in the
-			// MAC check, below. An attacker can align the record
-			// so that a correct padding will cause one less hash
-			// block to be calculated. Then they can iteratively
-			// decrypt a record by breaking each byte. See
-			// "Password Interception in a SSL/TLS Channel", Brice
-			// Canvel et al.
-			//
-			// However, our behavior matches OpenSSL, so we leak
-			// only as much as they do.
+				// To protect against CBC padding oracles like Lucky13, the data
+				// past paddingLen (which is secret) is passed to the MAC
+				// function as extra data, to be fed into the HMAC after
+				// computing the digest. This makes the MAC constant time as
+				// long as the digest computation is constant time and does not
+				// affect the subsequent write.
+			}
 		default:
 			panic("unknown cipher type")
 		}
@@ -336,17 +336,19 @@ func (hc *halfConn) decrypt(b *block) (ok bool, prefixLen int, alertValue alert)
 		}
 
 		// strip mac off payload, b.data
-		n := len(payload) - macSize
+		n := len(payload) - macSize - paddingLen
+		n = subtle.ConstantTimeSelect(int(uint32(n)>>31), 0, n) // if n < 0 { n = 0 }
 		b.data[3] = byte(n >> 8)
 		b.data[4] = byte(n)
-		b.resize(recordHeaderLen + explicitIVLen + n)
-		remoteMAC := payload[n:]
-		localMAC := hc.mac.MAC(hc.inDigestBuf, hc.seq[0:], b.data[:recordHeaderLen], payload[:n])
+		remoteMAC := payload[n : n+macSize]
+		localMAC := hc.mac.MAC(hc.inDigestBuf, hc.seq[0:], b.data[:recordHeaderLen], payload[:n], payload[n+macSize:])
 
 		if subtle.ConstantTimeCompare(localMAC, remoteMAC) != 1 || paddingGood != 255 {
 			return false, 0, alertBadRecordMAC
 		}
 		hc.inDigestBuf = localMAC
+
+		b.resize(recordHeaderLen + explicitIVLen + n)
 	}
 	hc.incSeq()
 
@@ -374,7 +376,7 @@ func padToBlockSize(payload []byte, blockSize int) (prefix, finalBlock []byte) {
 func (hc *halfConn) encrypt(b *block, explicitIVLen int) (bool, alert) {
 	// mac
 	if hc.mac != nil {
-		mac := hc.mac.MAC(hc.outDigestBuf, hc.seq[0:], b.data[:recordHeaderLen], b.data[recordHeaderLen+explicitIVLen:])
+		mac := hc.mac.MAC(hc.outDigestBuf, hc.seq[0:], b.data[:recordHeaderLen], b.data[recordHeaderLen+explicitIVLen:], nil)
 
 		n := len(b.data)
 		b.resize(n + len(mac))
@@ -628,9 +630,10 @@ Again:
 
 	// Process message.
 	b, c.rawInput = c.in.splitBlock(b, recordHeaderLen+n)
-	ok, off, err := c.in.decrypt(b)
+	ok, off, alertValue := c.in.decrypt(b)
 	if !ok {
-		c.in.setErrorLocked(c.sendAlert(err))
+		c.in.freeBlock(b)
+		return c.in.setErrorLocked(c.sendAlert(alertValue))
 	}
 	b.off = off
 	data := b.data[b.off:]
@@ -1206,26 +1209,50 @@ func (c *Conn) Handshake() error {
 	// need to check whether a handshake is pending (such as Write) to
 	// block.
 	//
-	// Thus we take c.handshakeMutex first and, if we find that a handshake
-	// is needed, then we unlock, acquire c.in and c.handshakeMutex in the
-	// correct order, and check again.
+	// Thus we first take c.handshakeMutex to check whether a handshake is
+	// needed.
+	//
+	// If so then, previously, this code would unlock handshakeMutex and
+	// then lock c.in and handshakeMutex in the correct order to run the
+	// handshake. The problem was that it was possible for a Read to
+	// complete the handshake once handshakeMutex was unlocked and then
+	// keep c.in while waiting for network data. Thus a concurrent
+	// operation could be blocked on c.in.
+	//
+	// Thus handshakeCond is used to signal that a goroutine is committed
+	// to running the handshake and other goroutines can wait on it if they
+	// need. handshakeCond is protected by handshakeMutex.
 	c.handshakeMutex.Lock()
 	defer c.handshakeMutex.Unlock()
 
-	for i := 0; i < 2; i++ {
-		if i == 1 {
-			c.handshakeMutex.Unlock()
-			c.in.Lock()
-			defer c.in.Unlock()
-			c.handshakeMutex.Lock()
-		}
-
+	for {
 		if err := c.handshakeErr; err != nil {
 			return err
 		}
 		if c.handshakeComplete {
 			return nil
 		}
+		if c.handshakeCond == nil {
+			break
+		}
+
+		c.handshakeCond.Wait()
+	}
+
+	// Set handshakeCond to indicate that this goroutine is committing to
+	// running the handshake.
+	c.handshakeCond = sync.NewCond(&c.handshakeMutex)
+	c.handshakeMutex.Unlock()
+
+	c.in.Lock()
+	defer c.in.Unlock()
+
+	c.handshakeMutex.Lock()
+
+	// The handshake cannot have completed when handshakeMutex was unlocked
+	// because this goroutine set handshakeCond.
+	if c.handshakeErr != nil || c.handshakeComplete {
+		panic("handshake should not have been able to complete after handshakeCond was set")
 	}
 
 	if c.isClient {
@@ -1235,7 +1262,21 @@ func (c *Conn) Handshake() error {
 	}
 	if c.handshakeErr == nil {
 		c.handshakes++
+	} else {
+		// If an error occurred during the hadshake try to flush the
+		// alert that might be left in the buffer.
+		c.flush()
 	}
+
+	if c.handshakeErr == nil && !c.handshakeComplete {
+		panic("handshake should have had a result.")
+	}
+
+	// Wake any other goroutines that are waiting for this handshake to
+	// complete.
+	c.handshakeCond.Broadcast()
+	c.handshakeCond = nil
+
 	return c.handshakeErr
 }
 

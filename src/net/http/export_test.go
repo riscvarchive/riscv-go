@@ -100,6 +100,24 @@ func (t *Transport) IdleConnStrsForTesting() []string {
 	return ret
 }
 
+func (t *Transport) IdleConnStrsForTesting_h2() []string {
+	var ret []string
+	noDialPool := t.h2transport.ConnPool.(http2noDialClientConnPool)
+	pool := noDialPool.http2clientConnPool
+
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	for k, cc := range pool.conns {
+		for range cc {
+			ret = append(ret, k)
+		}
+	}
+
+	sort.Strings(ret)
+	return ret
+}
+
 func (t *Transport) IdleConnCountForTesting(cacheKey string) int {
 	t.idleMu.Lock()
 	defer t.idleMu.Unlock()
@@ -160,3 +178,5 @@ func ExportHttp2ConfigureTransport(t *Transport) error {
 	t.h2transport = t2
 	return nil
 }
+
+var Export_shouldCopyHeaderOnRedirect = shouldCopyHeaderOnRedirect

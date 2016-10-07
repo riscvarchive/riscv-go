@@ -444,7 +444,7 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 	var rp *Reloc
 	var name string
 
-	ctxt.IncVersion()
+	localSymVersion := ctxt.Syms.IncVersion()
 	base := f.Offset()
 	if _, err := io.ReadFull(f, hdr[:]); err != nil {
 		goto bad
@@ -487,18 +487,18 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 
 	switch SysArch.Family {
 	default:
-		ctxt.Diag("%s: mach-o %s unimplemented", pn, SysArch.Name)
+		Errorf(nil, "%s: mach-o %s unimplemented", pn, SysArch.Name)
 		return
 
 	case sys.AMD64:
 		if e != binary.LittleEndian || m.cputype != LdMachoCpuAmd64 {
-			ctxt.Diag("%s: mach-o object but not amd64", pn)
+			Errorf(nil, "%s: mach-o object but not amd64", pn)
 			return
 		}
 
 	case sys.I386:
 		if e != binary.LittleEndian || m.cputype != LdMachoCpu386 {
-			ctxt.Diag("%s: mach-o object but not 386", pn)
+			Errorf(nil, "%s: mach-o object but not 386", pn)
 			return
 		}
 	}
@@ -587,7 +587,7 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 			continue
 		}
 		name = fmt.Sprintf("%s(%s/%s)", pkg, sect.segname, sect.name)
-		s = Linklookup(ctxt, name, ctxt.Version)
+		s = ctxt.Syms.Lookup(name, localSymVersion)
 		if s.Type != 0 {
 			err = fmt.Errorf("duplicate %s/%s", sect.segname, sect.name)
 			goto bad
@@ -634,9 +634,9 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 		}
 		v := 0
 		if sym.type_&N_EXT == 0 {
-			v = ctxt.Version
+			v = localSymVersion
 		}
-		s = Linklookup(ctxt, name, v)
+		s = ctxt.Syms.Lookup(name, v)
 		if sym.type_&N_EXT == 0 {
 			s.Attr |= AttrDuplicateOK
 		}
@@ -673,7 +673,7 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 		}
 		if outer.Type == obj.STEXT {
 			if s.Attr.External() && !s.Attr.DuplicateOK() {
-				ctxt.Diag("%s: duplicate definition of %s", pn, s.Name)
+				Errorf(s, "%s: duplicate symbol definition", pn)
 			}
 			s.Attr |= AttrExternal
 		}
@@ -738,7 +738,7 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 			if rel.scattered != 0 {
 				if SysArch.Family != sys.I386 {
 					// mach-o only uses scattered relocation on 32-bit platforms
-					ctxt.Diag("unexpected scattered relocation")
+					Errorf(s, "unexpected scattered relocation")
 					continue
 				}
 
@@ -900,5 +900,5 @@ func ldmacho(ctxt *Link, f *bio.Reader, pkg string, length int64, pn string) {
 	return
 
 bad:
-	ctxt.Diag("%s: malformed mach-o file: %v", pn, err)
+	Errorf(nil, "%s: malformed mach-o file: %v", pn, err)
 }

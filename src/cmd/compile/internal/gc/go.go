@@ -5,7 +5,6 @@
 package gc
 
 import (
-	"bufio"
 	"cmd/compile/internal/ssa"
 	"cmd/internal/bio"
 	"cmd/internal/obj"
@@ -23,9 +22,7 @@ type Pkg struct {
 	Pathsym  *obj.LSym
 	Prefix   string // escaped path for use in symbol table
 	Imported bool   // export data of this package was parsed
-	Exported bool   // import line written in export data
 	Direct   bool   // imported directly
-	Safe     bool   // whether the package is marked as safe
 	Syms     map[string]*Sym
 }
 
@@ -57,17 +54,7 @@ type Sym struct {
 }
 
 type Label struct {
-	Sym *Sym
 	Def *Node
-	Use []*Node
-
-	// for use during gen
-	Gotopc   *obj.Prog // pointer to unresolved gotos
-	Labelpc  *obj.Prog // pointer to code
-	Breakpc  *obj.Prog // pointer to code
-	Continpc *obj.Prog // pointer to code
-
-	Used bool // for "label defined and not used" error
 }
 
 type SymFlags uint8
@@ -108,11 +95,11 @@ const (
 // 	uchar	nel[4];		// number of elements
 // 	uchar	cap[4];		// allocated number of elements
 // } Array;
-var Array_array int // runtime offsetof(Array,array) - same for String
+var array_array int // runtime offsetof(Array,array) - same for String
 
-var Array_nel int // runtime offsetof(Array,nel) - same for String
+var array_nel int // runtime offsetof(Array,nel) - same for String
 
-var Array_cap int // runtime offsetof(Array,cap)
+var array_cap int // runtime offsetof(Array,cap)
 
 var sizeof_Array int // runtime sizeof(Array)
 
@@ -185,13 +172,13 @@ var localimport string
 
 var asmhdr string
 
-var Simtype [NTYPE]EType
+var simtype [NTYPE]EType
 
 var (
 	isforw    [NTYPE]bool
-	Isint     [NTYPE]bool
-	Isfloat   [NTYPE]bool
-	Iscomplex [NTYPE]bool
+	isInt     [NTYPE]bool
+	isFloat   [NTYPE]bool
+	isComplex [NTYPE]bool
 	issimple  [NTYPE]bool
 )
 
@@ -213,9 +200,9 @@ var (
 	iscmp [OEND]bool
 )
 
-var Minintval [NTYPE]*Mpint
+var minintval [NTYPE]*Mpint
 
-var Maxintval [NTYPE]*Mpint
+var maxintval [NTYPE]*Mpint
 
 var minfltval [NTYPE]*Mpflt
 
@@ -230,8 +217,6 @@ var importlist []*Node // imported functions and methods with inlinable bodies
 var funcsyms []*Node
 
 var dclcontext Class // PEXTERN/PAUTO
-
-var incannedimport int
 
 var statuniqgen int // name generator for static temps
 
@@ -287,19 +272,13 @@ var Ctxt *obj.Link
 
 var writearchive bool
 
-var bstdout *bufio.Writer
-
 var Nacl bool
-
-var continpc *obj.Prog
-
-var breakpc *obj.Prog
 
 var Pc *obj.Prog
 
 var nodfp *Node
 
-var Disable_checknil int
+var disable_checknil int
 
 // interface to back end
 
@@ -357,89 +336,20 @@ const (
 
 	// Instruction updates whichever of from/to is type D_OREG. (ppc64)
 	PostInc = 1 << 29
+
+	// Optional 3rd input operand, only ever read.
+	From3Read = 1 << 30
 )
 
 type Arch struct {
 	LinkArch *obj.LinkArch
 
-	REGSP        int
-	REGCTXT      int
-	REGCALLX     int // BX
-	REGCALLX2    int // AX
-	REGRETURN    int // AX
-	REGMIN       int
-	REGMAX       int
-	REGZERO      int // architectural zero register, if available
-	FREGMIN      int
-	FREGMAX      int
-	MAXWIDTH     int64
-	ReservedRegs []int
+	REGSP    int
+	MAXWIDTH int64
 
-	AddIndex            func(*Node, int64, *Node) bool // optional
-	Betypeinit          func()
-	Bgen_float          func(*Node, bool, int, *obj.Prog) // optional
-	Cgen64              func(*Node, *Node)                // only on 32-bit systems
-	Cgenindex           func(*Node, *Node, bool) *obj.Prog
-	Cgen_bmul           func(Op, *Node, *Node, *Node) bool
-	Cgen_float          func(*Node, *Node) // optional
-	Cgen_hmul           func(*Node, *Node, *Node)
-	RightShiftWithCarry func(*Node, uint, *Node)  // only on systems without RROTC instruction
-	AddSetCarry         func(*Node, *Node, *Node) // only on systems when ADD does not update carry flag
-	Cgen_shift          func(Op, bool, *Node, *Node, *Node)
-	Clearfat            func(*Node)
-	Cmp64               func(*Node, *Node, Op, int, *obj.Prog) // only on 32-bit systems
-	Defframe            func(*obj.Prog)
-	Dodiv               func(Op, *Node, *Node, *Node)
-	Excise              func(*Flow)
-	Expandchecks        func(*obj.Prog)
-	Getg                func(*Node)
-	Gins                func(obj.As, *Node, *Node) *obj.Prog
-
-	// Ginscmp generates code comparing n1 to n2 and jumping away if op is satisfied.
-	// The returned prog should be Patch'ed with the jump target.
-	// If op is not satisfied, code falls through to the next emitted instruction.
-	// Likely is the branch prediction hint: +1 for likely, -1 for unlikely, 0 for no opinion.
-	//
-	// Ginscmp must be able to handle all kinds of arguments for n1 and n2,
-	// not just simple registers, although it can assume that there are no
-	// function calls needed during the evaluation, and on 32-bit systems
-	// the values are guaranteed not to be 64-bit values, so no in-memory
-	// temporaries are necessary.
-	Ginscmp func(op Op, t *Type, n1, n2 *Node, likely int) *obj.Prog
-
-	// Ginsboolval inserts instructions to convert the result
-	// of a just-completed comparison to a boolean value.
-	// The first argument is the conditional jump instruction
-	// corresponding to the desired value.
-	// The second argument is the destination.
-	// If not present, Ginsboolval will be emulated with jumps.
-	Ginsboolval func(obj.As, *Node)
-
-	Ginscon      func(obj.As, int64, *Node)
-	Ginsnop      func()
-	Gmove        func(*Node, *Node)
-	Igenindex    func(*Node, *Node, bool) *obj.Prog
-	Peep         func(*obj.Prog)
-	Proginfo     func(*obj.Prog) // fills in Prog.Info
-	Regtyp       func(*obj.Addr) bool
-	Sameaddr     func(*obj.Addr, *obj.Addr) bool
-	Smallindir   func(*obj.Addr, *obj.Addr) bool
-	Stackaddr    func(*obj.Addr) bool
-	Blockcopy    func(*Node, *Node, int64, int64, int64)
-	Sudoaddable  func(obj.As, *Node, *obj.Addr) bool
-	Sudoclean    func()
-	Excludedregs func() uint64
-	RtoB         func(int) uint64
-	FtoB         func(int) uint64
-	BtoR         func(uint64) int
-	BtoF         func(uint64) int
-	Optoas       func(Op, *Type) obj.As
-	Doregbits    func(int) uint64
-	Regnames     func(*int) []string
-	Use387       bool // should 8g use 387 FP instructions instead of sse2.
-
-	// SSARegToReg maps ssa register numbers to obj register numbers.
-	SSARegToReg []int16
+	Defframe func(*obj.Prog)
+	Proginfo func(*obj.Prog) ProgInfo
+	Use387   bool // should 8g use 387 FP instructions instead of sse2.
 
 	// SSAMarkMoves marks any MOVXconst ops that need to avoid clobbering flags.
 	SSAMarkMoves func(*SSAGenState, *ssa.Block)
@@ -462,13 +372,11 @@ var Deferproc *Node
 
 var Deferreturn *Node
 
-var Panicindex *Node
+var panicindex *Node
 
 var panicslice *Node
 
 var panicdivide *Node
-
-var throwreturn *Node
 
 var growslice *Node
 

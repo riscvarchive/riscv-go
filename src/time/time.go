@@ -832,8 +832,9 @@ func (t Time) Unix() int64 {
 
 // UnixNano returns t as a Unix time, the number of nanoseconds elapsed
 // since January 1, 1970 UTC. The result is undefined if the Unix time
-// in nanoseconds cannot be represented by an int64. Note that this
-// means the result of calling UnixNano on the zero Time is undefined.
+// in nanoseconds cannot be represented by an int64 (a date before the year
+// 1678 or after 2262). Note that this means the result of calling UnixNano
+// on the zero Time is undefined.
 func (t Time) UnixNano() int64 {
 	return (t.sec+internalToUnix)*1e9 + int64(t.nsec)
 }
@@ -1103,6 +1104,11 @@ func Date(year int, month Month, day, hour, min, sec, nsec int, loc *Location) T
 
 // Truncate returns the result of rounding t down to a multiple of d (since the zero time).
 // If d <= 0, Truncate returns t unchanged.
+//
+// Truncate operates on the time as an absolute duration since the
+// zero time; it does not operate on the presentation form of the
+// time. Thus, Truncate(Hour) may return a time with a non-zero
+// minute, depending on the time's Location.
 func (t Time) Truncate(d Duration) Time {
 	if d <= 0 {
 		return t
@@ -1114,6 +1120,11 @@ func (t Time) Truncate(d Duration) Time {
 // Round returns the result of rounding t to the nearest multiple of d (since the zero time).
 // The rounding behavior for halfway values is to round up.
 // If d <= 0, Round returns t unchanged.
+//
+// Round operates on the time as an absolute duration since the
+// zero time; it does not operate on the presentation form of the
+// time. Thus, Round(Hour) may return a time with a non-zero
+// minute, depending on the time's Location.
 func (t Time) Round(d Duration) Time {
 	if d <= 0 {
 		return t

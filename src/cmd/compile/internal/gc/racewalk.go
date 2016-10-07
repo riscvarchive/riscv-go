@@ -69,9 +69,10 @@ func instrument(fn *Node) {
 		nodpc.Type = Types[TUINTPTR]
 		nodpc.Xoffset = int64(-Widthptr)
 		nd := mkcall("racefuncenter", nil, nil, &nodpc)
-		fn.Func.Enter.Set(append([]*Node{nd}, fn.Func.Enter.Slice()...))
+		fn.Func.Enter.Prepend(nd)
 		nd = mkcall("racefuncexit", nil, nil)
 		fn.Func.Exit.Append(nd)
+		fn.Func.Dcl = append(fn.Func.Dcl, &nodpc)
 	}
 
 	if Debug['W'] != 0 {
@@ -188,7 +189,7 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		instrumentnode(&n.Left, init, 0, 0)
 		goto ret
 
-		// Instrument dst argument of runtime.writebarrier* calls
+	// Instrument dst argument of runtime.writebarrier* calls
 	// as we do not instrument runtime code.
 	// typedslicecopy is instrumented in runtime.
 	case OCALLFUNC:
@@ -229,9 +230,9 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 	case OSPTR, OLEN, OCAP:
 		instrumentnode(&n.Left, init, 0, 0)
 		if n.Left.Type.IsMap() {
-			n1 := Nod(OCONVNOP, n.Left, nil)
-			n1.Type = Ptrto(Types[TUINT8])
-			n1 = Nod(OIND, n1, nil)
+			n1 := nod(OCONVNOP, n.Left, nil)
+			n1.Type = ptrto(Types[TUINT8])
+			n1 = nod(OIND, n1, nil)
 			n1 = typecheck(n1, Erv)
 			callinstr(&n1, init, 0, skip)
 		}
@@ -368,23 +369,24 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		OCLOSURE,  // lowered to PTRLIT
 		ORANGE,    // lowered to ordinary for loop
 		OARRAYLIT, // lowered to assignments
+		OSLICELIT,
 		OMAPLIT,
 		OSTRUCTLIT,
 		OAS2,
 		OAS2RECV,
 		OAS2MAPR,
 		OASOP:
-		Yyerror("instrument: %v must be lowered by now", n.Op)
+		yyerror("instrument: %v must be lowered by now", n.Op)
 
 		goto ret
 
 		// impossible nodes: only appear in backend.
 	case ORROTC, OEXTEND:
-		Yyerror("instrument: %v cannot exist now", n.Op)
+		yyerror("instrument: %v cannot exist now", n.Op)
 		goto ret
 
 	case OGETG:
-		Yyerror("instrument: OGETG can happen only in runtime which we don't instrument")
+		yyerror("instrument: OGETG can happen only in runtime which we don't instrument")
 		goto ret
 
 	case OFOR:
@@ -518,7 +520,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 			if w == BADWIDTH {
 				Fatalf("instrument: %v badwidth", t)
 			}
-			f = mkcall(name, nil, init, uintptraddr(n), Nodintconst(w))
+			f = mkcall(name, nil, init, uintptraddr(n), nodintconst(w))
 		} else if flag_race && (t.IsStruct() || t.IsArray()) {
 			name := "racereadrange"
 			if wr != 0 {
@@ -530,7 +532,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 			if w == BADWIDTH {
 				Fatalf("instrument: %v badwidth", t)
 			}
-			f = mkcall(name, nil, init, uintptraddr(n), Nodintconst(w))
+			f = mkcall(name, nil, init, uintptraddr(n), nodintconst(w))
 		} else if flag_race {
 			name := "raceread"
 			if wr != 0 {
@@ -578,7 +580,7 @@ func makeaddable(n *Node) {
 }
 
 func uintptraddr(n *Node) *Node {
-	r := Nod(OADDR, n, nil)
+	r := nod(OADDR, n, nil)
 	r.Bounded = true
 	r = conv(r, Types[TUNSAFEPTR])
 	r = conv(r, Types[TUINTPTR])
@@ -586,13 +588,13 @@ func uintptraddr(n *Node) *Node {
 }
 
 func detachexpr(n *Node, init *Nodes) *Node {
-	addr := Nod(OADDR, n, nil)
-	l := temp(Ptrto(n.Type))
-	as := Nod(OAS, l, addr)
+	addr := nod(OADDR, n, nil)
+	l := temp(ptrto(n.Type))
+	as := nod(OAS, l, addr)
 	as = typecheck(as, Etop)
 	as = walkexpr(as, init)
 	init.Append(as)
-	ind := Nod(OIND, l, nil)
+	ind := nod(OIND, l, nil)
 	ind = typecheck(ind, Erv)
 	ind = walkexpr(ind, init)
 	return ind
@@ -638,7 +640,7 @@ func appendinit(np **Node, init Nodes) {
 	// There may be multiple refs to this node;
 	// introduce OCONVNOP to hold init list.
 	case ONAME, OLITERAL:
-		n = Nod(OCONVNOP, n, nil)
+		n = nod(OCONVNOP, n, nil)
 
 		n.Type = n.Left.Type
 		n.Typecheck = 1

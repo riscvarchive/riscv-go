@@ -35,9 +35,9 @@ import (
 	"cmd/internal/obj"
 	"cmd/internal/sys"
 	"flag"
-	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -48,7 +48,9 @@ var (
 )
 
 func init() {
+	flag.Var(&Linkmode, "linkmode", "set link `mode`")
 	flag.Var(&Buildmode, "buildmode", "set build `mode`")
+	flag.Var(&Headtype, "H", "set header `type`")
 	flag.Var(&rpath, "r", "set the ELF dynamic linker search `path` to dir1:dir2:...")
 }
 
@@ -58,7 +60,6 @@ var (
 
 	flagOutfile    = flag.String("o", "", "write output to `file`")
 	FlagLinkshared = flag.Bool("linkshared", false, "link against installed Go shared libraries")
-	Buildmode      BuildMode
 
 	flagInstallSuffix = flag.String("installsuffix", "", "set package directory `suffix`")
 	flagDumpDep       = flag.Bool("dumpdep", false, "dump symbol dependency graph")
@@ -102,10 +103,6 @@ func Main() {
 	ctxt := linknew(SysArch)
 	ctxt.Bso = bufio.NewWriter(os.Stdout)
 
-	nerrors = 0
-	HEADTYPE = -1
-	Linkmode = LinkAuto
-
 	// For testing behavior of go command when tools crash silently.
 	// Undocumented, not in standard flag parser to avoid
 	// exposing in usage message.
@@ -116,20 +113,14 @@ func Main() {
 	}
 
 	// TODO(matloob): define these above and then check flag values here
-	if SysArch.Family == sys.AMD64 && obj.Getgoos() == "plan9" {
+	if SysArch.Family == sys.AMD64 && obj.GOOS == "plan9" {
 		flag.BoolVar(&Flag8, "8", false, "use 64-bit addresses in symbol table")
 	}
 	obj.Flagfn1("B", "add an ELF NT_GNU_BUILD_ID `note` when using ELF", addbuildinfo)
 	obj.Flagfn1("L", "add specified `directory` to library path", func(a string) { Lflag(ctxt, a) })
-	obj.Flagfn1("H", "set header `type`", setheadtype)
 	obj.Flagfn0("V", "print version and exit", doversion)
 	obj.Flagfn1("X", "add string value `definition` of the form importpath.name=value", func(s string) { addstrdata1(ctxt, s) })
 	obj.Flagcount("v", "print link trace", &ctxt.Debugvlog)
-	obj.Flagfn1("linkmode", "set link `mode` (internal, external, auto)", setlinkmode)
-	var flagShared bool
-	if SysArch.InFamily(sys.ARM, sys.AMD64) {
-		flag.BoolVar(&flagShared, "shared", false, "generate shared object (implies -linkmode external)")
-	}
 
 	obj.Flagparse(usage)
 
@@ -139,19 +130,12 @@ func Main() {
 	// because we can't/don't build the runtime yet.
 	if SysArch.Family == sys.RISCV {
 		// FIXME: restore default flags when RISC-V has an _rt0 function and can link the runtime
-		*FlagS = !*FlagS  // invert symbol table flag
+		*FlagS = !*FlagS // invert symbol table flag
 		if *flagEntrySymbol == "" {
 			*flagEntrySymbol = "main.main"
 		}
 	}
 
-	if flagShared {
-		if Buildmode == BuildmodeUnset {
-			Buildmode = BuildmodeCShared
-		} else if Buildmode != BuildmodeCShared {
-			Exitf("-shared and -buildmode=%s are incompatible", Buildmode.String())
-		}
-	}
 	if Buildmode == BuildmodeUnset {
 		Buildmode = BuildmodeExe
 	}
@@ -162,7 +146,7 @@ func Main() {
 
 	if *flagOutfile == "" {
 		*flagOutfile = "a.out"
-		if HEADTYPE == obj.Hwindows {
+		if Headtype == obj.Hwindows || Headtype == obj.Hwindowsgui {
 			*flagOutfile += ".exe"
 		}
 	}
@@ -171,14 +155,11 @@ func Main() {
 
 	libinit(ctxt) // creates outfile
 
-	if HEADTYPE == -1 {
-		HEADTYPE = int32(headtype(goos))
-	}
-	ctxt.Headtype = int(HEADTYPE)
-	if headstring == "" {
-		headstring = Headstr(int(HEADTYPE))
+	if Headtype == obj.Hunknown {
+		Headtype.Set(obj.GOOS)
 	}
 
+	ctxt.computeTLSOffset()
 	Thearch.Archinit(ctxt)
 
 	if *FlagLinkshared && !Iself {
@@ -186,10 +167,11 @@ func Main() {
 	}
 
 	if ctxt.Debugvlog != 0 {
-		ctxt.Logf("HEADER = -H%d -T0x%x -D0x%x -R0x%x\n", HEADTYPE, uint64(*FlagTextAddr), uint64(*FlagDataAddr), uint32(*FlagRound))
+		ctxt.Logf("HEADER = -H%d -T0x%x -D0x%x -R0x%x\n", Headtype, uint64(*FlagTextAddr), uint64(*FlagDataAddr), uint32(*FlagRound))
 	}
 
-	if Buildmode == BuildmodeShared {
+	switch Buildmode {
+	case BuildmodeShared:
 		for i := 0; i < flag.NArg(); i++ {
 			arg := flag.Arg(i)
 			parts := strings.SplitN(arg, "=", 2)
@@ -203,7 +185,10 @@ func Main() {
 			pkglistfornote = append(pkglistfornote, '\n')
 			addlibpath(ctxt, "command line", "command line", file, pkgpath, "")
 		}
-	} else {
+	case BuildmodePlugin:
+		pluginName := strings.TrimSuffix(filepath.Base(flag.Arg(0)), ".a")
+		addlibpath(ctxt, "command line", "command line", flag.Arg(0), pluginName, "")
+	default:
 		addlibpath(ctxt, "command line", "command line", flag.Arg(0), "main", "")
 	}
 	ctxt.loadlib()
@@ -214,13 +199,13 @@ func Main() {
 	ctxt.callgraph()
 
 	ctxt.doelf()
-	if HEADTYPE == obj.Hdarwin {
+	if Headtype == obj.Hdarwin {
 		ctxt.domacho()
 	}
 	if SysArch.Family != sys.RISCV {
 		ctxt.dostkcheck()
 	}
-	if HEADTYPE == obj.Hwindows {
+	if Headtype == obj.Hwindows || Headtype == obj.Hwindowsgui {
 		ctxt.dope()
 	}
 	ctxt.addexport()
@@ -243,104 +228,13 @@ func Main() {
 	ctxt.archive()
 	if ctxt.Debugvlog != 0 {
 		ctxt.Logf("%5.2f cpu time\n", obj.Cputime())
-		ctxt.Logf("%d symbols\n", len(ctxt.Allsym))
+		ctxt.Logf("%d symbols\n", len(ctxt.Syms.Allsym))
 		ctxt.Logf("%d liveness data\n", liveness)
 	}
 
 	ctxt.Bso.Flush()
 
 	errorexit()
-}
-
-// A BuildMode indicates the sort of object we are building:
-//   "exe": build a main package and everything it imports into an executable.
-//   "c-shared": build a main package, plus all packages that it imports, into a
-//     single C shared library. The only callable symbols will be those functions
-//     marked as exported.
-//   "shared": combine all packages passed on the command line, and their
-//     dependencies, into a single shared library that will be used when
-//     building with the -linkshared option.
-type BuildMode uint8
-
-const (
-	BuildmodeUnset BuildMode = iota
-	BuildmodeExe
-	BuildmodePIE
-	BuildmodeCArchive
-	BuildmodeCShared
-	BuildmodeShared
-)
-
-func (mode *BuildMode) Set(s string) error {
-	goos := obj.Getgoos()
-	goarch := obj.Getgoarch()
-	badmode := func() error {
-		return fmt.Errorf("buildmode %s not supported on %s/%s", s, goos, goarch)
-	}
-	switch s {
-	default:
-		return fmt.Errorf("invalid buildmode: %q", s)
-	case "exe":
-		*mode = BuildmodeExe
-	case "pie":
-		switch goos {
-		case "android", "linux":
-		default:
-			return badmode()
-		}
-		*mode = BuildmodePIE
-	case "c-archive":
-		switch goos {
-		case "darwin", "linux":
-		case "windows":
-			switch goarch {
-			case "amd64", "386":
-			default:
-				return badmode()
-			}
-		default:
-			return badmode()
-		}
-		*mode = BuildmodeCArchive
-	case "c-shared":
-		switch goarch {
-		case "386", "amd64", "arm", "arm64":
-		default:
-			return badmode()
-		}
-		*mode = BuildmodeCShared
-	case "shared":
-		switch goos {
-		case "linux":
-			switch goarch {
-			case "386", "amd64", "arm", "arm64", "ppc64le", "s390x":
-			default:
-				return badmode()
-			}
-		default:
-			return badmode()
-		}
-		*mode = BuildmodeShared
-	}
-	return nil
-}
-
-func (mode *BuildMode) String() string {
-	switch *mode {
-	case BuildmodeUnset:
-		return "" // avoid showing a default in usage message
-	case BuildmodeExe:
-		return "exe"
-	case BuildmodePIE:
-		return "pie"
-	case BuildmodeCArchive:
-		return "c-archive"
-	case BuildmodeCShared:
-		return "c-shared"
-	case BuildmodeShared:
-		return "shared"
-	}
-	return fmt.Sprintf("BuildMode(%d)", uint8(*mode))
 }
 
 type Rpath struct {

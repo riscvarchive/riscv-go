@@ -218,8 +218,8 @@ TEXT runtime·sigaction(SB),NOSPLIT,$-8
 	MOVL	$0xf1, 0xf1		// crash
 	RET
 
-TEXT runtime·sigprocmask(SB),NOSPLIT,$0
-	MOVL	mode+0(FP), DI		// arg 1 - how
+TEXT runtime·obsdsigprocmask(SB),NOSPLIT,$0
+	MOVL	how+0(FP), DI		// arg 1 - how
 	MOVL	new+4(FP), SI		// arg 2 - set
 	MOVL	$48, AX			// sys_sigprocmask
 	SYSCALL
@@ -278,8 +278,8 @@ TEXT runtime·madvise(SB),NOSPLIT,$0
 	RET
 
 TEXT runtime·sigaltstack(SB),NOSPLIT,$-8
-	MOVQ	new+8(SP), DI		// arg 1 - nss
-	MOVQ	old+16(SP), SI		// arg 2 - oss
+	MOVQ	new+0(FP), DI		// arg 1 - nss
+	MOVQ	old+8(FP), SI		// arg 2 - oss
 	MOVQ	$288, AX		// sys_sigaltstack
 	SYSCALL
 	JCC	2(PC)

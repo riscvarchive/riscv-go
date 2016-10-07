@@ -271,6 +271,7 @@ E4:	MOVD R4, c+56(FP)	// return c
 // func shlVU(z, x []Word, s uint) (c Word)
 TEXT ·shlVU(SB),NOSPLIT,$0
 	MOVD z_len+8(FP), R5
+	MOVD $0, R0
 	SUB  $1, R5             // n--
 	BLT  X8b                // n < 0        (n <= 0)
 
@@ -358,6 +359,7 @@ E864:	CMPBGT R5, R0, L864     // i < n-1
 // func shrVU(z, x []Word, s uint) (c Word)
 TEXT ·shrVU(SB),NOSPLIT,$0
 	MOVD z_len+8(FP), R5
+	MOVD $0, R0
 	SUB  $1, R5             // n--
 	BLT  X9b                // n < 0        (n <= 0)
 
@@ -557,9 +559,9 @@ E7:	SUB  $1, R7		// i--
 
 // func bitLen(x Word) (n int)
 TEXT ·bitLen(SB),NOSPLIT,$0
-	MOVD x+0(FP), R2
-	WORD $0xb9830022 // FLOGR R2,R2
-	MOVD $64, R3
-	SUB  R2, R3
-	MOVD R3, n+8(FP)
+	MOVD  x+0(FP), R2
+	FLOGR R2, R2 // clobbers R3
+	MOVD  $64, R3
+	SUB   R2, R3
+	MOVD  R3, n+8(FP)
 	RET
