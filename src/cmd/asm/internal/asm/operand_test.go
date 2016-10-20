@@ -5,7 +5,6 @@
 package asm
 
 import (
-	"os"
 	"testing"
 
 	"cmd/asm/internal/arch"
@@ -16,8 +15,8 @@ import (
 // A simple in-out test: Do we print what we parse?
 
 func setArch(goarch string) (*arch.Arch, *obj.Link) {
-	os.Setenv("GOOS", "linux") // obj can handle this OS for all architectures.
-	os.Setenv("GOARCH", goarch)
+	obj.GOOS = "linux" // obj can handle this OS for all architectures.
+	obj.GOARCH = goarch
 	architecture := arch.Set(goarch)
 	if architecture == nil {
 		panic("asm: unrecognized architecture " + goarch)
@@ -341,6 +340,38 @@ var ppc64OperandTests = []operandTest{
 	{"6(PC)", "6(PC)"},
 	{"CR7", "CR7"},
 	{"CTR", "CTR"},
+	{"V0", "V0"},
+	{"V1", "V1"},
+	{"V2", "V2"},
+	{"V3", "V3"},
+	{"V4", "V4"},
+	{"V5", "V5"},
+	{"V6", "V6"},
+	{"V7", "V7"},
+	{"V8", "V8"},
+	{"V9", "V9"},
+	{"V10", "V10"},
+	{"V11", "V11"},
+	{"V12", "V12"},
+	{"V13", "V13"},
+	{"V14", "V14"},
+	{"V15", "V15"},
+	{"V16", "V16"},
+	{"V17", "V17"},
+	{"V18", "V18"},
+	{"V19", "V19"},
+	{"V20", "V20"},
+	{"V21", "V21"},
+	{"V22", "V22"},
+	{"V23", "V23"},
+	{"V24", "V24"},
+	{"V25", "V25"},
+	{"V26", "V26"},
+	{"V27", "V27"},
+	{"V28", "V28"},
+	{"V29", "V29"},
+	{"V30", "V30"},
+	{"V31", "V31"},
 	{"F14", "F14"},
 	{"F15", "F15"},
 	{"F16", "F16"},

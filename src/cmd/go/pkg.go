@@ -776,7 +776,7 @@ func (p *Package) load(stk *importStack, bp *build.Package, err error) *Package 
 	useBindir := p.Name == "main"
 	if !p.Standard {
 		switch buildBuildmode {
-		case "c-archive", "c-shared":
+		case "c-archive", "c-shared", "plugin":
 			useBindir = false
 		}
 	}
@@ -847,10 +847,11 @@ func (p *Package) load(stk *importStack, bp *build.Package, err error) *Package 
 		importPaths = append(importPaths, "syscall")
 	}
 
-	// Currently build modes c-shared, pie, and -linkshared force
+	// Currently build modes c-shared, pie, plugin, and -linkshared force
 	// external linking mode, and external linking mode forces an
 	// import of runtime/cgo.
-	if p.Name == "main" && !p.Goroot && (buildBuildmode == "c-shared" || buildBuildmode == "pie" || buildLinkshared) {
+	pieCgo := buildBuildmode == "pie" && (buildContext.GOOS != "linux" || buildContext.GOARCH != "amd64")
+	if p.Name == "main" && !p.Goroot && (buildBuildmode == "c-shared" || buildBuildmode == "plugin" || pieCgo || buildLinkshared) {
 		importPaths = append(importPaths, "runtime/cgo")
 	}
 

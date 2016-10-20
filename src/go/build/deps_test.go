@@ -59,7 +59,6 @@ var pkgDeps = map[string][]string{
 	"math":          {"unsafe"},
 	"math/cmplx":    {"math"},
 	"math/rand":     {"L0", "math"},
-	"sort":          {},
 	"strconv":       {"L0", "unicode/utf8", "math"},
 	"unicode/utf16": {},
 	"unicode/utf8":  {},
@@ -109,6 +108,7 @@ var pkgDeps = map[string][]string{
 	"image/color":         {"L2"},                // interfaces
 	"image/color/palette": {"L2", "image/color"},
 	"reflect":             {"L2"},
+	"sort":                {"reflect"},
 
 	"L3": {
 		"L2",
@@ -228,8 +228,8 @@ var pkgDeps = map[string][]string{
 	"compress/lzw":             {"L4"},
 	"compress/zlib":            {"L4", "compress/flate"},
 	"context":                  {"errors", "fmt", "reflect", "sync", "time"},
-	"database/sql":             {"L4", "container/list", "database/sql/driver"},
-	"database/sql/driver":      {"L4", "time"},
+	"database/sql":             {"L4", "container/list", "context", "database/sql/driver"},
+	"database/sql/driver":      {"L4", "context", "time"},
 	"debug/dwarf":              {"L4"},
 	"debug/elf":                {"L4", "OS", "debug/dwarf", "compress/zlib"},
 	"debug/gosym":              {"L4"},
@@ -261,6 +261,7 @@ var pkgDeps = map[string][]string{
 	"mime/quotedprintable":     {"L4"},
 	"net/internal/socktest":    {"L4", "OS", "syscall"},
 	"net/url":                  {"L4"},
+	"plugin":                   {"L0", "OS", "CGO"},
 	"text/scanner":             {"L4", "OS"},
 	"text/template/parse":      {"L4"},
 
@@ -297,7 +298,7 @@ var pkgDeps = map[string][]string{
 		"context", "math/rand", "os", "sort", "syscall", "time",
 		"internal/nettrace",
 		"internal/syscall/windows", "internal/singleflight", "internal/race",
-		"golang_org/x/net/route",
+		"golang_org/x/net/lif", "golang_org/x/net/route",
 	},
 
 	// NET enables use of basic network-related packages.
@@ -375,13 +376,21 @@ var pkgDeps = map[string][]string{
 	// HTTP, kingpin of dependencies.
 	"net/http": {
 		"L4", "NET", "OS",
-		"context", "compress/gzip", "container/list", "crypto/tls",
-		"mime/multipart", "runtime/debug",
-		"net/http/internal",
+		"compress/gzip",
+		"container/list",
+		"context",
+		"crypto/rand",
+		"crypto/tls",
 		"golang_org/x/net/http2/hpack",
+		"golang_org/x/net/idna",
 		"golang_org/x/net/lex/httplex",
+		"golang_org/x/text/unicode/norm",
+		"golang_org/x/text/width",
 		"internal/nettrace",
+		"mime/multipart",
 		"net/http/httptrace",
+		"net/http/internal",
+		"runtime/debug",
 	},
 	"net/http/internal":  {"L4"},
 	"net/http/httptrace": {"context", "internal/nettrace", "net", "reflect", "time"},

@@ -99,7 +99,7 @@ func hostArchive(ctxt *Link, name string) {
 	any := true
 	for any {
 		var load []uint64
-		for _, s := range ctxt.Allsym {
+		for _, s := range ctxt.Syms.Allsym {
 			for _, r := range s.R {
 				if r.Sym != nil && r.Sym.Type&obj.SMASK == obj.SXREF {
 					if off := armap[r.Sym.Name]; off != 0 && !loaded[off] {
@@ -165,7 +165,7 @@ func readArmap(filename string, f *bio.Reader, arhdr ArHdr) archiveMap {
 
 		// For Mach-O and PE/386 files we strip a leading
 		// underscore from the symbol name.
-		if goos == "darwin" || (goos == "windows" && goarch == "386") {
+		if obj.GOOS == "darwin" || (obj.GOOS == "windows" && obj.GOARCH == "386") {
 			if name[0] == '_' && len(name) > 1 {
 				name = name[1:]
 			}

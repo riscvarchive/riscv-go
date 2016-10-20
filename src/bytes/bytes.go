@@ -131,14 +131,12 @@ func LastIndexByte(s []byte, c byte) int {
 // It returns the byte index of the first occurrence in s of the given rune.
 // It returns -1 if rune is not present in s.
 func IndexRune(s []byte, r rune) int {
-	for i := 0; i < len(s); {
-		r1, size := utf8.DecodeRune(s[i:])
-		if r == r1 {
-			return i
-		}
-		i += size
+	if r < utf8.RuneSelf {
+		return IndexByte(s, byte(r))
 	}
-	return -1
+	var b [utf8.UTFMax]byte
+	n := utf8.EncodeRune(b[:], r)
+	return Index(s, b[:n])
 }
 
 // IndexAny interprets s as a sequence of UTF-8-encoded Unicode code points.
@@ -367,7 +365,20 @@ func Map(mapping func(r rune) rune, s []byte) []byte {
 }
 
 // Repeat returns a new byte slice consisting of count copies of b.
+//
+// It panics if count is negative or if
+// the result of (len(b) * count) overflows.
 func Repeat(b []byte, count int) []byte {
+	// Since we cannot return an error on overflow,
+	// we should panic if the repeat will generate
+	// an overflow.
+	// See Issue golang.org/issue/16237.
+	if count < 0 {
+		panic("bytes: negative Repeat count")
+	} else if count > 0 && len(b)*count/count != len(b) {
+		panic("bytes: Repeat count causes overflow")
+	}
+
 	nb := make([]byte, len(b)*count)
 	bp := copy(nb, b)
 	for bp < len(nb) {

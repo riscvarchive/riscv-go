@@ -6,6 +6,7 @@ package strings_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"reflect"
@@ -86,32 +87,44 @@ var indexTests = []IndexTest{
 	{"32145678", "01234567", -1},
 	{"01234567", "01234567", 0},
 	{"x01234567", "01234567", 1},
+	{"x0123456x01234567", "01234567", 9},
 	{"xx01234567"[:9], "01234567", -1},
 	{"", "0123456789", -1},
 	{"3214567844", "0123456789", -1},
 	{"0123456789", "0123456789", 0},
 	{"x0123456789", "0123456789", 1},
+	{"x012345678x0123456789", "0123456789", 11},
 	{"xyz0123456789"[:12], "0123456789", -1},
 	{"x01234567x89", "0123456789", -1},
 	{"", "0123456789012345", -1},
 	{"3214567889012345", "0123456789012345", -1},
 	{"0123456789012345", "0123456789012345", 0},
 	{"x0123456789012345", "0123456789012345", 1},
+	{"x012345678901234x0123456789012345", "0123456789012345", 17},
 	{"", "01234567890123456789", -1},
 	{"32145678890123456789", "01234567890123456789", -1},
 	{"01234567890123456789", "01234567890123456789", 0},
 	{"x01234567890123456789", "01234567890123456789", 1},
+	{"x0123456789012345678x01234567890123456789", "01234567890123456789", 21},
 	{"xyz01234567890123456789"[:22], "01234567890123456789", -1},
 	{"", "0123456789012345678901234567890", -1},
 	{"321456788901234567890123456789012345678911", "0123456789012345678901234567890", -1},
 	{"0123456789012345678901234567890", "0123456789012345678901234567890", 0},
 	{"x0123456789012345678901234567890", "0123456789012345678901234567890", 1},
+	{"x012345678901234567890123456789x0123456789012345678901234567890", "0123456789012345678901234567890", 32},
 	{"xyz0123456789012345678901234567890"[:33], "0123456789012345678901234567890", -1},
 	{"", "01234567890123456789012345678901", -1},
 	{"32145678890123456789012345678901234567890211", "01234567890123456789012345678901", -1},
 	{"01234567890123456789012345678901", "01234567890123456789012345678901", 0},
 	{"x01234567890123456789012345678901", "01234567890123456789012345678901", 1},
+	{"x0123456789012345678901234567890x01234567890123456789012345678901", "01234567890123456789012345678901", 33},
 	{"xyz01234567890123456789012345678901"[:34], "01234567890123456789012345678901", -1},
+	{"xxxxxx012345678901234567890123456789012345678901234567890123456789012", "012345678901234567890123456789012345678901234567890123456789012", 6},
+	{"", "0123456789012345678901234567890123456789", -1},
+	{"xx012345678901234567890123456789012345678901234567890123456789012", "0123456789012345678901234567890123456789", 2},
+	{"xx012345678901234567890123456789012345678901234567890123456789012"[:41], "0123456789012345678901234567890123456789", -1},
+	{"xx012345678901234567890123456789012345678901234567890123456789012", "0123456789012345678901234567890123456xxx", -1},
+	{"xx0123456789012345678901234567890123456789012345678901234567890120123456789012345678901234567890123456xxx", "0123456789012345678901234567890123456xxx", 65},
 }
 
 var lastIndexTests = []IndexTest{
@@ -244,6 +257,20 @@ func TestIndexRune(t *testing.T) {
 			t.Errorf("IndexRune(%q,%d)= %v; want %v", test.s, test.rune, actual, test.out)
 		}
 	}
+
+	haystack := "test世界"
+	allocs := testing.AllocsPerRun(1000, func() {
+		if i := IndexRune(haystack, 's'); i != 2 {
+			t.Fatalf("'s' at %d; want 2", i)
+		}
+		if i := IndexRune(haystack, '世'); i != 4 {
+			t.Fatalf("'世' at %d; want 4", i)
+		}
+	})
+
+	if allocs != 0 {
+		t.Errorf(`expected no allocations, got %f`, allocs)
+	}
 }
 
 const benchmarkString = "some_text=some☺value"
@@ -254,6 +281,17 @@ func BenchmarkIndexRune(b *testing.B) {
 	}
 	for i := 0; i < b.N; i++ {
 		IndexRune(benchmarkString, '☺')
+	}
+}
+
+var benchmarkLongString = Repeat(" ", 100) + benchmarkString
+
+func BenchmarkIndexRuneLongString(b *testing.B) {
+	if got := IndexRune(benchmarkLongString, '☺'); got != 114 {
+		b.Fatalf("wrong index: expected 114, got=%d", got)
+	}
+	for i := 0; i < b.N; i++ {
+		IndexRune(benchmarkLongString, '☺')
 	}
 }
 
@@ -855,6 +893,54 @@ func TestRepeat(t *testing.T) {
 	}
 }
 
+func repeat(s string, count int) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			switch v := r.(type) {
+			case error:
+				err = v
+			default:
+				err = fmt.Errorf("%s", v)
+			}
+		}
+	}()
+
+	Repeat(s, count)
+
+	return
+}
+
+// See Issue golang.org/issue/16237
+func TestRepeatCatchesOverflow(t *testing.T) {
+	tests := [...]struct {
+		s      string
+		count  int
+		errStr string
+	}{
+		0: {"--", -2147483647, "negative"},
+		1: {"", int(^uint(0) >> 1), ""},
+		2: {"-", 10, ""},
+		3: {"gopher", 0, ""},
+		4: {"-", -1, "negative"},
+		5: {"--", -102, "negative"},
+		6: {string(make([]byte, 255)), int((^uint(0))/255 + 1), "overflow"},
+	}
+
+	for i, tt := range tests {
+		err := repeat(tt.s, tt.count)
+		if tt.errStr == "" {
+			if err != nil {
+				t.Errorf("#%d panicked %v", i, err)
+			}
+			continue
+		}
+
+		if err == nil || !Contains(err.Error(), tt.errStr) {
+			t.Errorf("#%d expected %q got %q", i, tt.errStr, err)
+		}
+	}
+}
+
 func runesEqual(a, b []rune) bool {
 	if len(a) != len(b) {
 		return false
@@ -1290,6 +1376,9 @@ func benchmarkCountHard(b *testing.B, sep string) {
 func BenchmarkIndexHard1(b *testing.B) { benchmarkIndexHard(b, "<>") }
 func BenchmarkIndexHard2(b *testing.B) { benchmarkIndexHard(b, "</pre>") }
 func BenchmarkIndexHard3(b *testing.B) { benchmarkIndexHard(b, "<b>hello world</b>") }
+func BenchmarkIndexHard4(b *testing.B) {
+	benchmarkIndexHard(b, "<pre><b>hello</b><strong>world</strong></pre>")
+}
 
 func BenchmarkLastIndexHard1(b *testing.B) { benchmarkLastIndexHard(b, "<>") }
 func BenchmarkLastIndexHard2(b *testing.B) { benchmarkLastIndexHard(b, "</pre>") }

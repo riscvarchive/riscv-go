@@ -24,14 +24,13 @@ const (
 // size variants of an operation even if we just use a subset.
 //
 // The table is formatted for 8-space tabs.
-var progtable = [arm64.ALAST & obj.AMask]obj.ProgInfo{
+var progtable = [arm64.ALAST & obj.AMask]gc.ProgInfo{
 	obj.ATYPE:     {Flags: gc.Pseudo | gc.Skip},
 	obj.ATEXT:     {Flags: gc.Pseudo},
 	obj.AFUNCDATA: {Flags: gc.Pseudo},
 	obj.APCDATA:   {Flags: gc.Pseudo},
 	obj.AUNDEF:    {Flags: gc.Break},
 	obj.AUSEFIELD: {Flags: gc.OK},
-	obj.ACHECKNIL: {Flags: gc.LeftRead},
 	obj.AVARDEF:   {Flags: gc.Pseudo | gc.RightWrite},
 	obj.AVARKILL:  {Flags: gc.Pseudo | gc.RightWrite},
 	obj.AVARLIVE:  {Flags: gc.Pseudo | gc.LeftRead},
@@ -78,6 +77,10 @@ var progtable = [arm64.ALAST & obj.AMask]obj.ProgInfo{
 	arm64.AREV & obj.AMask:    {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite},
 	arm64.AREVW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite},
 	arm64.AREV16W & obj.AMask: {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite},
+	arm64.ARBIT & obj.AMask:   {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite},
+	arm64.ARBITW & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite},
+	arm64.ACLZ & obj.AMask:    {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite},
+	arm64.ACLZW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite},
 
 	// Floating point.
 	arm64.AFADDD & obj.AMask:  {Flags: gc.SizeD | gc.LeftRead | gc.RegRead | gc.RightWrite},
@@ -119,15 +122,25 @@ var progtable = [arm64.ALAST & obj.AMask]obj.ProgInfo{
 	arm64.AUCVTFWS & obj.AMask: {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Conv},
 
 	// Moves
-	arm64.AMOVB & obj.AMask:  {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVBU & obj.AMask: {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVH & obj.AMask:  {Flags: gc.SizeW | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVHU & obj.AMask: {Flags: gc.SizeW | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVW & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVWU & obj.AMask: {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AMOVD & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
-	arm64.AFMOVS & obj.AMask: {Flags: gc.SizeF | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
-	arm64.AFMOVD & obj.AMask: {Flags: gc.SizeD | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.AMOVB & obj.AMask:   {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVBU & obj.AMask:  {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVH & obj.AMask:   {Flags: gc.SizeW | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVHU & obj.AMask:  {Flags: gc.SizeW | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVWU & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AMOVD & obj.AMask:   {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.AFMOVS & obj.AMask:  {Flags: gc.SizeF | gc.LeftRead | gc.RightWrite | gc.Move | gc.Conv},
+	arm64.AFMOVD & obj.AMask:  {Flags: gc.SizeD | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ALDARW & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ALDAR & obj.AMask:   {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ALDAXRB & obj.AMask: {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ALDAXRW & obj.AMask: {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ALDAXR & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ASTLRW & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ASTLR & obj.AMask:   {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ASTLXRB & obj.AMask: {Flags: gc.SizeB | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ASTLXRW & obj.AMask: {Flags: gc.SizeL | gc.LeftRead | gc.RightWrite | gc.Move},
+	arm64.ASTLXR & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.RightWrite | gc.Move},
 
 	// Jumps
 	arm64.AB & obj.AMask:    {Flags: gc.Jump | gc.Break},
@@ -149,9 +162,8 @@ var progtable = [arm64.ALAST & obj.AMask]obj.ProgInfo{
 	obj.ADUFFCOPY:           {Flags: gc.Call},
 }
 
-func proginfo(p *obj.Prog) {
-	info := &p.Info
-	*info = progtable[p.As&obj.AMask]
+func proginfo(p *obj.Prog) gc.ProgInfo {
+	info := progtable[p.As&obj.AMask]
 	if info.Flags == 0 {
 		gc.Fatalf("proginfo: unknown instruction %v", p)
 	}
@@ -161,34 +173,10 @@ func proginfo(p *obj.Prog) {
 		info.Flags |= gc.RightRead /*CanRegRead |*/
 	}
 
-	if (p.From.Type == obj.TYPE_MEM || p.From.Type == obj.TYPE_ADDR) && p.From.Reg != 0 {
-		info.Regindex |= RtoB(int(p.From.Reg))
-		if p.Scond != 0 {
-			info.Regset |= RtoB(int(p.From.Reg))
-		}
-	}
-
-	if (p.To.Type == obj.TYPE_MEM || p.To.Type == obj.TYPE_ADDR) && p.To.Reg != 0 {
-		info.Regindex |= RtoB(int(p.To.Reg))
-		if p.Scond != 0 {
-			info.Regset |= RtoB(int(p.To.Reg))
-		}
-	}
-
 	if p.From.Type == obj.TYPE_ADDR && p.From.Sym != nil && (info.Flags&gc.LeftRead != 0) {
 		info.Flags &^= gc.LeftRead
 		info.Flags |= gc.LeftAddr
 	}
 
-	if p.As == obj.ADUFFZERO {
-		info.Reguse |= RtoB(arm64.REGRT1)
-		info.Regset |= RtoB(arm64.REGRT1)
-	}
-
-	if p.As == obj.ADUFFCOPY {
-		// TODO(austin) Revisit when duffcopy is implemented
-		info.Reguse |= RtoB(arm64.REGRT1) | RtoB(arm64.REGRT2) | RtoB(arm64.REG_R5)
-
-		info.Regset |= RtoB(arm64.REGRT1) | RtoB(arm64.REGRT2)
-	}
+	return info
 }

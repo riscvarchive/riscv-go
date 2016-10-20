@@ -303,6 +303,7 @@ var genericOps = []opData{
 	{name: "SP"},                 // stack pointer
 	{name: "SB", typ: "Uintptr"}, // static base pointer (a.k.a. globals pointer)
 	{name: "Func", aux: "Sym"},   // entry address of a function
+	{name: "Invalid"},            // unused value
 
 	// Memory operations
 	{name: "Load", argLength: 2},                                  // Load from arg0.  arg1=memory
@@ -313,11 +314,11 @@ var genericOps = []opData{
 	// Function calls. Arguments to the call have already been written to the stack.
 	// Return values appear on the stack. The method receiver, if any, is treated
 	// as a phantom first argument.
-	{name: "ClosureCall", argLength: 3, aux: "Int64"}, // arg0=code pointer, arg1=context ptr, arg2=memory.  auxint=arg size.  Returns memory.
-	{name: "StaticCall", argLength: 1, aux: "SymOff"}, // call function aux.(*gc.Sym), arg0=memory.  auxint=arg size.  Returns memory.
-	{name: "DeferCall", argLength: 1, aux: "Int64"},   // defer call.  arg0=memory, auxint=arg size.  Returns memory.
-	{name: "GoCall", argLength: 1, aux: "Int64"},      // go call.  arg0=memory, auxint=arg size.  Returns memory.
-	{name: "InterCall", argLength: 2, aux: "Int64"},   // interface call.  arg0=code pointer, arg1=memory, auxint=arg size.  Returns memory.
+	{name: "ClosureCall", argLength: 3, aux: "Int64", call: true}, // arg0=code pointer, arg1=context ptr, arg2=memory.  auxint=arg size.  Returns memory.
+	{name: "StaticCall", argLength: 1, aux: "SymOff", call: true}, // call function aux.(*gc.Sym), arg0=memory.  auxint=arg size.  Returns memory.
+	{name: "DeferCall", argLength: 1, aux: "Int64", call: true},   // defer call.  arg0=memory, auxint=arg size.  Returns memory.
+	{name: "GoCall", argLength: 1, aux: "Int64", call: true},      // go call.  arg0=memory, auxint=arg size.  Returns memory.
+	{name: "InterCall", argLength: 2, aux: "Int64", call: true},   // interface call.  arg0=code pointer, arg1=memory, auxint=arg size.  Returns memory.
 
 	// Conversions: signed extensions, zero (unsigned) extensions, truncations
 	{name: "SignExt8to16", argLength: 1, typ: "Int16"},
@@ -354,7 +355,7 @@ var genericOps = []opData{
 	{name: "IsNonNil", argLength: 1, typ: "Bool"},        // arg0 != nil
 	{name: "IsInBounds", argLength: 2, typ: "Bool"},      // 0 <= arg0 < arg1. arg1 is guaranteed >= 0.
 	{name: "IsSliceInBounds", argLength: 2, typ: "Bool"}, // 0 <= arg0 <= arg1. arg1 is guaranteed >= 0.
-	{name: "NilCheck", argLength: 2, typ: "Void"},        // arg0=ptr, arg1=mem. Panics if arg0 is nil, returns void.
+	{name: "NilCheck", argLength: 2, typ: "Void"},        // arg0=ptr, arg1=mem. Panics if arg0 is nil. Returns void.
 
 	// Pseudo-ops
 	{name: "GetG", argLength: 1}, // runtime.getg() (read g pointer). arg0=mem
@@ -478,9 +479,7 @@ var genericOps = []opData{
 var genericBlocks = []blockData{
 	{name: "Plain"},  // a single successor
 	{name: "If"},     // 2 successors, if control goto Succs[0] else goto Succs[1]
-	{name: "Call"},   // 1 successor, control is call op (of memory type)
 	{name: "Defer"},  // 2 successors, Succs[0]=defer queued, Succs[1]=defer recovered. control is call op (of memory type)
-	{name: "Check"},  // 1 successor, control is nilcheck op (of void type)
 	{name: "Ret"},    // no successors, control value is memory result
 	{name: "RetJmp"}, // no successors, jumps to b.Aux.(*gc.Sym)
 	{name: "Exit"},   // no successors, control value generates a panic

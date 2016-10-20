@@ -89,6 +89,9 @@ type Edge struct {
 func (e Edge) Block() *Block {
 	return e.b
 }
+func (e Edge) Index() int {
+	return e.i
+}
 
 //     kind           control    successors
 //   ------------------------------------------
@@ -144,6 +147,7 @@ func (b *Block) AddEdgeTo(c *Block) {
 	j := len(c.Preds)
 	b.Succs = append(b.Succs, Edge{c, j})
 	c.Preds = append(c.Preds, Edge{b, i})
+	b.Func.invalidateCFG()
 }
 
 // removePred removes the ith input edge from b.
@@ -159,6 +163,7 @@ func (b *Block) removePred(i int) {
 	}
 	b.Preds[n] = Edge{}
 	b.Preds = b.Preds[:n]
+	b.Func.invalidateCFG()
 }
 
 // removeSucc removes the ith output edge from b.
@@ -174,6 +179,7 @@ func (b *Block) removeSucc(i int) {
 	}
 	b.Succs[n] = Edge{}
 	b.Succs = b.Succs[:n]
+	b.Func.invalidateCFG()
 }
 
 func (b *Block) swapSuccessors() {
@@ -189,10 +195,9 @@ func (b *Block) swapSuccessors() {
 	b.Likely *= -1
 }
 
-func (b *Block) Logf(msg string, args ...interface{})           { b.Func.Logf(msg, args...) }
-func (b *Block) Log() bool                                      { return b.Func.Log() }
-func (b *Block) Fatalf(msg string, args ...interface{})         { b.Func.Fatalf(msg, args...) }
-func (b *Block) Unimplementedf(msg string, args ...interface{}) { b.Func.Unimplementedf(msg, args...) }
+func (b *Block) Logf(msg string, args ...interface{})   { b.Func.Logf(msg, args...) }
+func (b *Block) Log() bool                              { return b.Func.Log() }
+func (b *Block) Fatalf(msg string, args ...interface{}) { b.Func.Fatalf(msg, args...) }
 
 type BranchPrediction int8
 

@@ -37,14 +37,7 @@ import (
 	"fmt"
 )
 
-// Reading object files.
-
-func Main() {
-	linkarchinit()
-	ld.Main()
-}
-
-func linkarchinit() {
+func Init() {
 	ld.SysArch = sys.ArchS390X
 
 	ld.Thearch.Funcalign = FuncAlign
@@ -80,19 +73,9 @@ func linkarchinit() {
 }
 
 func archinit(ctxt *ld.Link) {
-	// getgoextlinkenabled is based on GO_EXTLINK_ENABLED when
-	// Go was built; see ../../make.bash.
-	if ld.Linkmode == ld.LinkAuto && obj.Getgoextlinkenabled() == "0" {
-		ld.Linkmode = ld.LinkInternal
-	}
-
-	if ld.Buildmode == ld.BuildmodeCArchive || ld.Buildmode == ld.BuildmodeCShared || ctxt.DynlinkingGo() {
-		ld.Linkmode = ld.LinkExternal
-	}
-
-	switch ld.HEADTYPE {
+	switch ld.Headtype {
 	default:
-		ld.Exitf("unknown -H option: %v", ld.HEADTYPE)
+		ld.Exitf("unknown -H option: %v", ld.Headtype)
 
 	case obj.Hlinux: // s390x ELF
 		ld.Elfinit(ctxt)

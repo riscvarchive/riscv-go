@@ -250,7 +250,6 @@ var passes = [...]pass{
 	{name: "opt", fn: opt, required: true},               // TODO: split required rules and optimizing rules
 	{name: "zero arg cse", fn: zcse, required: true},     // required to merge OpSB values
 	{name: "opt deadcode", fn: deadcode, required: true}, // remove any blocks orphaned during opt
-	{name: "generic domtree", fn: domTree},
 	{name: "generic cse", fn: cse},
 	{name: "phiopt", fn: phiopt},
 	{name: "nilcheckelim", fn: nilcheckelim},
@@ -274,8 +273,9 @@ var passes = [...]pass{
 	{name: "late deadcode", fn: deadcode},
 	{name: "critical", fn: critical, required: true}, // remove critical edges
 	{name: "likelyadjust", fn: likelyadjust},
-	{name: "layout", fn: layout, required: true},       // schedule blocks
-	{name: "schedule", fn: schedule, required: true},   // schedule values
+	{name: "layout", fn: layout, required: true},     // schedule blocks
+	{name: "schedule", fn: schedule, required: true}, // schedule values
+	{name: "late nilcheck", fn: nilcheckelim2},
 	{name: "flagalloc", fn: flagalloc, required: true}, // allocate flags register
 	{name: "regalloc", fn: regalloc, required: true},   // allocate int & float registers + stack slots
 	{name: "trim", fn: trim},                           // remove empty blocks
@@ -307,12 +307,6 @@ var passOrder = [...]constraint{
 	{"opt", "nilcheckelim"},
 	// tighten should happen before lowering to avoid splitting naturally paired instructions such as CMP/SET
 	{"tighten", "lower"},
-	// cse, phiopt, nilcheckelim, prove and loopbce share idom.
-	{"generic domtree", "generic cse"},
-	{"generic domtree", "phiopt"},
-	{"generic domtree", "nilcheckelim"},
-	{"generic domtree", "prove"},
-	{"generic domtree", "loopbce"},
 	// tighten will be most effective when as many values have been removed as possible
 	{"generic deadcode", "tighten"},
 	{"generic cse", "tighten"},
@@ -329,6 +323,8 @@ var passOrder = [...]constraint{
 	// checkLower must run after lowering & subsequent dead code elim
 	{"lower", "checkLower"},
 	{"lowered deadcode", "checkLower"},
+	// late nilcheck needs instructions to be scheduled.
+	{"schedule", "late nilcheck"},
 	// flagalloc needs instructions to be scheduled.
 	{"schedule", "flagalloc"},
 	// regalloc needs flags to be allocated first.

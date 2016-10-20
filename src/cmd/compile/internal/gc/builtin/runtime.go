@@ -16,7 +16,6 @@ func newobject(typ *byte) *any
 func panicindex()
 func panicslice()
 func panicdivide()
-func throwreturn()
 func throwinit()
 func panicwrap(string, string, string)
 
@@ -61,8 +60,8 @@ func slicestringcopy(to any, fr any) int
 // interface conversions
 func convI2E(elem any) (ret any)
 func convI2I(typ *byte, elem any) (ret any)
-func convT2E(typ *byte, elem, buf *any) (ret any)
-func convT2I(tab *byte, elem, buf *any) (ret any)
+func convT2E(typ *byte, elem *any) (ret any)
+func convT2I(tab *byte, elem *any) (ret any)
 
 // interface type assertions  x.(T)
 func assertE2E(typ *byte, iface any, ret *any)

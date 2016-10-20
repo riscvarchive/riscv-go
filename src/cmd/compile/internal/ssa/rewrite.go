@@ -189,6 +189,7 @@ func nto(x int64) int64 {
 }
 
 // log2 returns logarithm in base of uint64(n), with log2(0) = -1.
+// Rounds down.
 func log2(n int64) (l int64) {
 	l = -1
 	x := uint64(n)
@@ -226,6 +227,16 @@ func is32Bit(n int64) bool {
 // is16Bit reports whether n can be represented as a signed 16 bit integer.
 func is16Bit(n int64) bool {
 	return n == int64(int16(n))
+}
+
+// is16Bit reports whether n can be represented as an unsigned 16 bit integer.
+func isU16Bit(n int64) bool {
+	return n == int64(uint16(n))
+}
+
+// is20Bit reports whether n can be represented as a signed 20 bit integer.
+func is20Bit(n int64) bool {
+	return -(1<<19) <= n && n < (1<<19)
 }
 
 // b2i translates a boolean value to 0 or 1 for assigning to auxInt.
@@ -347,6 +358,24 @@ found:
 func clobber(v *Value) bool {
 	v.reset(OpInvalid)
 	// Note: leave v.Block intact.  The Block field is used after clobber.
+	return true
+}
+
+// noteRule is an easy way to track if a rule is matched when writing
+// new ones.  Make the rule of interest also conditional on
+//     noteRule("note to self: rule of interest matched")
+// and that message will print when the rule matches.
+func noteRule(s string) bool {
+	println(s)
+	return true
+}
+
+// warnRule generates a compiler debug output with string s when
+// cond is true and the rule is fired.
+func warnRule(cond bool, v *Value, s string) bool {
+	if cond {
+		v.Block.Func.Config.Warnl(v.Line, "removed nil check")
+	}
 	return true
 }
 

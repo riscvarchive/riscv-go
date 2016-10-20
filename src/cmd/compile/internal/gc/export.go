@@ -35,7 +35,7 @@ func exportsym(n *Node) {
 	}
 	if n.Sym.Flags&(SymExport|SymPackage) != 0 {
 		if n.Sym.Flags&SymPackage != 0 {
-			Yyerror("export/package mismatch: %v", n.Sym)
+			yyerror("export/package mismatch: %v", n.Sym)
 		}
 		return
 	}
@@ -116,7 +116,7 @@ func reexportdep(n *Node) {
 			}
 
 			// nodes for method calls.
-			if n.Type == nil || n.Type.Recv() != nil {
+			if n.Type == nil || n.IsMethod() {
 				break
 			}
 			fallthrough
@@ -182,6 +182,7 @@ func reexportdep(n *Node) {
 		ODOTTYPE2,
 		OSTRUCTLIT,
 		OARRAYLIT,
+		OSLICELIT,
 		OPTRLIT,
 		OMAKEMAP,
 		OMAKESLICE,
@@ -290,7 +291,7 @@ func pkgtype(s *Sym) *Type {
 	}
 
 	if s.Def.Type == nil {
-		Yyerror("pkgtype %v", s)
+		yyerror("pkgtype %v", s)
 	}
 	return s.Def.Type
 }
@@ -305,7 +306,7 @@ func importconst(s *Sym, t *Type, n *Node) {
 	}
 
 	if n.Op != OLITERAL {
-		Yyerror("expression must be a constant")
+		yyerror("expression must be a constant")
 		return
 	}
 
@@ -327,10 +328,10 @@ func importconst(s *Sym, t *Type, n *Node) {
 func importvar(s *Sym, t *Type) {
 	importsym(s, ONAME)
 	if s.Def != nil && s.Def.Op == ONAME {
-		if Eqtype(t, s.Def.Type) {
+		if eqtype(t, s.Def.Type) {
 			return
 		}
-		Yyerror("inconsistent definition for var %v during import\n\t%v (in %q)\n\t%v (in %q)", s, s.Def.Type, s.Importdef.Path, t, importpkg.Path)
+		yyerror("inconsistent definition for var %v during import\n\t%v (in %q)\n\t%v (in %q)", s, s.Def.Type, s.Importdef.Path, t, importpkg.Path)
 	}
 
 	n := newname(s)
@@ -339,33 +340,7 @@ func importvar(s *Sym, t *Type) {
 	declare(n, PEXTERN)
 
 	if Debug['E'] != 0 {
-		fmt.Printf("import var %v %v\n", s, Tconv(t, FmtLong))
-	}
-}
-
-// importtype and importer.importtype (bimport.go) need to remain in sync.
-func importtype(pt *Type, t *Type) {
-	// override declaration in unsafe.go for Pointer.
-	// there is no way in Go code to define unsafe.Pointer
-	// so we have to supply it.
-	if incannedimport != 0 && importpkg.Name == "unsafe" && pt.Nod.Sym.Name == "Pointer" {
-		t = Types[TUNSAFEPTR]
-	}
-
-	if pt.Etype == TFORW {
-		n := pt.Nod
-		copytype(pt.Nod, t)
-		pt.Nod = n // unzero nod
-		pt.Sym.Importdef = importpkg
-		pt.Sym.Lastlineno = lineno
-		declare(n, PEXTERN)
-		checkwidth(pt)
-	} else if !Eqtype(pt.Orig, t) {
-		Yyerror("inconsistent definition for type %v during import\n\t%v (in %q)\n\t%v (in %q)", pt.Sym, Tconv(pt, FmtLong), pt.Sym.Importdef.Path, Tconv(t, FmtLong), importpkg.Path)
-	}
-
-	if Debug['E'] != 0 {
-		fmt.Printf("import type %v %v\n", pt, Tconv(t, FmtLong))
+		fmt.Printf("import var %v %L\n", s, t)
 	}
 }
 
@@ -381,7 +356,7 @@ func dumpasmhdr() {
 		}
 		switch n.Op {
 		case OLITERAL:
-			fmt.Fprintf(b, "#define const_%s %v\n", n.Sym.Name, vconv(n.Val(), FmtSharp))
+			fmt.Fprintf(b, "#define const_%s %#v\n", n.Sym.Name, n.Val())
 
 		case OTYPE:
 			t := n.Type

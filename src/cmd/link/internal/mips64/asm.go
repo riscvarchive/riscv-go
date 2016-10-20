@@ -40,8 +40,9 @@ import (
 
 func gentext(ctxt *ld.Link) {}
 
-func adddynrel(ctxt *ld.Link, s *ld.Symbol, r *ld.Reloc) {
+func adddynrel(ctxt *ld.Link, s *ld.Symbol, r *ld.Reloc) bool {
 	log.Fatalf("adddynrel not implemented")
+	return false
 }
 
 func elfreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
@@ -97,7 +98,7 @@ func elfsetupplt(ctxt *ld.Link) {
 	return
 }
 
-func machoreloc1(ctxt *ld.Link, r *ld.Reloc, sectoff int64) int {
+func machoreloc1(s *ld.Symbol, r *ld.Reloc, sectoff int64) int {
 	return -1
 }
 
@@ -115,12 +116,12 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 			rs := r.Sym
 			r.Xadd = r.Add
 			for rs.Outer != nil {
-				r.Xadd += ld.Symaddr(ctxt, rs) - ld.Symaddr(ctxt, rs.Outer)
+				r.Xadd += ld.Symaddr(rs) - ld.Symaddr(rs.Outer)
 				rs = rs.Outer
 			}
 
 			if rs.Type != obj.SHOSTOBJ && rs.Type != obj.SDYNIMPORT && rs.Sect == nil {
-				ctxt.Diag("missing section for %s", rs.Name)
+				ld.Errorf(s, "missing section for %s", rs.Name)
 			}
 			r.Xsym = rs
 
@@ -142,12 +143,12 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		return 0
 
 	case obj.R_GOTOFF:
-		*val = ld.Symaddr(ctxt, r.Sym) + r.Add - ld.Symaddr(ctxt, ld.Linklookup(ctxt, ".got", 0))
+		*val = ld.Symaddr(r.Sym) + r.Add - ld.Symaddr(ctxt.Syms.Lookup(".got", 0))
 		return 0
 
 	case obj.R_ADDRMIPS,
 		obj.R_ADDRMIPSU:
-		t := ld.Symaddr(ctxt, r.Sym) + r.Add
+		t := ld.Symaddr(r.Sym) + r.Add
 		o1 := ld.SysArch.ByteOrder.Uint32(s.P[r.Off:])
 		if r.Type == obj.R_ADDRMIPS {
 			*val = int64(o1&0xffff0000 | uint32(t)&0xffff)
@@ -158,9 +159,9 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 
 	case obj.R_ADDRMIPSTLS:
 		// thread pointer is at 0x7000 offset from the start of TLS data area
-		t := ld.Symaddr(ctxt, r.Sym) + r.Add - 0x7000
+		t := ld.Symaddr(r.Sym) + r.Add - 0x7000
 		if t < -32768 || t >= 32678 {
-			ctxt.Diag("TLS offset out of range %d", t)
+			ld.Errorf(s, "TLS offset out of range %d", t)
 		}
 		o1 := ld.SysArch.ByteOrder.Uint32(s.P[r.Off:])
 		*val = int64(o1&0xffff0000 | uint32(t)&0xffff)
@@ -169,7 +170,7 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 	case obj.R_CALLMIPS,
 		obj.R_JMPMIPS:
 		// Low 26 bits = (S + A) >> 2
-		t := ld.Symaddr(ctxt, r.Sym) + r.Add
+		t := ld.Symaddr(r.Sym) + r.Add
 		o1 := ld.SysArch.ByteOrder.Uint32(s.P[r.Off:])
 		*val = int64(o1&0xfc000000 | uint32(t>>2)&^0xfc000000)
 		return 0
@@ -188,7 +189,7 @@ func asmb(ctxt *ld.Link) {
 	}
 
 	if ld.Iself {
-		ld.Asmbelfsetup(ctxt)
+		ld.Asmbelfsetup()
 	}
 
 	sect := ld.Segtext.Sect
@@ -203,9 +204,15 @@ func asmb(ctxt *ld.Link) {
 		if ctxt.Debugvlog != 0 {
 			ctxt.Logf("%5.2f rodatblk\n", obj.Cputime())
 		}
-
 		ld.Cseek(int64(ld.Segrodata.Fileoff))
 		ld.Datblk(ctxt, int64(ld.Segrodata.Vaddr), int64(ld.Segrodata.Filelen))
+	}
+	if ld.Segrelrodata.Filelen > 0 {
+		if ctxt.Debugvlog != 0 {
+			ctxt.Logf("%5.2f rodatblk\n", obj.Cputime())
+		}
+		ld.Cseek(int64(ld.Segrelrodata.Fileoff))
+		ld.Datblk(ctxt, int64(ld.Segrelrodata.Vaddr), int64(ld.Segrelrodata.Filelen))
 	}
 
 	if ctxt.Debugvlog != 0 {
@@ -228,7 +235,7 @@ func asmb(ctxt *ld.Link) {
 		if ctxt.Debugvlog != 0 {
 			ctxt.Logf("%5.2f sym\n", obj.Cputime())
 		}
-		switch ld.HEADTYPE {
+		switch ld.Headtype {
 		default:
 			if ld.Iself {
 				symo = uint32(ld.Segdwarf.Fileoff + ld.Segdwarf.Filelen)
@@ -240,7 +247,7 @@ func asmb(ctxt *ld.Link) {
 		}
 
 		ld.Cseek(int64(symo))
-		switch ld.HEADTYPE {
+		switch ld.Headtype {
 		default:
 			if ld.Iself {
 				if ctxt.Debugvlog != 0 {
@@ -259,7 +266,7 @@ func asmb(ctxt *ld.Link) {
 			ld.Asmplan9sym(ctxt)
 			ld.Cflush()
 
-			sym := ld.Linklookup(ctxt, "pclntab", 0)
+			sym := ctxt.Syms.Lookup("pclntab", 0)
 			if sym != nil {
 				ld.Lcsize = int32(len(sym.P))
 				for i := 0; int32(i) < ld.Lcsize; i++ {
@@ -271,12 +278,11 @@ func asmb(ctxt *ld.Link) {
 		}
 	}
 
-	ctxt.Cursym = nil
 	if ctxt.Debugvlog != 0 {
 		ctxt.Logf("%5.2f header\n", obj.Cputime())
 	}
 	ld.Cseek(0)
-	switch ld.HEADTYPE {
+	switch ld.Headtype {
 	default:
 	case obj.Hplan9: /* plan 9 */
 		magic := uint32(4*18*18 + 7)

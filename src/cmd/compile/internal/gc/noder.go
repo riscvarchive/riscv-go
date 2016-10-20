@@ -60,6 +60,9 @@ func (p *noder) decls(decls []syntax.Decl) (l []*Node) {
 		case *syntax.ImportDecl:
 			p.importDecl(decl)
 
+		case *syntax.AliasDecl:
+			yyerror("alias declarations not yet implemented")
+
 		case *syntax.VarDecl:
 			l = append(l, p.varDecl(decl)...)
 
@@ -87,6 +90,10 @@ func (p *noder) decls(decls []syntax.Decl) (l []*Node) {
 			lastConstGroup = decl.Group
 
 		case *syntax.TypeDecl:
+			if decl.Alias {
+				yyerror("alias declarations not yet implemented")
+				break
+			}
 			l = append(l, p.typeDecl(decl))
 
 		case *syntax.FuncDecl:
@@ -119,7 +126,7 @@ func (p *noder) importDecl(imp *syntax.ImportDecl) {
 	if imp.LocalPkgName != nil {
 		my = p.name(imp.LocalPkgName)
 	} else {
-		my = Lookup(ipkg.Name)
+		my = lookup(ipkg.Name)
 	}
 
 	pack := p.nod(imp, OPACK, nil, nil)
@@ -222,7 +229,7 @@ func (p *noder) funcDecl(fun *syntax.FuncDecl) *Node {
 	f.Nbody.Set(body)
 	f.Noescape = pragma&Noescape != 0
 	if f.Noescape && len(body) != 0 {
-		Yyerror("can only use //go:noescape with external func implementations")
+		yyerror("can only use //go:noescape with external func implementations")
 	}
 	f.Func.Pragma = pragma
 	lineno = p.baseline + int32(fun.EndLine) - 1
@@ -243,13 +250,13 @@ func (p *noder) funcHeader(fun *syntax.FuncDecl) *Node {
 		if name.Name == "init" {
 			name = renameinit()
 			if t.List.Len() > 0 || t.Rlist.Len() > 0 {
-				Yyerror("func init must have no arguments and no return values")
+				yyerror("func init must have no arguments and no return values")
 			}
 		}
 
 		if localpkg.Name == "main" && name.Name == "main" {
 			if t.List.Len() > 0 || t.Rlist.Len() > 0 {
-				Yyerror("func main must have no arguments and no return values")
+				yyerror("func main must have no arguments and no return values")
 			}
 		}
 
@@ -300,9 +307,9 @@ func (p *noder) param(param *syntax.Field, dddOk, final bool) *Node {
 	// rewrite ...T parameter
 	if typ.Op == ODDD {
 		if !dddOk {
-			Yyerror("cannot use ... in receiver or result parameter list")
+			yyerror("cannot use ... in receiver or result parameter list")
 		} else if !final {
-			Yyerror("can only use ... with final parameter in list")
+			yyerror("can only use ... with final parameter in list")
 		}
 		typ.Op = OTARRAY
 		typ.Right = typ.Left
@@ -371,7 +378,7 @@ func (p *noder) expr(expr syntax.Expr) *Node {
 			obj.Used = true
 			return oldname(s)
 		}
-		return p.setlineno(expr, NodSym(OXDOT, obj, sel))
+		return p.setlineno(expr, nodSym(OXDOT, obj, sel))
 	case *syntax.IndexExpr:
 		return p.nod(expr, OINDEX, p.expr(expr.X), p.expr(expr.Index))
 	case *syntax.SliceExpr:
@@ -405,7 +412,7 @@ func (p *noder) expr(expr syntax.Expr) *Node {
 					// Special case for &T{...}: turn into (*T){...}.
 					// TODO(mdempsky): Switch back to p.nod after we
 					// get rid of gcCompat.
-					x.Right = Nod(OIND, x.Right, nil)
+					x.Right = nod(OIND, x.Right, nil)
 					x.Right.Implicit = true
 					return x
 				}
@@ -449,7 +456,7 @@ func (p *noder) expr(expr syntax.Expr) *Node {
 		if expr.Lhs != nil {
 			n.Left = p.declName(expr.Lhs)
 			if isblank(n.Left) {
-				Yyerror("invalid variable name %s in type switch", n.Left)
+				yyerror("invalid variable name %v in type switch", n.Left)
 			}
 		}
 		return n
@@ -530,7 +537,7 @@ func (p *noder) packname(expr syntax.Expr) *Sym {
 		s := p.name(expr.Sel)
 		var pkg *Pkg
 		if name.Def == nil || name.Def.Op != OPACK {
-			Yyerror("%v is not a package", name)
+			yyerror("%v is not a package", name)
 			pkg = localpkg
 		} else {
 			name.Def.Used = true
@@ -666,7 +673,7 @@ func (p *noder) stmt(stmt syntax.Stmt) *Node {
 					break
 				}
 				if ln.Sym.Def != ln {
-					Yyerror("%s is shadowed during return", ln.Sym.Name)
+					yyerror("%s is shadowed during return", ln.Sym.Name)
 				}
 			}
 		}
@@ -687,7 +694,7 @@ func (p *noder) body(body []syntax.Stmt) *Node {
 	l := p.bodyList(body)
 	if len(l) == 0 {
 		// TODO(mdempsky): Line number?
-		return Nod(OEMPTY, nil, nil)
+		return nod(OEMPTY, nil, nil)
 	}
 	return liststmt(l)
 }
@@ -948,7 +955,7 @@ func (p *noder) basicLit(lit *syntax.BasicLit) Val {
 }
 
 func (p *noder) name(name *syntax.Name) *Sym {
-	return Lookup(name.Value)
+	return lookup(name.Value)
 }
 
 func (p *noder) mkname(name *syntax.Name) *Node {
@@ -973,7 +980,7 @@ func (p *noder) wrapname(n syntax.Node, x *Node) *Node {
 }
 
 func (p *noder) nod(orig syntax.Node, op Op, left, right *Node) *Node {
-	return p.setlineno(orig, Nod(op, left, right))
+	return p.setlineno(orig, nod(op, left, right))
 }
 
 func (p *noder) setlineno(src syntax.Node, dst *Node) *Node {
@@ -1034,7 +1041,7 @@ func (p *noder) pragma(pos, line int, text string) syntax.Pragma {
 			p.error(pos, line, "usage: //go:linkname localname linkname")
 			break
 		}
-		Lookup(f[1]).Linkname = f[2]
+		lookup(f[1]).Linkname = f[2]
 
 	case strings.HasPrefix(text, "go:cgo_"):
 		pragcgobuf += pragcgo(text)
@@ -1044,7 +1051,7 @@ func (p *noder) pragma(pos, line int, text string) syntax.Pragma {
 		if i := strings.Index(text, " "); i >= 0 {
 			verb = verb[:i]
 		}
-		return syntax.Pragma(PragmaValue(verb))
+		return syntax.Pragma(pragmaValue(verb))
 	}
 
 	return 0

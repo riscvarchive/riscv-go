@@ -406,6 +406,22 @@ func buildModeInit() {
 			fatalf("-buildmode=shared and -o not supported together")
 		}
 		ldBuildmode = "shared"
+	case "plugin":
+		pkgsFilter = pkgsMain
+		if gccgo {
+			codegenArg = "-fPIC"
+		} else {
+			switch platform {
+			case "linux/amd64", "linux/arm", "linux/arm64", "linux/386",
+				"android/amd64", "android/arm", "android/arm64", "android/386",
+				"darwin/amd64":
+			default:
+				fatalf("-buildmode=plugin not supported on %s\n", platform)
+			}
+			codegenArg = "-dynlink"
+		}
+		exeSuffix = ".so"
+		ldBuildmode = "plugin"
 	default:
 		fatalf("buildmode=%s not supported", buildBuildmode)
 	}
@@ -605,7 +621,7 @@ func installPackages(args []string, forGet bool) {
 				errorf("go install: no install location for %s: hidden by %s", p.Dir, p.ConflictDir)
 			default:
 				errorf("go install: no install location for directory %s outside GOPATH\n"+
-					"\tFor more details see: go help gopath", p.Dir)
+					"\tFor more details see: 'go help gopath'", p.Dir)
 			}
 		}
 	}
@@ -1608,13 +1624,19 @@ func (b *builder) build(a *action) (err error) {
 	return nil
 }
 
+// pkgconfigCmd returns a pkg-config binary name
+// defaultPkgConfig is defined in zdefaultcc.go, written by cmd/dist.
+func (b *builder) pkgconfigCmd() string {
+	return envList("PKG_CONFIG", defaultPkgConfig)[0]
+}
+
 // Calls pkg-config if needed and returns the cflags/ldflags needed to build the package.
 func (b *builder) getPkgConfigFlags(p *Package) (cflags, ldflags []string, err error) {
 	if pkgs := p.CgoPkgConfig; len(pkgs) > 0 {
 		var out []byte
-		out, err = b.runOut(p.Dir, p.ImportPath, nil, "pkg-config", "--cflags", pkgs)
+		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.pkgconfigCmd(), "--cflags", pkgs)
 		if err != nil {
-			b.showOutput(p.Dir, "pkg-config --cflags "+strings.Join(pkgs, " "), string(out))
+			b.showOutput(p.Dir, b.pkgconfigCmd()+" --cflags "+strings.Join(pkgs, " "), string(out))
 			b.print(err.Error() + "\n")
 			err = errPrintedOutput
 			return
@@ -1622,9 +1644,9 @@ func (b *builder) getPkgConfigFlags(p *Package) (cflags, ldflags []string, err e
 		if len(out) > 0 {
 			cflags = strings.Fields(string(out))
 		}
-		out, err = b.runOut(p.Dir, p.ImportPath, nil, "pkg-config", "--libs", pkgs)
+		out, err = b.runOut(p.Dir, p.ImportPath, nil, b.pkgconfigCmd(), "--libs", pkgs)
 		if err != nil {
-			b.showOutput(p.Dir, "pkg-config --libs "+strings.Join(pkgs, " "), string(out))
+			b.showOutput(p.Dir, b.pkgconfigCmd()+" --libs "+strings.Join(pkgs, " "), string(out))
 			b.print(err.Error() + "\n")
 			err = errPrintedOutput
 			return
@@ -1665,7 +1687,7 @@ func (b *builder) install(a *action) (err error) {
 	perm := os.FileMode(0666)
 	if a1.link {
 		switch buildBuildmode {
-		case "c-archive", "c-shared":
+		case "c-archive", "c-shared", "plugin":
 		default:
 			perm = 0777
 		}
@@ -2959,7 +2981,7 @@ func (tools gccgoToolchain) cc(b *builder, p *Package, objdir, ofile, cfile stri
 // maybePIC adds -fPIC to the list of arguments if needed.
 func (tools gccgoToolchain) maybePIC(args []string) []string {
 	switch buildBuildmode {
-	case "c-shared", "shared":
+	case "c-shared", "shared", "plugin":
 		args = append(args, "-fPIC")
 	}
 	return args

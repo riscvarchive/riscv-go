@@ -1026,16 +1026,15 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 
 		case obj.NAME_AUTO:
 			ctxt.Instoffset = int64(ctxt.Autosize) + a.Offset
-			t := int(immaddr(int32(ctxt.Instoffset)))
-			if t != 0 {
+			if t := immaddr(int32(ctxt.Instoffset)); t != 0 {
 				if immhalf(int32(ctxt.Instoffset)) {
-					if immfloat(int32(t)) {
+					if immfloat(t) {
 						return C_HFAUTO
 					}
 					return C_HAUTO
 				}
 
-				if immfloat(int32(t)) {
+				if immfloat(t) {
 					return C_FAUTO
 				}
 				return C_SAUTO
@@ -1045,16 +1044,15 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 
 		case obj.NAME_PARAM:
 			ctxt.Instoffset = int64(ctxt.Autosize) + a.Offset + 4
-			t := int(immaddr(int32(ctxt.Instoffset)))
-			if t != 0 {
+			if t := immaddr(int32(ctxt.Instoffset)); t != 0 {
 				if immhalf(int32(ctxt.Instoffset)) {
-					if immfloat(int32(t)) {
+					if immfloat(t) {
 						return C_HFAUTO
 					}
 					return C_HAUTO
 				}
 
-				if immfloat(int32(t)) {
+				if immfloat(t) {
 					return C_FAUTO
 				}
 				return C_SAUTO
@@ -1064,20 +1062,18 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 
 		case obj.NAME_NONE:
 			ctxt.Instoffset = a.Offset
-			t := int(immaddr(int32(ctxt.Instoffset)))
-			if t != 0 {
+			if t := immaddr(int32(ctxt.Instoffset)); t != 0 {
 				if immhalf(int32(ctxt.Instoffset)) { /* n.b. that it will also satisfy immrot */
-					if immfloat(int32(t)) {
+					if immfloat(t) {
 						return C_HFOREG
 					}
 					return C_HOREG
 				}
 
-				if immfloat(int32(t)) {
+				if immfloat(t) {
 					return C_FOREG /* n.b. that it will also satisfy immrot */
 				}
-				t := int(immrot(uint32(ctxt.Instoffset)))
-				if t != 0 {
+				if immrot(uint32(ctxt.Instoffset)) != 0 {
 					return C_SROREG
 				}
 				if immhalf(int32(ctxt.Instoffset)) {
@@ -1086,8 +1082,7 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 				return C_SOREG
 			}
 
-			t = int(immrot(uint32(ctxt.Instoffset)))
-			if t != 0 {
+			if immrot(uint32(ctxt.Instoffset)) != 0 {
 				return C_ROREG
 			}
 			return C_LOREG
@@ -1116,12 +1111,10 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 				return aconsize(ctxt)
 			}
 
-			t := int(immrot(uint32(ctxt.Instoffset)))
-			if t != 0 {
+			if immrot(uint32(ctxt.Instoffset)) != 0 {
 				return C_RCON
 			}
-			t = int(immrot(^uint32(ctxt.Instoffset)))
-			if t != 0 {
+			if immrot(^uint32(ctxt.Instoffset)) != 0 {
 				return C_NCON
 			}
 			return C_LCON
@@ -1155,8 +1148,10 @@ func aclass(ctxt *obj.Link, a *obj.Addr) int {
 }
 
 func aconsize(ctxt *obj.Link) int {
-	t := int(immrot(uint32(ctxt.Instoffset)))
-	if t != 0 {
+	if immrot(uint32(ctxt.Instoffset)) != 0 {
+		return C_RACON
+	}
+	if immrot(uint32(-ctxt.Instoffset)) != 0 {
 		return C_RACON
 	}
 	return C_LACON
@@ -1537,11 +1532,15 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab, out []uint32) {
 	case 3: /* add R<<[IR],[R],R */
 		o1 = mov(ctxt, p)
 
-	case 4: /* add $I,[R],R */
+	case 4: /* MOVW $off(R), R -> add $off,[R],R */
 		aclass(ctxt, &p.From)
-
-		o1 = oprrr(ctxt, AADD, int(p.Scond))
-		o1 |= uint32(immrot(uint32(ctxt.Instoffset)))
+		if ctxt.Instoffset < 0 {
+			o1 = oprrr(ctxt, ASUB, int(p.Scond))
+			o1 |= uint32(immrot(uint32(-ctxt.Instoffset)))
+		} else {
+			o1 = oprrr(ctxt, AADD, int(p.Scond))
+			o1 |= uint32(immrot(uint32(ctxt.Instoffset)))
+		}
 		r := int(p.From.Reg)
 		if r == 0 {
 			r = int(o.param)
@@ -2359,7 +2358,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab, out []uint32) {
 			o1 |= uint32(p.From.Offset & 0xfff)
 		}
 
-		// This is supposed to be something that stops execution.
+	// This is supposed to be something that stops execution.
 	// It's not supposed to be reached, ever, but if it is, we'd
 	// like to be able to tell how we got there. Assemble as
 	// 0xf7fabcfd which is guaranteed to raise undefined instruction
@@ -2388,7 +2387,7 @@ func asmout(ctxt *obj.Link, p *obj.Prog, o *Optab, out []uint32) {
 		o1 |= (uint32(p.Reg) & 15) << 0
 		o1 |= uint32((p.To.Offset & 15) << 16)
 
-		// DATABUNDLE: BKPT $0x5be0, signify the start of NaCl data bundle;
+	// DATABUNDLE: BKPT $0x5be0, signify the start of NaCl data bundle;
 	// DATABUNDLEEND: zero width alignment marker
 	case 100:
 		if p.As == ADATABUNDLE {
@@ -2794,7 +2793,7 @@ func omvl(ctxt *obj.Link, p *obj.Prog, a *obj.Addr, dr int) uint32 {
 
 func chipzero5(ctxt *obj.Link, e float64) int {
 	// We use GOARM=7 to gate the use of VFPv3 vmov (imm) instructions.
-	if ctxt.Goarm < 7 || e != 0 {
+	if obj.GOARM < 7 || e != 0 {
 		return -1
 	}
 	return 0
@@ -2802,7 +2801,7 @@ func chipzero5(ctxt *obj.Link, e float64) int {
 
 func chipfloat5(ctxt *obj.Link, e float64) int {
 	// We use GOARM=7 to gate the use of VFPv3 vmov (imm) instructions.
-	if ctxt.Goarm < 7 {
+	if obj.GOARM < 7 {
 		return -1
 	}
 

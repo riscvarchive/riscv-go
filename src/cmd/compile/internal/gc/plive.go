@@ -96,6 +96,14 @@ type Liveness struct {
 	livepointers     []bvec
 }
 
+// ProgInfo holds information about the instruction for use
+// by clients such as the compiler. The exact meaning of this
+// data is up to the client and is not interpreted by the cmd/internal/obj/... packages.
+type ProgInfo struct {
+	_     struct{} // to prevent unkeyed literals. Trailing zero-sized field will take space.
+	Flags uint32   // flag bits
+}
+
 // Constructs a new basic block containing a single instruction.
 func newblock(prog *obj.Prog) *BasicBlock {
 	if prog == nil {
@@ -400,7 +408,6 @@ func newcfg(firstp *obj.Prog) []*BasicBlock {
 	bb := newblock(firstp)
 	cfg = append(cfg, bb)
 	for p := firstp; p != nil && p.As != obj.AEND; p = p.Link {
-		Thearch.Proginfo(p)
 		if p.To.Type == obj.TYPE_BRANCH {
 			if p.To.Val == nil {
 				Fatalf("prog branch to nil")
@@ -542,32 +549,33 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 	bvresetall(varkill)
 	bvresetall(avarinit)
 
+	// A return instruction with a p.to is a tail return, which brings
+	// the stack pointer back up (if it ever went down) and then jumps
+	// to a new function entirely. That form of instruction must read
+	// all the parameters for correctness, and similarly it must not
+	// read the out arguments - they won't be set until the new
+	// function runs.
+	if (prog.As == obj.AJMP || prog.As == obj.ARET) && prog.To.Type == obj.TYPE_MEM && prog.To.Name == obj.NAME_EXTERN {
+		// This is a tail call. Ensure the arguments are still alive.
+		// See issue 16016.
+		for i, node := range vars {
+			if node.Class == PPARAM {
+				bvset(uevar, int32(i))
+			}
+		}
+	}
+
 	if prog.As == obj.ARET {
-		// Return instructions implicitly read all the arguments. For
-		// the sake of correctness, out arguments must be read. For the
-		// sake of backtrace quality, we read in arguments as well.
-		//
-		// A return instruction with a p.to is a tail return, which brings
-		// the stack pointer back up (if it ever went down) and then jumps
-		// to a new function entirely. That form of instruction must read
-		// all the parameters for correctness, and similarly it must not
-		// read the out arguments - they won't be set until the new
-		// function runs.
+		// Return instructions read all of the out arguments.
 		for i, node := range vars {
 			switch node.Class {
-			case PPARAM:
-				if !node.NotLiveAtEnd() {
-					bvset(uevar, int32(i))
-				}
-
-				// If the result had its address taken, it is being tracked
+			// If the result had its address taken, it is being tracked
 			// by the avarinit code, which does not use uevar.
 			// If we added it to uevar too, we'd not see any kill
 			// and decide that the variable was live entry, which it is not.
 			// So only use uevar in the non-addrtaken case.
-			// The p.to.type == thearch.D_NONE limits the bvset to
-			// non-tail-call return instructions; see note above
-			// the for loop for details.
+			// The p.to.type == obj.TYPE_NONE limits the bvset to
+			// non-tail-call return instructions; see note below for details.
 			case PPARAMOUT:
 				if !node.Addrtaken && prog.To.Type == obj.TYPE_NONE {
 					bvset(uevar, int32(i))
@@ -576,15 +584,6 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 		}
 
 		return
-	}
-	if prog.As == obj.AJMP && prog.To.Type == obj.TYPE_MEM && prog.To.Name == obj.NAME_EXTERN {
-		// This is a tail call. Ensure the arguments are still alive.
-		// See issue 16016.
-		for i, node := range vars {
-			if node.Class == PPARAM {
-				bvset(uevar, int32(i))
-			}
-		}
 	}
 
 	if prog.As == obj.ATEXT {
@@ -603,7 +602,9 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 		return
 	}
 
-	if prog.Info.Flags&(LeftRead|LeftWrite|LeftAddr) != 0 {
+	info := Thearch.Proginfo(prog)
+
+	if info.Flags&(LeftRead|LeftWrite|LeftAddr) != 0 {
 		from := &prog.From
 		if from.Node != nil && from.Sym != nil {
 			n := from.Node.(*Node)
@@ -611,11 +612,11 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 				if n.Addrtaken {
 					bvset(avarinit, pos)
 				} else {
-					if prog.Info.Flags&(LeftRead|LeftAddr) != 0 {
+					if info.Flags&(LeftRead|LeftAddr) != 0 {
 						bvset(uevar, pos)
 					}
-					if prog.Info.Flags&LeftWrite != 0 {
-						if !Isfat(n.Type) {
+					if info.Flags&LeftWrite != 0 {
+						if !isfat(n.Type) {
 							bvset(varkill, pos)
 						}
 					}
@@ -624,7 +625,21 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 		}
 	}
 
-	if prog.Info.Flags&(RightRead|RightWrite|RightAddr) != 0 {
+	if info.Flags&From3Read != 0 {
+		from := prog.From3
+		if from.Node != nil && from.Sym != nil {
+			n := from.Node.(*Node)
+			if pos := liveIndex(n, vars); pos >= 0 {
+				if n.Addrtaken {
+					bvset(avarinit, pos)
+				} else {
+					bvset(uevar, pos)
+				}
+			}
+		}
+	}
+
+	if info.Flags&(RightRead|RightWrite|RightAddr) != 0 {
 		to := &prog.To
 		if to.Node != nil && to.Sym != nil {
 			n := to.Node.(*Node)
@@ -645,11 +660,11 @@ func progeffects(prog *obj.Prog, vars []*Node, uevar bvec, varkill bvec, avarini
 					// It is not a read. It is equivalent to RightWrite except that
 					// having the RightAddr bit set keeps the registerizer from
 					// trying to substitute a register for the memory location.
-					if (prog.Info.Flags&RightRead != 0) || prog.Info.Flags&(RightAddr|RightWrite) == RightAddr {
+					if (info.Flags&RightRead != 0) || info.Flags&(RightAddr|RightWrite) == RightAddr {
 						bvset(uevar, pos)
 					}
-					if prog.Info.Flags&RightWrite != 0 {
-						if !Isfat(n.Type) || prog.As == obj.AVARDEF {
+					if info.Flags&RightWrite != 0 {
+						if !isfat(n.Type) || prog.As == obj.AVARDEF {
 							bvset(varkill, pos)
 						}
 					}
@@ -806,7 +821,7 @@ func checkauto(fn *Node, p *obj.Prog, n *Node) {
 	for _, ln := range fn.Func.Dcl {
 		fmt.Printf("\t%v (%p; class=%d)\n", ln, ln, ln.Class)
 	}
-	Yyerror("checkauto: invariant lost")
+	yyerror("checkauto: invariant lost")
 }
 
 func checkparam(fn *Node, p *obj.Prog, n *Node) {
@@ -823,7 +838,7 @@ func checkparam(fn *Node, p *obj.Prog, n *Node) {
 	for _, ln := range fn.Func.Dcl {
 		fmt.Printf("\t%v (%p; class=%d)\n", ln, ln, ln.Class)
 	}
-	Yyerror("checkparam: invariant lost")
+	yyerror("checkparam: invariant lost")
 }
 
 func checkprog(fn *Node, p *obj.Prog) {
@@ -855,7 +870,7 @@ func checkptxt(fn *Node, firstp *obj.Prog) {
 		if false {
 			fmt.Printf("analyzing '%v'\n", p)
 		}
-		if p.As != obj.AGLOBL && p.As != obj.ATYPE {
+		if p.As != obj.ATYPE {
 			checkprog(fn, p)
 		}
 	}
@@ -1173,17 +1188,18 @@ func livenessepilogue(lv *Liveness) {
 	avarinit := bvalloc(nvars)
 	any := bvalloc(nvars)
 	all := bvalloc(nvars)
-	ambig := bvalloc(localswords())
+	pparamout := bvalloc(localswords())
 
-	// Set ambig bit for the pointers to heap-allocated pparamout variables.
-	// These are implicitly read by post-deferreturn code and thus must be
-	// kept live throughout the function (if there is any defer that recovers).
+	// Record pointers to heap-allocated pparamout variables.  These
+	// are implicitly read by post-deferreturn code and thus must be
+	// kept live throughout the function (if there is any defer that
+	// recovers).
 	if hasdefer {
 		for _, n := range lv.vars {
 			if n.IsOutputParamHeapAddr() {
 				n.Name.Needzero = true
 				xoffset := n.Xoffset + stkptrsize
-				onebitwalktype1(n.Type, &xoffset, ambig)
+				onebitwalktype1(n.Type, &xoffset, pparamout)
 			}
 		}
 	}
@@ -1233,13 +1249,8 @@ func livenessepilogue(lv *Liveness) {
 						if !n.Name.Needzero {
 							n.Name.Needzero = true
 							if debuglive >= 1 {
-								Warnl(p.Lineno, "%v: %v is ambiguously live", Curfn.Func.Nname, Nconv(n, FmtLong))
+								Warnl(p.Lineno, "%v: %L is ambiguously live", Curfn.Func.Nname, n)
 							}
-
-							// Record in 'ambiguous' bitmap.
-							xoffset := n.Xoffset + stkptrsize
-
-							onebitwalktype1(n.Type, &xoffset, ambig)
 						}
 					}
 				}
@@ -1329,7 +1340,7 @@ func livenessepilogue(lv *Liveness) {
 						}
 						n := lv.vars[j]
 						if n.Class != PPARAM {
-							yyerrorl(p.Lineno, "internal error: %v %v recorded as live on entry, p.Pc=%v", Curfn.Func.Nname, Nconv(n, FmtLong), p.Pc)
+							yyerrorl(p.Lineno, "internal error: %v %L recorded as live on entry, p.Pc=%v", Curfn.Func.Nname, n, p.Pc)
 						}
 					}
 				}
@@ -1340,11 +1351,9 @@ func livenessepilogue(lv *Liveness) {
 				locals := lv.livepointers[pos]
 				onebitlivepointermap(lv, liveout, lv.vars, args, locals)
 
-				// Ambiguously live variables are zeroed immediately after
-				// function entry. Mark them live for all the non-entry bitmaps
-				// so that GODEBUG=gcdead=1 mode does not poison them.
+				// Mark pparamout variables (as described above)
 				if p.As == obj.ACALL {
-					bvor(locals, locals, ambig)
+					bvor(locals, locals, pparamout)
 				}
 
 				// Show live pointer bitmaps.
@@ -1423,7 +1432,7 @@ func livenessepilogue(lv *Liveness) {
 		}
 	}
 
-	Flusherrors()
+	flusherrors()
 }
 
 // FNV-1 hash function constants.

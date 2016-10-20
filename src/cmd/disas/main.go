@@ -18,8 +18,7 @@ import (
 )
 
 func getobjdumpcmd(fname string) (*exec.Cmd, error) {
-	GOARCH := obj.Getgoarch()
-	switch GOARCH {
+	switch obj.GOARCH {
 	case "arm":
 		return exec.Command(
 				"arm-none-eabi-objdump",
@@ -37,7 +36,7 @@ func getobjdumpcmd(fname string) (*exec.Cmd, error) {
 				"-D", fname),
 			nil
 	default:
-		return nil, fmt.Errorf("unsupported architecture %s", GOARCH)
+		return nil, fmt.Errorf("unsupported architecture %s", obj.GOARCH)
 	}
 }
 

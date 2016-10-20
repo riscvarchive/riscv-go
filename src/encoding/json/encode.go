@@ -50,7 +50,8 @@ import (
 // The angle brackets "<" and ">" are escaped to "\u003c" and "\u003e"
 // to keep some browsers from misinterpreting JSON output as HTML.
 // Ampersand "&" is also escaped to "\u0026" for the same reason.
-// This escaping can be disabled using an Encoder with DisableHTMLEscaping.
+// This escaping can be disabled using an Encoder that had SetEscapeHTML(false)
+// called on it.
 //
 // Array and slice values encode as JSON arrays, except that
 // []byte encodes as a base64-encoded string, and a nil slice
@@ -635,7 +636,7 @@ func (me *mapEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 			e.error(&MarshalerError{v.Type(), err})
 		}
 	}
-	sort.Sort(byString(sv))
+	sort.Slice(sv, func(i, j int) bool { return sv[i].s < sv[j].s })
 
 	for i, kv := range sv {
 		if i > 0 {
@@ -834,15 +835,6 @@ func (w *reflectWithString) resolve() error {
 	panic("unexpected map key type")
 }
 
-// byString is a slice of reflectWithString where the reflect.Value is either
-// a string or an encoding.TextMarshaler.
-// It implements the methods to sort by string.
-type byString []reflectWithString
-
-func (sv byString) Len() int           { return len(sv) }
-func (sv byString) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
-func (sv byString) Less(i, j int) bool { return sv[i].s < sv[j].s }
-
 // NOTE: keep in sync with stringBytes below.
 func (e *encodeState) string(s string, escapeHTML bool) int {
 	len0 := e.Len()
@@ -850,8 +842,7 @@ func (e *encodeState) string(s string, escapeHTML bool) int {
 	start := 0
 	for i := 0; i < len(s); {
 		if b := s[i]; b < utf8.RuneSelf {
-			if 0x20 <= b && b != '\\' && b != '"' &&
-				(!escapeHTML || b != '<' && b != '>' && b != '&') {
+			if htmlSafeSet[b] || (!escapeHTML && safeSet[b]) {
 				i++
 				continue
 			}
@@ -928,8 +919,7 @@ func (e *encodeState) stringBytes(s []byte, escapeHTML bool) int {
 	start := 0
 	for i := 0; i < len(s); {
 		if b := s[i]; b < utf8.RuneSelf {
-			if 0x20 <= b && b != '\\' && b != '"' &&
-				(!escapeHTML || b != '<' && b != '>' && b != '&') {
+			if htmlSafeSet[b] || (!escapeHTML && safeSet[b]) {
 				i++
 				continue
 			}
@@ -1016,28 +1006,6 @@ func fillField(f field) field {
 	f.nameBytes = []byte(f.name)
 	f.equalFold = foldFunc(f.nameBytes)
 	return f
-}
-
-// byName sorts field by name, breaking ties with depth,
-// then breaking ties with "name came from json tag", then
-// breaking ties with index sequence.
-type byName []field
-
-func (x byName) Len() int { return len(x) }
-
-func (x byName) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
-
-func (x byName) Less(i, j int) bool {
-	if x[i].name != x[j].name {
-		return x[i].name < x[j].name
-	}
-	if len(x[i].index) != len(x[j].index) {
-		return len(x[i].index) < len(x[j].index)
-	}
-	if x[i].tag != x[j].tag {
-		return x[i].tag
-	}
-	return byIndex(x).Less(i, j)
 }
 
 // byIndex sorts field by index sequence.
@@ -1157,7 +1125,22 @@ func typeFields(t reflect.Type) []field {
 		}
 	}
 
-	sort.Sort(byName(fields))
+	sort.Slice(fields, func(i, j int) bool {
+		x := fields
+		// sort field by name, breaking ties with depth, then
+		// breaking ties with "name came from json tag", then
+		// breaking ties with index sequence.
+		if x[i].name != x[j].name {
+			return x[i].name < x[j].name
+		}
+		if len(x[i].index) != len(x[j].index) {
+			return len(x[i].index) < len(x[j].index)
+		}
+		if x[i].tag != x[j].tag {
+			return x[i].tag
+		}
+		return byIndex(x).Less(i, j)
+	})
 
 	// Delete all fields that are hidden by the Go rules for embedded fields,
 	// except that fields with JSON tags are promoted.

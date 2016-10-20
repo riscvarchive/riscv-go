@@ -148,9 +148,9 @@ func newosproc(mp *m, stk unsafe.Pointer) {
 	// Disable signals during clone, so that the new thread starts
 	// with signals disabled. It will enable them in minit.
 	var oset sigset
-	rtsigprocmask(_SIG_SETMASK, &sigset_all, &oset, int32(unsafe.Sizeof(oset)))
+	sigprocmask(_SIG_SETMASK, &sigset_all, &oset)
 	ret := clone(cloneFlags, stk, unsafe.Pointer(mp), unsafe.Pointer(mp.g0), unsafe.Pointer(funcPC(mstart)))
-	rtsigprocmask(_SIG_SETMASK, &oset, nil, int32(unsafe.Sizeof(oset)))
+	sigprocmask(_SIG_SETMASK, &oset, nil)
 
 	if ret < 0 {
 		print("runtime: failed to create new OS thread (have ", mcount(), " already; errno=", -ret, ")\n")
@@ -207,17 +207,7 @@ func sysargs(argc int32, argv **byte) {
 			startupRandomData = (*[16]byte)(unsafe.Pointer(val))[:]
 
 		case _AT_PAGESZ:
-			// Check that the true physical page size is
-			// compatible with the runtime's assumed
-			// physical page size.
-			if sys.PhysPageSize < val {
-				print("runtime: kernel page size (", val, ") is larger than runtime page size (", sys.PhysPageSize, ")\n")
-				exit(1)
-			}
-			if sys.PhysPageSize%val != 0 {
-				print("runtime: runtime page size (", sys.PhysPageSize, ") is not a multiple of kernel page size (", val, ")\n")
-				exit(1)
-			}
+			physPageSize = val
 		}
 
 		archauxv(tag, val)
@@ -262,65 +252,21 @@ func mpreinit(mp *m) {
 	mp.gsignal.m = mp
 }
 
-//go:nosplit
-func msigsave(mp *m) {
-	smask := &mp.sigmask
-	rtsigprocmask(_SIG_SETMASK, nil, smask, int32(unsafe.Sizeof(*smask)))
-}
-
-//go:nosplit
-func msigrestore(sigmask sigset) {
-	rtsigprocmask(_SIG_SETMASK, &sigmask, nil, int32(unsafe.Sizeof(sigmask)))
-}
-
-//go:nosplit
-func sigblock() {
-	rtsigprocmask(_SIG_SETMASK, &sigset_all, nil, int32(unsafe.Sizeof(sigset_all)))
-}
-
 func gettid() uint32
 
 // Called to initialize a new m (including the bootstrap m).
 // Called on the new thread, cannot allocate memory.
 func minit() {
-	// Initialize signal handling.
-	_g_ := getg()
-
-	var st sigaltstackt
-	sigaltstack(nil, &st)
-	if st.ss_flags&_SS_DISABLE != 0 {
-		signalstack(&_g_.m.gsignal.stack)
-		_g_.m.newSigstack = true
-	} else {
-		// Use existing signal stack.
-		stsp := uintptr(unsafe.Pointer(st.ss_sp))
-		_g_.m.gsignal.stack.lo = stsp
-		_g_.m.gsignal.stack.hi = stsp + st.ss_size
-		_g_.m.gsignal.stackguard0 = stsp + _StackGuard
-		_g_.m.gsignal.stackguard1 = stsp + _StackGuard
-		_g_.m.gsignal.stackAlloc = st.ss_size
-		_g_.m.newSigstack = false
-	}
+	minitSignals()
 
 	// for debuggers, in case cgo created the thread
-	_g_.m.procid = uint64(gettid())
-
-	// restore signal mask from m.sigmask and unblock essential signals
-	nmask := _g_.m.sigmask
-	for i := range sigtable {
-		if sigtable[i].flags&_SigUnblock != 0 {
-			sigdelset(&nmask, i)
-		}
-	}
-	rtsigprocmask(_SIG_SETMASK, &nmask, nil, int32(unsafe.Sizeof(nmask)))
+	getg().m.procid = uint64(gettid())
 }
 
 // Called from dropm to undo the effect of an minit.
 //go:nosplit
 func unminit() {
-	if getg().m.newSigstack {
-		signalstack(nil)
-	}
+	unminitSignals()
 }
 
 func memlimit() uintptr {
@@ -367,18 +313,24 @@ func cgoSigtramp()
 func rt_sigaction(sig uintptr, new, old *sigactiont, size uintptr) int32
 
 //go:noescape
-func sigaltstack(new, old *sigaltstackt)
+func sigaltstack(new, old *stackt)
 
 //go:noescape
 func setitimer(mode int32, new, old *itimerval)
 
 //go:noescape
-func rtsigprocmask(sig uint32, new, old *sigset, size int32)
+func rtsigprocmask(how int32, new, old *sigset, size int32)
+
+//go:nosplit
+//go:nowritebarrierrec
+func sigprocmask(how int32, new, old *sigset) {
+	rtsigprocmask(how, new, old, int32(unsafe.Sizeof(*new)))
+}
 
 //go:noescape
 func getrlimit(kind int32, limit unsafe.Pointer) int32
-func raise(sig int32)
-func raiseproc(sig int32)
+func raise(sig uint32)
+func raiseproc(sig uint32)
 
 //go:noescape
 func sched_getaffinity(pid, len uintptr, buf *uintptr) int32
@@ -386,12 +338,9 @@ func osyield()
 
 //go:nosplit
 //go:nowritebarrierrec
-func setsig(i int32, fn uintptr, restart bool) {
+func setsig(i uint32, fn uintptr) {
 	var sa sigactiont
-	sa.sa_flags = _SA_SIGINFO | _SA_ONSTACK | _SA_RESTORER
-	if restart {
-		sa.sa_flags |= _SA_RESTART
-	}
+	sa.sa_flags = _SA_SIGINFO | _SA_ONSTACK | _SA_RESTORER | _SA_RESTART
 	sigfillset(&sa.sa_mask)
 	// Although Linux manpage says "sa_restorer element is obsolete and
 	// should not be used". x86_64 kernel requires it. Only use it on
@@ -412,56 +361,31 @@ func setsig(i int32, fn uintptr, restart bool) {
 
 //go:nosplit
 //go:nowritebarrierrec
-func setsigstack(i int32) {
+func setsigstack(i uint32) {
 	var sa sigactiont
-	if rt_sigaction(uintptr(i), nil, &sa, unsafe.Sizeof(sa.sa_mask)) != 0 {
-		throw("rt_sigaction failure")
-	}
-	if sa.sa_handler == 0 || sa.sa_handler == _SIG_DFL || sa.sa_handler == _SIG_IGN || sa.sa_flags&_SA_ONSTACK != 0 {
+	rt_sigaction(uintptr(i), nil, &sa, unsafe.Sizeof(sa.sa_mask))
+	if sa.sa_flags&_SA_ONSTACK != 0 {
 		return
 	}
 	sa.sa_flags |= _SA_ONSTACK
-	if rt_sigaction(uintptr(i), &sa, nil, unsafe.Sizeof(sa.sa_mask)) != 0 {
-		throw("rt_sigaction failure")
-	}
+	rt_sigaction(uintptr(i), &sa, nil, unsafe.Sizeof(sa.sa_mask))
 }
 
 //go:nosplit
 //go:nowritebarrierrec
-func getsig(i int32) uintptr {
+func getsig(i uint32) uintptr {
 	var sa sigactiont
 	if rt_sigaction(uintptr(i), nil, &sa, unsafe.Sizeof(sa.sa_mask)) != 0 {
 		throw("rt_sigaction read failure")
 	}
-	if sa.sa_handler == funcPC(sigtramp) || sa.sa_handler == funcPC(cgoSigtramp) {
-		return funcPC(sighandler)
-	}
 	return sa.sa_handler
 }
 
+// setSignaltstackSP sets the ss_sp field of a stackt.
 //go:nosplit
-func signalstack(s *stack) {
-	var st sigaltstackt
-	if s == nil {
-		st.ss_flags = _SS_DISABLE
-	} else {
-		st.ss_sp = (*byte)(unsafe.Pointer(s.lo))
-		st.ss_size = s.hi - s.lo
-		st.ss_flags = 0
-	}
-	sigaltstack(&st, nil)
+func setSignalstackSP(s *stackt, sp uintptr) {
+	s.ss_sp = (*byte)(unsafe.Pointer(sp))
 }
 
-//go:nosplit
-//go:nowritebarrierrec
-func updatesigmask(m sigmask) {
-	var mask sigset
-	sigcopyset(&mask, m)
-	rtsigprocmask(_SIG_SETMASK, &mask, nil, int32(unsafe.Sizeof(mask)))
-}
-
-func unblocksig(sig int32) {
-	var mask sigset
-	sigaddset(&mask, int(sig))
-	rtsigprocmask(_SIG_UNBLOCK, &mask, nil, int32(unsafe.Sizeof(mask)))
+func (c *sigctxt) fixsigcode(sig uint32) {
 }

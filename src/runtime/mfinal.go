@@ -226,11 +226,12 @@ func runfinq() {
 //
 // SetFinalizer(obj, nil) clears any finalizer associated with obj.
 //
-// The argument obj must be a pointer to an object allocated by
-// calling new or by taking the address of a composite literal.
+// The argument obj must be a pointer to an object allocated by calling
+// new, by taking the address of a composite literal, or by taking the
+// address of a local variable.
 // The argument finalizer must be a function that takes a single argument
 // to which obj's type can be assigned, and can have arbitrary ignored return
-// values. If either of these is not true, SetFinalizer aborts the
+// values. If either of these is not true, SetFinalizer may abort the
 // program.
 //
 // Finalizers are run in dependency order: if A points at B, both have
@@ -352,7 +353,7 @@ func SetFinalizer(obj interface{}, finalizer interface{}) {
 	if ft.dotdotdot() {
 		throw("runtime.SetFinalizer: cannot pass " + etyp.string() + " to finalizer " + ftyp.string() + " because dotdotdot")
 	}
-	if ft.dotdotdot() || ft.inCount != 1 {
+	if ft.inCount != 1 {
 		throw("runtime.SetFinalizer: cannot pass " + etyp.string() + " to finalizer " + ftyp.string())
 	}
 	fint := ft.in()[0]

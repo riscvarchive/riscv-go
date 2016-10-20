@@ -396,7 +396,7 @@ func export(out *bufio.Writer, trace bool) int {
 			// function has inlineable body:
 			// write index and body
 			if p.trace {
-				p.tracef("\n----\nfunc { %s }\n", hconv(f.Inl, FmtSharp))
+				p.tracef("\n----\nfunc { %#v }\n", f.Inl)
 			}
 			p.int(i)
 			p.stmtList(f.Inl)
@@ -807,7 +807,7 @@ func (p *exporter) typ(t *Type) {
 		p.typ(t.Elem())
 
 	default:
-		Fatalf("exporter: unexpected type: %s (Etype = %d)", Tconv(t, 0), t.Etype)
+		Fatalf("exporter: unexpected type: %v (Etype = %d)", t, t.Etype)
 	}
 }
 
@@ -1016,7 +1016,7 @@ func (p *exporter) value(x Val) {
 		p.tag(tag)
 
 	case *Mpint:
-		if Minintval[TINT64].Cmp(x) <= 0 && x.Cmp(Maxintval[TINT64]) <= 0 {
+		if minintval[TINT64].Cmp(x) <= 0 && x.Cmp(maxintval[TINT64]) <= 0 {
 			// common case: x fits into an int64 - use compact encoding
 			p.tag(int64Tag)
 			p.int64(x.Int64())
@@ -1258,7 +1258,7 @@ func (p *exporter) expr(n *Node) {
 		p.typ(n.Type)
 		p.elemList(n.List) // special handling of field names
 
-	case OARRAYLIT, OMAPLIT:
+	case OARRAYLIT, OSLICELIT, OMAPLIT:
 		p.op(OCOMPLIT)
 		p.typ(n.Type)
 		p.exprList(n.List)
@@ -1387,8 +1387,8 @@ func (p *exporter) expr(n *Node) {
 		p.op(ODCLCONST)
 
 	default:
-		Fatalf("cannot export %s (%d) node\n"+
-			"==> please file an issue and assign to gri@\n", n.Op, n.Op)
+		Fatalf("cannot export %v (%d) node\n"+
+			"==> please file an issue and assign to gri@\n", n.Op, int(n.Op))
 	}
 }
 
@@ -1503,7 +1503,7 @@ func (p *exporter) stmt(n *Node) {
 		p.expr(n.Left)
 
 	default:
-		Fatalf("exporter: CANNOT EXPORT: %s\nPlease notify gri@\n", n.Op)
+		Fatalf("exporter: CANNOT EXPORT: %v\nPlease notify gri@\n", n.Op)
 	}
 }
 
@@ -1595,7 +1595,7 @@ func (p *exporter) bool(b bool) bool {
 func (p *exporter) op(op Op) {
 	if p.trace {
 		p.tracef("[")
-		defer p.tracef("= %s] ", op)
+		defer p.tracef("= %v] ", op)
 	}
 
 	p.int(int(op))

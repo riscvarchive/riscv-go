@@ -102,12 +102,23 @@ var mheap_ mheap
 // * During GC (gcphase != _GCoff), a span *must not* transition from
 //   stack or in-use to free. Because concurrent GC may read a pointer
 //   and then look up its span, the span state must be monotonic.
+type mSpanState uint8
+
 const (
-	_MSpanInUse = iota // allocated for garbage collected heap
-	_MSpanStack        // allocated for use by stack allocator
+	_MSpanInUse mSpanState = iota // allocated for garbage collected heap
+	_MSpanStack                   // allocated for use by stack allocator
 	_MSpanFree
 	_MSpanDead
 )
+
+// mSpanStateNames are the names of the span states, indexed by
+// mSpanState.
+var mSpanStateNames = []string{
+	"_MSpanInUse",
+	"_MSpanStack",
+	"_MSpanFree",
+	"_MSpanDead",
+}
 
 // mSpanList heads a linked list of spans.
 //
@@ -186,21 +197,21 @@ type mspan struct {
 	// h->sweepgen is incremented by 2 after every GC
 
 	sweepgen    uint32
-	divMul      uint32   // for divide by elemsize - divMagic.mul
-	allocCount  uint16   // capacity - number of objects in freelist
-	sizeclass   uint8    // size class
-	incache     bool     // being used by an mcache
-	state       uint8    // mspaninuse etc
-	needzero    uint8    // needs to be zeroed before allocation
-	divShift    uint8    // for divide by elemsize - divMagic.shift
-	divShift2   uint8    // for divide by elemsize - divMagic.shift2
-	elemsize    uintptr  // computed from sizeclass or from npages
-	unusedsince int64    // first time spotted by gc in mspanfree state
-	npreleased  uintptr  // number of pages released to the os
-	limit       uintptr  // end of data in span
-	speciallock mutex    // guards specials list
-	specials    *special // linked list of special records sorted by offset.
-	baseMask    uintptr  // if non-0, elemsize is a power of 2, & this will get object allocation base
+	divMul      uint32     // for divide by elemsize - divMagic.mul
+	allocCount  uint16     // capacity - number of objects in freelist
+	sizeclass   uint8      // size class
+	incache     bool       // being used by an mcache
+	state       mSpanState // mspaninuse etc
+	needzero    uint8      // needs to be zeroed before allocation
+	divShift    uint8      // for divide by elemsize - divMagic.shift
+	divShift2   uint8      // for divide by elemsize - divMagic.shift2
+	elemsize    uintptr    // computed from sizeclass or from npages
+	unusedsince int64      // first time spotted by gc in mspanfree state
+	npreleased  uintptr    // number of pages released to the os
+	limit       uintptr    // end of data in span
+	speciallock mutex      // guards specials list
+	specials    *special   // linked list of special records sorted by offset.
+	baseMask    uintptr    // if non-0, elemsize is a power of 2, & this will get object allocation base
 }
 
 func (s *mspan) base() uintptr {
@@ -401,7 +412,7 @@ func (h *mheap) mapSpans(arena_used uintptr) {
 	n := arena_used
 	n -= h.arena_start
 	n = n / _PageSize * sys.PtrSize
-	n = round(n, sys.PhysPageSize)
+	n = round(n, physPageSize)
 	if h.spans_mapped >= n {
 		return
 	}
@@ -909,14 +920,14 @@ func scavengelist(list *mSpanList, now, limit uint64) uintptr {
 		if (now-uint64(s.unusedsince)) > limit && s.npreleased != s.npages {
 			start := s.base()
 			end := start + s.npages<<_PageShift
-			if sys.PhysPageSize > _PageSize {
+			if physPageSize > _PageSize {
 				// We can only release pages in
-				// PhysPageSize blocks, so round start
+				// physPageSize blocks, so round start
 				// and end in. (Otherwise, madvise
 				// will round them *out* and release
 				// more memory than we want.)
-				start = (start + sys.PhysPageSize - 1) &^ (sys.PhysPageSize - 1)
-				end &^= sys.PhysPageSize - 1
+				start = (start + physPageSize - 1) &^ (physPageSize - 1)
+				end &^= physPageSize - 1
 				if end <= start {
 					// start and end don't span a
 					// whole physical page.
@@ -926,7 +937,7 @@ func scavengelist(list *mSpanList, now, limit uint64) uintptr {
 			len := end - start
 
 			released := len - (s.npreleased << _PageShift)
-			if sys.PhysPageSize > _PageSize && released == 0 {
+			if physPageSize > _PageSize && released == 0 {
 				continue
 			}
 			memstats.heap_released += uint64(released)

@@ -11,10 +11,7 @@ import (
 )
 
 type Plist struct {
-	Name    *LSym
 	Firstpc *Prog
-	Recur   int
-	Link    *Plist
 }
 
 /*
@@ -22,12 +19,7 @@ type Plist struct {
  */
 func Linknewplist(ctxt *Link) *Plist {
 	pl := new(Plist)
-	if ctxt.Plist == nil {
-		ctxt.Plist = pl
-	} else {
-		ctxt.Plast.Link = pl
-	}
-	ctxt.Plast = pl
+	ctxt.Plists = append(ctxt.Plists, pl)
 	return pl
 }
 
@@ -45,7 +37,7 @@ func flushplist(ctxt *Link, freeProgs bool) {
 	var etext *Prog
 	var text []*LSym
 
-	for pl := ctxt.Plist; pl != nil; pl = pl.Link {
+	for _, pl := range ctxt.Plists {
 		var plink *Prog
 		for p := pl.Firstpc; p != nil; p = plink {
 			if ctxt.Debugasm != 0 && ctxt.Debugvlog != 0 {
@@ -80,34 +72,6 @@ func flushplist(ctxt *Link, freeProgs bool) {
 				a.Gotype = p.From.Gotype
 				a.Link = curtext.Autom
 				curtext.Autom = a
-				continue
-
-			case AGLOBL:
-				s := p.From.Sym
-				if s.Seenglobl {
-					fmt.Printf("duplicate %v\n", p)
-				}
-				s.Seenglobl = true
-				if s.Onlist {
-					log.Fatalf("symbol %s listed multiple times", s.Name)
-				}
-				s.Onlist = true
-				ctxt.Data = append(ctxt.Data, s)
-				s.Size = p.To.Offset
-				if s.Type == 0 || s.Type == SXREF {
-					s.Type = SBSS
-				}
-				flag := int(p.From3.Offset)
-				if flag&DUPOK != 0 {
-					s.Dupok = true
-				}
-				if flag&RODATA != 0 {
-					s.Type = SRODATA
-				} else if flag&NOPTR != 0 {
-					s.Type = SNOPTRBSS
-				} else if flag&TLSBSS != 0 {
-					s.Type = STLSBSS
-				}
 				continue
 
 			case ATEXT:
@@ -210,10 +174,35 @@ func flushplist(ctxt *Link, freeProgs bool) {
 	// Add to running list in ctxt.
 	ctxt.Text = append(ctxt.Text, text...)
 	ctxt.Data = append(ctxt.Data, gendwarf(ctxt, text)...)
-	ctxt.Plist = nil
-	ctxt.Plast = nil
+	ctxt.Plists = nil
 	ctxt.Curp = nil
 	if freeProgs {
 		ctxt.freeProgs()
+	}
+}
+
+func (ctxt *Link) Globl(s *LSym, size int64, flag int) {
+	if s.Seenglobl {
+		fmt.Printf("duplicate %v\n", s)
+	}
+	s.Seenglobl = true
+	if s.Onlist {
+		log.Fatalf("symbol %s listed multiple times", s.Name)
+	}
+	s.Onlist = true
+	ctxt.Data = append(ctxt.Data, s)
+	s.Size = size
+	if s.Type == 0 || s.Type == SXREF {
+		s.Type = SBSS
+	}
+	if flag&DUPOK != 0 {
+		s.Dupok = true
+	}
+	if flag&RODATA != 0 {
+		s.Type = SRODATA
+	} else if flag&NOPTR != 0 {
+		s.Type = SNOPTRBSS
+	} else if flag&TLSBSS != 0 {
+		s.Type = STLSBSS
 	}
 }
