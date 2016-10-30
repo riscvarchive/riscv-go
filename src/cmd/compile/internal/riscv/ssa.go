@@ -386,13 +386,7 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 	case ssa.BlockRISCVBRANCH:
 		// Conditional branch. The control value tells us what kind.
 		v := b.Control
-		// Double-check that the value is exactly where we expect it.
-		if v.Block != b {
-			gc.Fatalf("control value in the wrong block %v, want %v: %v", v.Block, b, v.LongString())
-		}
-		if v != b.Values[len(b.Values)-1] {
-			gc.Fatalf("badly scheduled control value for block %v: %v", b, v.LongString())
-		}
+
 		p := gc.Prog(v.Op.Asm())
 		p.To.Type = obj.TYPE_BRANCH
 		p.Reg = v.Args[1].Reg()
