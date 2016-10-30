@@ -84,8 +84,17 @@ var ssaRegToReg = []int16{
 
 func loadByType(t ssa.Type) obj.As {
 	width := t.Size()
+
 	if t.IsFloat() {
-		panic("load float unsupported")
+		switch width {
+		case 4:
+			return riscv.AMOVF
+		case 8:
+			return riscv.AMOVD
+		default:
+			gc.Fatalf("unknown float width for load %d in type %v", width, t)
+			return 0
+		}
 	}
 
 	switch width {
@@ -109,16 +118,26 @@ func loadByType(t ssa.Type) obj.As {
 		}
 	case 8:
 		return riscv.AMOV
+	default:
+		gc.Fatalf("unknown width for load %d in type %v", width, t)
+		return 0
 	}
-
-	panic("bad load type")
 }
 
 // storeByType returns the store instruction of the given type.
 func storeByType(t ssa.Type) obj.As {
 	width := t.Size()
+
 	if t.IsFloat() {
-		panic("store float unsupported")
+		switch width {
+		case 4:
+			return riscv.AMOVF
+		case 8:
+			return riscv.AMOVD
+		default:
+			gc.Fatalf("unknown float width for store %d in type %v", width, t)
+			return 0
+		}
 	}
 
 	switch width {
@@ -130,9 +149,10 @@ func storeByType(t ssa.Type) obj.As {
 		return riscv.AMOVW
 	case 8:
 		return riscv.AMOV
+	default:
+		gc.Fatalf("unknown width for store %d in type %v", width, t)
+		return 0
 	}
-
-	panic("bad store type")
 }
 
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
@@ -158,10 +178,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		if rs == rd {
 			return
 		}
+		as := riscv.AMOV
 		if v.Type.IsFloat() {
-			v.Fatalf("OpCopy float not implemented")
+			as = riscv.AMOVD
 		}
-		p := gc.Prog(riscv.AMOV)
+		p := gc.Prog(as)
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = rs
 		p.To.Type = obj.TYPE_REG
