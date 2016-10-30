@@ -5,6 +5,7 @@
 package riscv
 
 import (
+	"fmt"
 	"math"
 
 	"cmd/compile/internal/gc"
@@ -82,57 +83,73 @@ var ssaRegToReg = []int16{
 	0, // SB isn't a real register.  We fill an Addr.Reg field with 0 in this case.
 }
 
-func loadByType(t ssa.Type) obj.As {
+func loadByType(t ssa.Type) (obj.As, error) {
 	width := t.Size()
+
 	if t.IsFloat() {
-		panic("load float unsupported")
+		switch width {
+		case 4:
+			return riscv.AMOVF, nil
+		case 8:
+			return riscv.AMOVD, nil
+		default:
+			return 0, fmt.Errorf("unknown float width for load %d in type %v", width, t)
+		}
 	}
 
 	switch width {
 	case 1:
 		if t.IsSigned() {
-			return riscv.AMOVB
+			return riscv.AMOVB, nil
 		} else {
-			return riscv.AMOVBU
+			return riscv.AMOVBU, nil
 		}
 	case 2:
 		if t.IsSigned() {
-			return riscv.AMOVH
+			return riscv.AMOVH, nil
 		} else {
-			return riscv.AMOVHU
+			return riscv.AMOVHU, nil
 		}
 	case 4:
 		if t.IsSigned() {
-			return riscv.AMOVW
+			return riscv.AMOVW, nil
 		} else {
-			return riscv.AMOVWU
+			return riscv.AMOVWU, nil
 		}
 	case 8:
-		return riscv.AMOV
+		return riscv.AMOV, nil
+	default:
+		return 0, fmt.Errorf("unknown width for load %d in type %v", width, t)
 	}
-
-	panic("bad load type")
 }
 
 // storeByType returns the store instruction of the given type.
-func storeByType(t ssa.Type) obj.As {
+func storeByType(t ssa.Type) (obj.As, error) {
 	width := t.Size()
+
 	if t.IsFloat() {
-		panic("store float unsupported")
+		switch width {
+		case 4:
+			return riscv.AMOVF, nil
+		case 8:
+			return riscv.AMOVD, nil
+		default:
+			return 0, fmt.Errorf("unknown float width for store %d in type %v", width, t)
+		}
 	}
 
 	switch width {
 	case 1:
-		return riscv.AMOVB
+		return riscv.AMOVB, nil
 	case 2:
-		return riscv.AMOVH
+		return riscv.AMOVH, nil
 	case 4:
-		return riscv.AMOVW
+		return riscv.AMOVW, nil
 	case 8:
-		return riscv.AMOV
+		return riscv.AMOV, nil
+	default:
+		return 0, fmt.Errorf("unknown width for store %d in type %v", width, t)
 	}
-
-	panic("bad store type")
 }
 
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
@@ -158,10 +175,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		if rs == rd {
 			return
 		}
+		as := riscv.AMOV
 		if v.Type.IsFloat() {
-			v.Fatalf("OpCopy float not implemented")
+			as = riscv.AMOVD
 		}
-		p := gc.Prog(riscv.AMOV)
+		p := gc.Prog(as)
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = rs
 		p.To.Type = obj.TYPE_REG
@@ -171,7 +189,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			v.Fatalf("load flags not implemented: %v", v.LongString())
 			return
 		}
-		p := gc.Prog(loadByType(v.Type))
+		as, err := loadByType(v.Type)
+		if err != nil {
+			v.Fatalf("cannot find load type for %v: %v", v, err)
+		}
+		p := gc.Prog(as)
 		gc.AddrAuto(&p.From, v.Args[0])
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = v.Reg()
@@ -180,7 +202,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			v.Fatalf("store flags not implemented: %v", v.LongString())
 			return
 		}
-		p := gc.Prog(storeByType(v.Type))
+		as, err := storeByType(v.Type)
+		if err != nil {
+			v.Fatalf("cannot find store type for %v: %v", v, err)
+		}
+		p := gc.Prog(as)
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = v.Args[0].Reg()
 		gc.AddrAuto(&p.To, v)

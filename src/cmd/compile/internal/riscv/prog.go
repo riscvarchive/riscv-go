@@ -127,13 +127,17 @@ var progmap = map[obj.As]gc.ProgInfo{
 	riscv.AFSQRTD: {Flags: gc.LeftRead | gc.RightWrite},
 
 	// 8.4: Double-Precision Floating-Point Conversion and Move Instructions
-	riscv.AFCVTWD: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFCVTLD: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFCVTDW: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFCVTDL: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFCVTSD: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFCVTDS: {Flags: gc.LeftRead | gc.RightWrite},
-	riscv.AFMVDX:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFSGNJD:  {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFSGNJND: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFNEGD:   {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFSGNJXD: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
+	riscv.AFCVTWD:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFCVTLD:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFCVTDW:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFCVTDL:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFCVTSD:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFCVTDS:  {Flags: gc.LeftRead | gc.RightWrite},
+	riscv.AFMVDX:   {Flags: gc.LeftRead | gc.RightWrite},
 
 	// 8.5: Double-Precision Floating-Point Compare Instructions
 	riscv.AFEQD: {Flags: gc.LeftRead | gc.RegRead | gc.RightWrite},
