@@ -135,6 +135,16 @@
 (Cvt32Fto64F x) -> (FCVTDS x)
 (Cvt64Fto32F x) -> (FCVTSD x)
 
+// From genericOps.go:
+// "0 if arg0 == 0, -1 if arg0 > 0, undef if arg0<0"
+//
+// Like other arches, we compute ~((x-1) >> 63), with arithmetic right shift.
+// For positive x, bit 63 of x-1 is always 0, so the result is -1.
+// For zero x, bit 63 of x-1 is 1, so the result is 0.
+//
+// TODO(prattmic): Use XORconst etc instead of XOR (MOVDconst).
+(Slicemask <t> x) -> (XOR (MOVDconst [-1]) (SRA <t> (SUB <t> x (MOVDconst [1])) (MOVDconst [63])))
+
 // Truncations
 // We ignore the unused high parts of registers, so truncates are just copies.
 (Trunc16to8  x) -> x
