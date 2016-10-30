@@ -135,6 +135,9 @@
 (Cvt32Fto64F x) -> (FCVTDS x)
 (Cvt64Fto32F x) -> (FCVTSD x)
 
+// TODO(prattmic): Use XORconst etc instead of XOR (MOVDconst).
+(Slicemask <t> x) -> (XOR (MOVDconst [-1]) (SRA <t> (SUB <t> x (MOVDconst [1])) (MOVDconst [63])))
+
 // Truncations
 // We ignore the unused high parts of registers, so truncates are just copies.
 (Trunc16to8  x) -> x

@@ -450,6 +450,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpSignExt8to32(v, config)
 	case OpSignExt8to64:
 		return rewriteValueRISCV_OpSignExt8to64(v, config)
+	case OpSlicemask:
+		return rewriteValueRISCV_OpSlicemask(v, config)
 	case OpSqrt:
 		return rewriteValueRISCV_OpSqrt(v, config)
 	case OpStaticCall:
@@ -4992,6 +4994,33 @@ func rewriteValueRISCV_OpSignExt8to64(v *Value, config *Config) bool {
 		v0.AuxInt = 56
 		v0.AddArg(x)
 		v.AddArg(v0)
+		return true
+	}
+}
+func rewriteValueRISCV_OpSlicemask(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (Slicemask <t> x)
+	// cond:
+	// result: (XOR (MOVDconst [-1]) (SRA <t> (SUB <t> x (MOVDconst [1])) (MOVDconst [63])))
+	for {
+		t := v.Type
+		x := v.Args[0]
+		v.reset(OpRISCVXOR)
+		v0 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
+		v0.AuxInt = -1
+		v.AddArg(v0)
+		v1 := b.NewValue0(v.Line, OpRISCVSRA, t)
+		v2 := b.NewValue0(v.Line, OpRISCVSUB, t)
+		v2.AddArg(x)
+		v3 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
+		v3.AuxInt = 1
+		v2.AddArg(v3)
+		v1.AddArg(v2)
+		v4 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
+		v4.AuxInt = 63
+		v1.AddArg(v4)
+		v.AddArg(v1)
 		return true
 	}
 }
