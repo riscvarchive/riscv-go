@@ -41,6 +41,7 @@ var tests = [...]struct {
 	{name: "keepalive"},
 	{name: "global"},
 	{name: "live"},
+	{name: "typeswitch"},
 }
 
 func main() {
