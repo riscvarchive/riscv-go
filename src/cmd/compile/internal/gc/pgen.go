@@ -5,6 +5,7 @@
 package gc
 
 import (
+	"cmd/compile/internal/ssa"
 	"cmd/internal/obj"
 	"cmd/internal/sys"
 	"fmt"
@@ -93,6 +94,11 @@ func gvardefx(n *Node, as obj.As) {
 
 	switch n.Class {
 	case PAUTO, PPARAM, PPARAMOUT:
+		if !n.Used {
+			Prog(obj.ANOP)
+			return
+		}
+
 		if as == obj.AVARLIVE {
 			Gins(as, n, nil)
 		} else {
@@ -151,15 +157,11 @@ func emitptrargsmap() {
 		onebitwalktype1(Curfn.Type.Params(), &xoffset, bv)
 	}
 
-	for j := 0; int32(j) < bv.n; j += 32 {
-		off = duint32(sym, off, bv.b[j/32])
-	}
+	off = dbvec(sym, off, bv)
 	if Curfn.Type.Results().NumFields() > 0 {
 		xoffset = 0
 		onebitwalktype1(Curfn.Type.Results(), &xoffset, bv)
-		for j := 0; int32(j) < bv.n; j += 32 {
-			off = duint32(sym, off, bv.b[j/32])
-		}
+		off = dbvec(sym, off, bv)
 	}
 
 	ggloblsym(sym, int32(off), obj.RODATA|obj.LOCAL)
@@ -214,14 +216,11 @@ func (s byStackVar) Len() int           { return len(s) }
 func (s byStackVar) Less(i, j int) bool { return cmpstackvarlt(s[i], s[j]) }
 func (s byStackVar) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
-// TODO(lvd) find out where the PAUTO/OLITERAL nodes come from.
-func allocauto(ptxt *obj.Prog) {
+var scratchFpMem *Node
+
+func (s *ssaExport) AllocFrame(f *ssa.Func) {
 	Stksize = 0
 	stkptrsize = 0
-
-	if len(Curfn.Func.Dcl) == 0 {
-		return
-	}
 
 	// Mark the PAUTO's unused.
 	for _, ln := range Curfn.Func.Dcl {
@@ -230,37 +229,48 @@ func allocauto(ptxt *obj.Prog) {
 		}
 	}
 
-	markautoused(ptxt)
+	for _, l := range f.RegAlloc {
+		if ls, ok := l.(ssa.LocalSlot); ok {
+			ls.N.(*Node).Used = true
+		}
+
+	}
+
+	scratchUsed := false
+	for _, b := range f.Blocks {
+		for _, v := range b.Values {
+			switch a := v.Aux.(type) {
+			case *ssa.ArgSymbol:
+				a.Node.(*Node).Used = true
+			case *ssa.AutoSymbol:
+				a.Node.(*Node).Used = true
+			}
+
+			if !scratchUsed {
+				scratchUsed = v.Op.UsesScratch()
+			}
+		}
+	}
+
+	if f.Config.NeedsFpScratch {
+		scratchFpMem = temp(Types[TUINT64])
+		scratchFpMem.Used = scratchUsed
+	}
 
 	sort.Sort(byStackVar(Curfn.Func.Dcl))
 
-	// Unused autos are at the end, chop 'em off.
-	n := Curfn.Func.Dcl[0]
-	if n.Class == PAUTO && n.Op == ONAME && !n.Used {
-		// No locals used at all
-		Curfn.Func.Dcl = nil
-
-		fixautoused(ptxt)
-		return
-	}
-
-	for i := 1; i < len(Curfn.Func.Dcl); i++ {
-		n = Curfn.Func.Dcl[i]
-		if n.Class == PAUTO && n.Op == ONAME && !n.Used {
+	// Reassign stack offsets of the locals that are used.
+	for i, n := range Curfn.Func.Dcl {
+		if n.Op != ONAME || n.Class != PAUTO {
+			continue
+		}
+		if !n.Used {
 			Curfn.Func.Dcl = Curfn.Func.Dcl[:i]
 			break
 		}
-	}
-
-	// Reassign stack offsets of the locals that are still there.
-	var w int64
-	for _, n := range Curfn.Func.Dcl {
-		if n.Class != PAUTO || n.Op != ONAME {
-			continue
-		}
 
 		dowidth(n.Type)
-		w = n.Type.Width
+		w := n.Type.Width
 		if w >= Thearch.MAXWIDTH || w < 0 {
 			Fatalf("bad width")
 		}
@@ -282,8 +292,6 @@ func allocauto(ptxt *obj.Prog) {
 
 	Stksize = Rnd(Stksize, int64(Widthreg))
 	stkptrsize = Rnd(stkptrsize, int64(Widthreg))
-
-	fixautoused(ptxt)
 }
 
 func compile(fn *Node) {
@@ -295,8 +303,6 @@ func compile(fn *Node) {
 		panicslice = Sysfunc("panicslice")
 		panicdivide = Sysfunc("panicdivide")
 		growslice = Sysfunc("growslice")
-		writebarrierptr = Sysfunc("writebarrierptr")
-		typedmemmove = Sysfunc("typedmemmove")
 		panicdottype = Sysfunc("panicdottype")
 	}
 
@@ -313,9 +319,6 @@ func compile(fn *Node) {
 			return
 		}
 
-		if Debug['A'] != 0 {
-			return
-		}
 		emitptrargsmap()
 		return
 	}
@@ -382,7 +385,7 @@ func compile(fn *Node) {
 		ptxt.From3.Offset |= obj.REFLECTMETHOD
 	}
 	if fn.Func.Pragma&Systemstack != 0 {
-		ptxt.From.Sym.Cfunc = true
+		ptxt.From.Sym.Set(obj.AttrCFunc, true)
 	}
 
 	// Clumsy but important.
@@ -413,9 +416,17 @@ func compile(fn *Node) {
 			continue
 		}
 		switch n.Class {
-		case PAUTO, PPARAM, PPARAMOUT:
+		case PAUTO:
+			if !n.Used {
+				continue
+			}
+			fallthrough
+		case PPARAM, PPARAMOUT:
 			p := Gins(obj.ATYPE, n, nil)
-			p.From.Gotype = Linksym(ngotype(n))
+			p.From.Sym = obj.Linklookup(Ctxt, n.Sym.Name, 0)
+			p.To.Type = obj.TYPE_MEM
+			p.To.Name = obj.NAME_EXTERN
+			p.To.Sym = Linksym(ngotype(n))
 		}
 	}
 

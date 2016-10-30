@@ -44,6 +44,8 @@ const (
 )
 
 const (
+	/* RBasePPC64 = 4096 */
+	/* R0=4096 ... R31=4127 */
 	REG_R0 = obj.RBasePPC64 + iota
 	REG_R1
 	REG_R2
@@ -77,6 +79,7 @@ const (
 	REG_R30
 	REG_R31
 
+	/* F0=4128 ... F31=4159 */
 	REG_F0
 	REG_F1
 	REG_F2
@@ -110,6 +113,7 @@ const (
 	REG_F30
 	REG_F31
 
+	/* V0=4160 ... V31=4191 */
 	REG_V0
 	REG_V1
 	REG_V2
@@ -142,6 +146,72 @@ const (
 	REG_V29
 	REG_V30
 	REG_V31
+
+	/* VS0=4192 ... VS63=4255 */
+	REG_VS0
+	REG_VS1
+	REG_VS2
+	REG_VS3
+	REG_VS4
+	REG_VS5
+	REG_VS6
+	REG_VS7
+	REG_VS8
+	REG_VS9
+	REG_VS10
+	REG_VS11
+	REG_VS12
+	REG_VS13
+	REG_VS14
+	REG_VS15
+	REG_VS16
+	REG_VS17
+	REG_VS18
+	REG_VS19
+	REG_VS20
+	REG_VS21
+	REG_VS22
+	REG_VS23
+	REG_VS24
+	REG_VS25
+	REG_VS26
+	REG_VS27
+	REG_VS28
+	REG_VS29
+	REG_VS30
+	REG_VS31
+	REG_VS32
+	REG_VS33
+	REG_VS34
+	REG_VS35
+	REG_VS36
+	REG_VS37
+	REG_VS38
+	REG_VS39
+	REG_VS40
+	REG_VS41
+	REG_VS42
+	REG_VS43
+	REG_VS44
+	REG_VS45
+	REG_VS46
+	REG_VS47
+	REG_VS48
+	REG_VS49
+	REG_VS50
+	REG_VS51
+	REG_VS52
+	REG_VS53
+	REG_VS54
+	REG_VS55
+	REG_VS56
+	REG_VS57
+	REG_VS58
+	REG_VS59
+	REG_VS60
+	REG_VS61
+	REG_VS62
+	REG_VS63
 
 	REG_CR0
 	REG_CR1
@@ -213,6 +283,43 @@ const (
 	NOSCHED = 1 << 9
 )
 
+// Values for use in branch instruction BC
+// BC B0,BI,label
+// BO is type of branch + likely bits described below
+// BI is CR value + branch type
+// ex: BEQ CR2,label is BC 12,10,label
+//   12 = BO_BCR
+//   10 = BI_CR2 + BI_EQ
+
+const (
+	BI_CR0 = 0
+	BI_CR1 = 4
+	BI_CR2 = 8
+	BI_CR3 = 12
+	BI_CR4 = 16
+	BI_CR5 = 20
+	BI_CR6 = 24
+	BI_CR7 = 28
+	BI_LT  = 0
+	BI_GT  = 1
+	BI_EQ  = 2
+	BI_OVF = 3
+)
+
+// Values for the BO field.  Add the branch type to
+// the likely bits, if a likely setting is known.
+// If branch likely or unlikely is not known, don't set it.
+// e.g. branch on cr+likely = 15
+
+const (
+	BO_BCTR     = 16 // branch on ctr value
+	BO_BCR      = 12 // branch on cr value
+	BO_BCRBCTR  = 8  // branch on ctr and cr value
+	BO_NOTBCR   = 4  // branch on not cr value
+	BO_UNLIKELY = 2  // value for unlikely
+	BO_LIKELY   = 3  // value for likely
+)
+
 // Bit settings from the CR
 
 const (
@@ -227,6 +334,7 @@ const (
 	C_REG
 	C_FREG
 	C_VREG
+	C_VSREG
 	C_CREG
 	C_SPR /* special processor register */
 	C_ZCON
@@ -387,6 +495,7 @@ const (
 	ALSW
 	ALWAR
 	ALWSYNC
+	AMOVDBR
 	AMOVWBR
 	AMOVB
 	AMOVBU
@@ -556,12 +665,18 @@ const (
 	ARFID
 	ARLDMI
 	ARLDMICC
+	ARLDIMI
+	ARLDIMICC
 	ARLDC
 	ARLDCCC
 	ARLDCR
 	ARLDCRCC
+	ARLDICR
+	ARLDICRCC
 	ARLDCL
 	ARLDCLCC
+	ARLDICL
+	ARLDICLCC
 	ASLBIA
 	ASLBIE
 	ASLBMFEE
@@ -736,6 +851,87 @@ const (
 	AVSHASIGMA
 	AVSHASIGMAW
 	AVSHASIGMAD
+
+	/* VSX */
+	ALXV
+	ALXVD2X
+	ALXVDSX
+	ALXVW4X
+	ASTXV
+	ASTXVD2X
+	ASTXVW4X
+	ALXS
+	ALXSDX
+	ASTXS
+	ASTXSDX
+	ALXSI
+	ALXSIWAX
+	ALXSIWZX
+	ASTXSI
+	ASTXSIWX
+	AMFVSR
+	AMFVSRD
+	AMFVSRWZ
+	AMTVSR
+	AMTVSRD
+	AMTVSRWA
+	AMTVSRWZ
+	AXXLAND
+	AXXLANDQ
+	AXXLANDC
+	AXXLEQV
+	AXXLNAND
+	AXXLOR
+	AXXLORC
+	AXXLNOR
+	AXXLORQ
+	AXXLXOR
+	AXXSEL
+	AXXMRG
+	AXXMRGHW
+	AXXMRGLW
+	AXXSPLT
+	AXXSPLTW
+	AXXPERM
+	AXXPERMDI
+	AXXSI
+	AXXSLDWI
+	AXSCV
+	AXSCVDPSP
+	AXSCVSPDP
+	AXSCVDPSPN
+	AXSCVSPDPN
+	AXVCV
+	AXVCVDPSP
+	AXVCVSPDP
+	AXSCVX
+	AXSCVDPSXDS
+	AXSCVDPSXWS
+	AXSCVDPUXDS
+	AXSCVDPUXWS
+	AXSCVXP
+	AXSCVSXDDP
+	AXSCVUXDDP
+	AXSCVSXDSP
+	AXSCVUXDSP
+	AXVCVX
+	AXVCVDPSXDS
+	AXVCVDPSXWS
+	AXVCVDPUXDS
+	AXVCVDPUXWS
+	AXVCVSPSXDS
+	AXVCVSPSXWS
+	AXVCVSPUXDS
+	AXVCVSPUXWS
+	AXVCVXP
+	AXVCVSXDDP
+	AXVCVSXWDP
+	AXVCVUXDDP
+	AXVCVUXWDP
+	AXVCVSXDSP
+	AXVCVSXWSP
+	AXVCVUXDSP
+	AXVCVUXWSP
 
 	ALAST
 

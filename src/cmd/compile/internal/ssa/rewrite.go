@@ -149,6 +149,116 @@ func canMergeSym(x, y interface{}) bool {
 	return x == nil || y == nil
 }
 
+// canMergeLoad reports whether the load can be merged into target without
+// invalidating the schedule.
+func canMergeLoad(target, load *Value) bool {
+	if target.Block.ID != load.Block.ID {
+		// If the load is in a different block do not merge it.
+		return false
+	}
+	mem := load.Args[len(load.Args)-1]
+
+	// We need the load's memory arg to still be alive at target. That
+	// can't be the case if one of target's args depends on a memory
+	// state that is a successor of load's memory arg.
+	//
+	// For example, it would be invalid to merge load into target in
+	// the following situation because newmem has killed oldmem
+	// before target is reached:
+	//     load = read ... oldmem
+	//   newmem = write ... oldmem
+	//     arg0 = read ... newmem
+	//   target = add arg0 load
+	//
+	// If the argument comes from a different block then we can exclude
+	// it immediately because it must dominate load (which is in the
+	// same block as target).
+	var args []*Value
+	for _, a := range target.Args {
+		if a != load && a.Block.ID == target.Block.ID {
+			args = append(args, a)
+		}
+	}
+
+	// memPreds contains memory states known to be predecessors of load's
+	// memory state. It is lazily initialized.
+	var memPreds map[*Value]bool
+search:
+	for i := 0; len(args) > 0; i++ {
+		const limit = 100
+		if i >= limit {
+			// Give up if we have done a lot of iterations.
+			return false
+		}
+		v := args[len(args)-1]
+		args = args[:len(args)-1]
+		if target.Block.ID != v.Block.ID {
+			// Since target and load are in the same block
+			// we can stop searching when we leave the block.
+			continue search
+		}
+		if v.Op == OpPhi {
+			// A Phi implies we have reached the top of the block.
+			continue search
+		}
+		if v.Type.IsTuple() && v.Type.FieldType(1).IsMemory() {
+			// We could handle this situation however it is likely
+			// to be very rare.
+			return false
+		}
+		if v.Type.IsMemory() {
+			if memPreds == nil {
+				// Initialise a map containing memory states
+				// known to be predecessors of load's memory
+				// state.
+				memPreds = make(map[*Value]bool)
+				m := mem
+				const limit = 50
+				for i := 0; i < limit; i++ {
+					if m.Op == OpPhi {
+						break
+					}
+					if m.Block.ID != target.Block.ID {
+						break
+					}
+					if !m.Type.IsMemory() {
+						break
+					}
+					memPreds[m] = true
+					if len(m.Args) == 0 {
+						break
+					}
+					m = m.Args[len(m.Args)-1]
+				}
+			}
+
+			// We can merge if v is a predecessor of mem.
+			//
+			// For example, we can merge load into target in the
+			// following scenario:
+			//      x = read ... v
+			//    mem = write ... v
+			//   load = read ... mem
+			// target = add x load
+			if memPreds[v] {
+				continue search
+			}
+			return false
+		}
+		if len(v.Args) > 0 && v.Args[len(v.Args)-1] == mem {
+			// If v takes mem as an input then we know mem
+			// is valid at this point.
+			continue search
+		}
+		for _, a := range v.Args {
+			if target.Block.ID == a.Block.ID {
+				args = append(args, a)
+			}
+		}
+	}
+	return true
+}
+
 // isArg returns whether s is an arg symbol
 func isArg(s interface{}) bool {
 	_, ok := s.(*ArgSymbol)
@@ -229,9 +339,14 @@ func is16Bit(n int64) bool {
 	return n == int64(int16(n))
 }
 
-// is16Bit reports whether n can be represented as an unsigned 16 bit integer.
+// isU16Bit reports whether n can be represented as an unsigned 16 bit integer.
 func isU16Bit(n int64) bool {
 	return n == int64(uint16(n))
+}
+
+// isU32Bit reports whether n can be represented as an unsigned 32 bit integer.
+func isU32Bit(n int64) bool {
+	return n == int64(uint32(n))
 }
 
 // is20Bit reports whether n can be represented as a signed 20 bit integer.
@@ -366,7 +481,7 @@ func clobber(v *Value) bool {
 //     noteRule("note to self: rule of interest matched")
 // and that message will print when the rule matches.
 func noteRule(s string) bool {
-	println(s)
+	fmt.Println(s)
 	return true
 }
 
@@ -374,7 +489,7 @@ func noteRule(s string) bool {
 // cond is true and the rule is fired.
 func warnRule(cond bool, v *Value, s string) bool {
 	if cond {
-		v.Block.Func.Config.Warnl(v.Line, "removed nil check")
+		v.Block.Func.Config.Warnl(v.Line, s)
 	}
 	return true
 }

@@ -126,19 +126,6 @@ func (p *Package) writeDefs() {
 		fmt.Fprint(fgo2, goProlog)
 	}
 
-	for i, t := range p.CgoChecks {
-		n := p.unsafeCheckPointerNameIndex(i, false)
-		fmt.Fprintf(fgo2, "\nfunc %s(p %s, args ...interface{}) %s {\n", n, t, t)
-		fmt.Fprintf(fgo2, "\treturn _cgoCheckPointer(p, args...).(%s)\n", t)
-		fmt.Fprintf(fgo2, "}\n")
-	}
-	for i, t := range p.DeferredCgoChecks {
-		n := p.unsafeCheckPointerNameIndex(i, true)
-		fmt.Fprintf(fgo2, "\nfunc %s(p interface{}, args ...interface{}) %s {\n", n, t)
-		fmt.Fprintf(fgo2, "\treturn _cgoCheckPointer(p, args...).(%s)\n", t)
-		fmt.Fprintf(fgo2, "}\n")
-	}
-
 	gccgoSymbolPrefix := p.gccgoSymbolPrefix()
 
 	cVars := make(map[string]bool)
@@ -1232,8 +1219,8 @@ var goTypes = map[string]*Type{
 	"uint64":     {Size: 8, Align: 8, C: c("GoUint64")},
 	"float32":    {Size: 4, Align: 4, C: c("GoFloat32")},
 	"float64":    {Size: 8, Align: 8, C: c("GoFloat64")},
-	"complex64":  {Size: 8, Align: 8, C: c("GoComplex64")},
-	"complex128": {Size: 16, Align: 16, C: c("GoComplex128")},
+	"complex64":  {Size: 8, Align: 4, C: c("GoComplex64")},
+	"complex128": {Size: 16, Align: 8, C: c("GoComplex128")},
 }
 
 // Map an ast type to a Type.
@@ -1392,14 +1379,14 @@ func _cgo_runtime_cgocall(unsafe.Pointer, uintptr) int32
 func _cgo_runtime_cgocallback(unsafe.Pointer, unsafe.Pointer, uintptr, uintptr)
 
 //go:linkname _cgoCheckPointer runtime.cgoCheckPointer
-func _cgoCheckPointer(interface{}, ...interface{}) interface{}
+func _cgoCheckPointer(interface{}, ...interface{})
 
 //go:linkname _cgoCheckResult runtime.cgoCheckResult
 func _cgoCheckResult(interface{})
 `
 
 const gccgoGoProlog = `
-func _cgoCheckPointer(interface{}, ...interface{}) interface{}
+func _cgoCheckPointer(interface{}, ...interface{})
 
 func _cgoCheckResult(interface{})
 `
@@ -1476,9 +1463,15 @@ const cMallocDefGo = `
 var __cgofn__cgoPREFIX_Cfunc__Cmalloc byte
 var _cgoPREFIX_Cfunc__Cmalloc = unsafe.Pointer(&__cgofn__cgoPREFIX_Cfunc__Cmalloc)
 
+//go:linkname runtime_throw runtime.throw
+func runtime_throw(string)
+
 //go:cgo_unsafe_args
 func _cgo_cmalloc(p0 uint64) (r1 unsafe.Pointer) {
 	_cgo_runtime_cgocall(_cgoPREFIX_Cfunc__Cmalloc, uintptr(unsafe.Pointer(&p0)))
+	if r1 == nil {
+		runtime_throw("runtime: C malloc failed")
+	}
 	return
 }
 `
@@ -1579,18 +1572,17 @@ typedef struct __go_empty_interface {
 	void *__object;
 } Eface;
 
-extern Eface runtimeCgoCheckPointer(Eface, Slice)
+extern void runtimeCgoCheckPointer(Eface, Slice)
 	__asm__("runtime.cgoCheckPointer")
 	__attribute__((weak));
 
-extern Eface localCgoCheckPointer(Eface, Slice)
+extern void localCgoCheckPointer(Eface, Slice)
 	__asm__("GCCGOSYMBOLPREF._cgoCheckPointer");
 
-Eface localCgoCheckPointer(Eface ptr, Slice args) {
+void localCgoCheckPointer(Eface ptr, Slice args) {
 	if(runtimeCgoCheckPointer) {
-		return runtimeCgoCheckPointer(ptr, args);
+		runtimeCgoCheckPointer(ptr, args);
 	}
-	return ptr;
 }
 
 extern void runtimeCgoCheckResult(Eface)

@@ -27,7 +27,6 @@ var basicTypes = [...]struct {
 	{"complex128", TCOMPLEX128},
 	{"bool", TBOOL},
 	{"string", TSTRING},
-	{"any", TANY},
 }
 
 var typedefs = [...]struct {
@@ -62,6 +61,15 @@ var builtinFuncs = [...]struct {
 	{"println", OPRINTN},
 	{"real", OREAL},
 	{"recover", ORECOVER},
+}
+
+var unsafeFuncs = [...]struct {
+	name string
+	op   Op
+}{
+	{"Alignof", OALIGNOF},
+	{"Offsetof", OOFFSETOF},
+	{"Sizeof", OSIZEOF},
 }
 
 // initUniverse initializes the universe block.
@@ -100,8 +108,16 @@ func lexinit() {
 		s2.Def.Etype = EType(s.op)
 	}
 
+	for _, s := range unsafeFuncs {
+		s2 := Pkglookup(s.name, unsafepkg)
+		s2.Def = nod(ONAME, nil, nil)
+		s2.Def.Sym = s2
+		s2.Def.Etype = EType(s.op)
+	}
+
 	idealstring = typ(TSTRING)
 	idealbool = typ(TBOOL)
+	Types[TANY] = typ(TANY)
 
 	s := Pkglookup("true", builtinpkg)
 	s.Def = nodbool(true)
@@ -359,32 +375,16 @@ func typeinit() {
 }
 
 func makeErrorInterface() *Type {
-	rcvr := typ(TSTRUCT)
-	rcvr.StructType().Funarg = FunargRcvr
 	field := newField()
-	field.Type = ptrto(typ(TSTRUCT))
-	rcvr.SetFields([]*Field{field})
-
-	in := typ(TSTRUCT)
-	in.StructType().Funarg = FunargParams
-
-	out := typ(TSTRUCT)
-	out.StructType().Funarg = FunargResults
-	field = newField()
 	field.Type = Types[TSTRING]
-	out.SetFields([]*Field{field})
+	f := functypefield(fakethisfield(), nil, []*Field{field})
 
-	f := typ(TFUNC)
-	f.FuncType().Receiver = rcvr
-	f.FuncType().Results = out
-	f.FuncType().Params = in
-
-	t := typ(TINTER)
 	field = newField()
 	field.Sym = lookup("Error")
 	field.Type = f
-	t.SetFields([]*Field{field})
 
+	t := typ(TINTER)
+	t.SetFields([]*Field{field})
 	return t
 }
 
@@ -446,7 +446,7 @@ func finishUniverse() {
 	// package block rather than emitting a redeclared symbol error.
 
 	for _, s := range builtinpkg.Syms {
-		if s.Def == nil || (s.Name == "any" && Debug['A'] == 0) {
+		if s.Def == nil {
 			continue
 		}
 		s1 := lookup(s.Name)

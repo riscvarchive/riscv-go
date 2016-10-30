@@ -33,6 +33,7 @@ type opInfo struct {
 	nilCheck          bool // this op is a nil check on arg0
 	faultOnNilArg0    bool // this op will fault if arg0 is nil (and aux encodes a small offset)
 	faultOnNilArg1    bool // this op will fault if arg1 is nil (and aux encodes a small offset)
+	usesScratch       bool // this op requires scratch memory space
 }
 
 type inputInfo struct {
@@ -54,20 +55,21 @@ type regInfo struct {
 type auxType int8
 
 const (
-	auxNone         auxType = iota
-	auxBool                 // auxInt is 0/1 for false/true
-	auxInt8                 // auxInt is an 8-bit integer
-	auxInt16                // auxInt is a 16-bit integer
-	auxInt32                // auxInt is a 32-bit integer
-	auxInt64                // auxInt is a 64-bit integer
-	auxInt128               // auxInt represents a 128-bit integer.  Always 0.
-	auxFloat32              // auxInt is a float32 (encoded with math.Float64bits)
-	auxFloat64              // auxInt is a float64 (encoded with math.Float64bits)
-	auxSizeAndAlign         // auxInt is a SizeAndAlign
-	auxString               // aux is a string
-	auxSym                  // aux is a symbol
-	auxSymOff               // aux is a symbol, auxInt is an offset
-	auxSymValAndOff         // aux is a symbol, auxInt is a ValAndOff
+	auxNone            auxType = iota
+	auxBool                    // auxInt is 0/1 for false/true
+	auxInt8                    // auxInt is an 8-bit integer
+	auxInt16                   // auxInt is a 16-bit integer
+	auxInt32                   // auxInt is a 32-bit integer
+	auxInt64                   // auxInt is a 64-bit integer
+	auxInt128                  // auxInt represents a 128-bit integer.  Always 0.
+	auxFloat32                 // auxInt is a float32 (encoded with math.Float64bits)
+	auxFloat64                 // auxInt is a float64 (encoded with math.Float64bits)
+	auxSizeAndAlign            // auxInt is a SizeAndAlign
+	auxString                  // aux is a string
+	auxSym                     // aux is a symbol
+	auxSymOff                  // aux is a symbol, auxInt is an offset
+	auxSymValAndOff            // aux is a symbol, auxInt is a ValAndOff
+	auxSymSizeAndAlign         // aux is a symbol, auxInt is a SizeAndAlign
 
 	auxSymInt32 // aux is a symbol, auxInt is a 32-bit integer
 )

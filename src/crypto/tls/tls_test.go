@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"internal/testenv"
 	"io"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"net"
@@ -458,6 +459,112 @@ func TestConnCloseBreakingWrite(t *testing.T) {
 	}
 }
 
+func TestConnCloseWrite(t *testing.T) {
+	ln := newLocalListener(t)
+	defer ln.Close()
+
+	clientDoneChan := make(chan struct{})
+
+	serverCloseWrite := func() error {
+		sconn, err := ln.Accept()
+		if err != nil {
+			return fmt.Errorf("accept: %v", err)
+		}
+		defer sconn.Close()
+
+		serverConfig := testConfig.Clone()
+		srv := Server(sconn, serverConfig)
+		if err := srv.Handshake(); err != nil {
+			return fmt.Errorf("handshake: %v", err)
+		}
+		defer srv.Close()
+
+		data, err := ioutil.ReadAll(srv)
+		if err != nil {
+			return err
+		}
+		if len(data) > 0 {
+			return fmt.Errorf("Read data = %q; want nothing", data)
+		}
+
+		if err := srv.CloseWrite(); err != nil {
+			return fmt.Errorf("server CloseWrite: %v", err)
+		}
+
+		// Wait for clientCloseWrite to finish, so we know we
+		// tested the CloseWrite before we defer the
+		// sconn.Close above, which would also cause the
+		// client to unblock like CloseWrite.
+		<-clientDoneChan
+		return nil
+	}
+
+	clientCloseWrite := func() error {
+		defer close(clientDoneChan)
+
+		clientConfig := testConfig.Clone()
+		conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+		if err != nil {
+			return err
+		}
+		if err := conn.Handshake(); err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		if err := conn.CloseWrite(); err != nil {
+			return fmt.Errorf("client CloseWrite: %v", err)
+		}
+
+		if _, err := conn.Write([]byte{0}); err != errShutdown {
+			return fmt.Errorf("CloseWrite error = %v; want errShutdown", err)
+		}
+
+		data, err := ioutil.ReadAll(conn)
+		if err != nil {
+			return err
+		}
+		if len(data) > 0 {
+			return fmt.Errorf("Read data = %q; want nothing", data)
+		}
+		return nil
+	}
+
+	errChan := make(chan error, 2)
+
+	go func() { errChan <- serverCloseWrite() }()
+	go func() { errChan <- clientCloseWrite() }()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("deadlock")
+		}
+	}
+
+	// Also test CloseWrite being called before the handshake is
+	// finished:
+	{
+		ln2 := newLocalListener(t)
+		defer ln2.Close()
+
+		netConn, err := net.Dial("tcp", ln2.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer netConn.Close()
+		conn := Client(netConn, testConfig.Clone())
+
+		if err := conn.CloseWrite(); err != errEarlyCloseWrite {
+			t.Errorf("CloseWrite error = %v; want errEarlyCloseWrite", err)
+		}
+	}
+}
+
 func TestClone(t *testing.T) {
 	var c1 Config
 	v := reflect.ValueOf(&c1).Elem()
@@ -477,7 +584,7 @@ func TestClone(t *testing.T) {
 		case "Rand":
 			f.Set(reflect.ValueOf(io.Reader(os.Stdin)))
 			continue
-		case "Time", "GetCertificate":
+		case "Time", "GetCertificate", "GetConfigForClient", "VerifyPeerCertificate", "GetClientCertificate":
 			// DeepEqual can't compare functions.
 			continue
 		case "Certificates":
@@ -508,6 +615,10 @@ func TestClone(t *testing.T) {
 	}
 
 	c2 := c1.Clone()
+	// DeepEqual also compares unexported fields, thus c2 needs to have run
+	// serverInit in order to be DeepEqual to c1. Cloning it and discarding
+	// the result is sufficient.
+	c2.Clone()
 
 	if !reflect.DeepEqual(&c1, c2) {
 		t.Errorf("clone failed to copy a field")

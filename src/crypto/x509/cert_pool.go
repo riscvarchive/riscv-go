@@ -4,12 +4,7 @@
 
 package x509
 
-import (
-	"bytes"
-	"encoding/pem"
-	"errors"
-	"runtime"
-)
+import "encoding/pem"
 
 // CertPool is a set of certificates.
 type CertPool struct {
@@ -31,9 +26,6 @@ func NewCertPool() *CertPool {
 // Any mutations to the returned pool are not written to disk and do
 // not affect any other pool.
 func SystemCertPool() (*CertPool, error) {
-	if runtime.GOOS == "windows" {
-		return nil, errors.New("crypto/x509: system root pool is not available on Windows")
-	}
 	return loadSystemRoots()
 }
 
@@ -72,7 +64,7 @@ func (s *CertPool) contains(cert *Certificate) bool {
 
 	candidates := s.byName[string(cert.RawSubject)]
 	for _, c := range candidates {
-		if bytes.Equal(cert.Raw, s.certs[c].Raw) {
+		if s.certs[c].Equal(cert) {
 			return true
 		}
 	}
@@ -87,10 +79,8 @@ func (s *CertPool) AddCert(cert *Certificate) {
 	}
 
 	// Check that the certificate isn't being added twice.
-	for _, c := range s.certs {
-		if c.Equal(cert) {
-			return
-		}
+	if s.contains(cert) {
+		return
 	}
 
 	n := len(s.certs)

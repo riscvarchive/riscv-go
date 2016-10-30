@@ -349,7 +349,11 @@ exponent:
 		if s.ch == '-' || s.ch == '+' {
 			s.next()
 		}
-		s.scanMantissa(10)
+		if digitVal(s.ch) < 10 {
+			s.scanMantissa(10)
+		} else {
+			s.error(offs, "illegal floating-point exponent")
+		}
 	}
 
 	if s.ch == 'i' {
@@ -731,7 +735,7 @@ scanAgain:
 		case '>':
 			tok = s.switch4(token.GTR, token.GEQ, '>', token.SHR, token.SHR_ASSIGN)
 		case '=':
-			tok = s.switch2(token.ASSIGN, token.EQL)
+			tok = s.switch3(token.ASSIGN, token.EQL, '>', token.ALIAS)
 		case '!':
 			tok = s.switch2(token.NOT, token.NEQ)
 		case '&':

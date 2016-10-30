@@ -23,6 +23,9 @@ func checkGdbEnvironment(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("gdb does not work on darwin")
 	}
+	if runtime.GOOS == "linux" && runtime.GOARCH == "ppc64" {
+		t.Skip("skipping gdb tests on linux/ppc64; see golang.org/issue/17366")
+	}
 	if final := os.Getenv("GOROOT_FINAL"); final != "" && runtime.GOROOT() != final {
 		t.Skip("gdb test can fail with GOROOT_FINAL pending")
 	}
@@ -65,14 +68,18 @@ func checkGdbPython(t *testing.T) {
 const helloSource = `
 package main
 import "fmt"
+var gslice []string
 func main() {
 	mapvar := make(map[string]string,5)
 	mapvar["abc"] = "def"
 	mapvar["ghi"] = "jkl"
 	strvar := "abc"
 	ptrvar := &strvar
-	fmt.Println("hi") // line 10
+	slicevar := make([]string, 0, 16)
+	slicevar = append(slicevar, mapvar["abc"])
+	fmt.Println("hi") // line 12
 	_ = ptrvar
+	gslice = slicevar
 }
 `
 
@@ -117,22 +124,15 @@ func TestGdbPython(t *testing.T) {
 		"-ex", "echo BEGIN print strvar\n",
 		"-ex", "print strvar",
 		"-ex", "echo END\n",
+		"-ex", "echo BEGIN info locals\n",
+		"-ex", "info locals",
+		"-ex", "echo END\n",
 		"-ex", "down", // back to fmt.Println (goroutine 2 below only works at bottom of stack.  TODO: fix that)
+		"-ex", "echo BEGIN goroutine 2 bt\n",
+		"-ex", "goroutine 2 bt",
+		"-ex", "echo END\n",
+		filepath.Join(dir, "a.exe"),
 	}
-
-	// without framepointer, gdb cannot backtrace our non-standard
-	// stack frames on RISC architectures.
-	canBackTrace := false
-	switch runtime.GOARCH {
-	case "amd64", "386", "ppc64", "ppc64le", "arm", "arm64", "mips64", "mips64le", "s390x":
-		canBackTrace = true
-		args = append(args,
-			"-ex", "echo BEGIN goroutine 2 bt\n",
-			"-ex", "goroutine 2 bt",
-			"-ex", "echo END\n")
-	}
-
-	args = append(args, filepath.Join(dir, "a.exe"))
 	got, _ := exec.Command("gdb", args...).CombinedOutput()
 
 	firstLine := bytes.SplitN(got, []byte("\n"), 2)[0]
@@ -175,11 +175,18 @@ func TestGdbPython(t *testing.T) {
 		t.Fatalf("print strvar failed: %s", bl)
 	}
 
+	// Issue 16338: ssa decompose phase can split a structure into
+	// a collection of scalar vars holding the fields. In such cases
+	// the DWARF variable location expression should be of the
+	// form "var.field" and not just "field".
+	infoLocalsRe := regexp.MustCompile(`^slicevar.len = `)
+	if bl := blocks["info locals"]; !infoLocalsRe.MatchString(bl) {
+		t.Fatalf("info locals failed: %s", bl)
+	}
+
 	btGoroutineRe := regexp.MustCompile(`^#0\s+runtime.+at`)
-	if bl := blocks["goroutine 2 bt"]; canBackTrace && !btGoroutineRe.MatchString(bl) {
+	if bl := blocks["goroutine 2 bt"]; !btGoroutineRe.MatchString(bl) {
 		t.Fatalf("goroutine 2 bt failed: %s", bl)
-	} else if !canBackTrace {
-		t.Logf("gdb cannot backtrace for GOARCH=%s, skipped goroutine backtrace test", runtime.GOARCH)
 	}
 }
 

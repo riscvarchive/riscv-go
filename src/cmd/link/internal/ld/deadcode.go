@@ -7,7 +7,9 @@ package ld
 import (
 	"cmd/internal/obj"
 	"cmd/internal/sys"
+	"flag"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -108,11 +110,10 @@ func deadcode(ctxt *Link) {
 	}
 
 	if Buildmode != BuildmodeShared {
-		// Keep a typelink or itablink if the symbol it points at is being kept.
-		// (When BuildmodeShared, always keep typelinks and itablinks.)
+		// Keep a itablink if the symbol it points at is being kept.
+		// (When BuildmodeShared, always keep itablinks.)
 		for _, s := range ctxt.Syms.Allsym {
-			if strings.HasPrefix(s.Name, "go.typelink.") ||
-				strings.HasPrefix(s.Name, "go.itablink.") {
+			if strings.HasPrefix(s.Name, "go.itablink.") {
 				s.Attr.Set(AttrReachable, len(s.R) == 1 && s.R[0].Sym.Attr.Reachable())
 			}
 		}
@@ -244,7 +245,8 @@ func (d *deadcodepass) init() {
 		if *FlagLinkshared && (Buildmode == BuildmodeExe || Buildmode == BuildmodePIE) {
 			names = append(names, "main.main", "main.init")
 		} else if Buildmode == BuildmodePlugin {
-			pluginInit := d.ctxt.Library[0].Pkg + ".init"
+			pluginName := strings.TrimSuffix(filepath.Base(flag.Arg(0)), ".a")
+			pluginInit := pluginName + ".init"
 			names = append(names, pluginInit, "go.plugin.tabs")
 
 			// We don't keep the go.plugin.exports symbol,

@@ -31,6 +31,7 @@ type arch struct {
 	fpregmask       regMask
 	specialregmask  regMask
 	framepointerreg int8
+	linkreg         int8
 	generic         bool
 }
 
@@ -50,6 +51,7 @@ type opData struct {
 	nilCheck          bool  // this op is a nil check on arg0
 	faultOnNilArg0    bool  // this op will fault if arg0 is nil (and aux encodes a small offset)
 	faultOnNilArg1    bool  // this op will fault if arg1 is nil (and aux encodes a small offset)
+	usesScratch       bool  // this op requires scratch memory space
 }
 
 type blockData struct {
@@ -203,6 +205,9 @@ func genOp() {
 					log.Fatalf("faultOnNilArg1 with aux %s not allowed", v.aux)
 				}
 			}
+			if v.usesScratch {
+				fmt.Fprintln(w, "usesScratch: true,")
+			}
 			if a.name == "generic" {
 				fmt.Fprintln(w, "generic:true,")
 				fmt.Fprintln(w, "},") // close op
@@ -262,6 +267,8 @@ func genOp() {
 	// generate op string method
 	fmt.Fprintln(w, "func (o Op) String() string {return opcodeTable[o].name }")
 
+	fmt.Fprintln(w, "func (o Op) UsesScratch() bool { return opcodeTable[o].usesScratch }")
+
 	// generate registers
 	for _, a := range archs {
 		if a.generic {
@@ -289,6 +296,7 @@ func genOp() {
 		fmt.Fprintf(w, "var fpRegMask%s = regMask(%d)\n", a.name, a.fpregmask)
 		fmt.Fprintf(w, "var specialRegMask%s = regMask(%d)\n", a.name, a.specialregmask)
 		fmt.Fprintf(w, "var framepointerReg%s = int8(%d)\n", a.name, a.framepointerreg)
+		fmt.Fprintf(w, "var linkReg%s = int8(%d)\n", a.name, a.linkreg)
 	}
 
 	// gofmt result

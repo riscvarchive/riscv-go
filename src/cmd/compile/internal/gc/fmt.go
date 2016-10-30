@@ -5,7 +5,6 @@
 package gc
 
 import (
-	"cmd/internal/obj"
 	"fmt"
 	"strconv"
 	"strings"
@@ -148,6 +147,7 @@ var goopnames = []string{
 	OADDR:     "&",
 	OADD:      "+",
 	OADDSTR:   "+",
+	OALIGNOF:  "unsafe.Alignof",
 	OANDAND:   "&&",
 	OANDNOT:   "&^",
 	OAND:      "&",
@@ -188,6 +188,7 @@ var goopnames = []string{
 	ONEW:      "new",
 	ONE:       "!=",
 	ONOT:      "!",
+	OOFFSETOF: "unsafe.Offsetof",
 	OOROR:     "||",
 	OOR:       "|",
 	OPANIC:    "panic",
@@ -202,6 +203,7 @@ var goopnames = []string{
 	ORSH:      ">>",
 	OSELECT:   "select",
 	OSEND:     "<-",
+	OSIZEOF:   "unsafe.Sizeof",
 	OSUB:      "-",
 	OSWITCH:   "switch",
 	OXOR:      "^",
@@ -318,9 +320,6 @@ func (n *Node) jconv(s fmt.State, flag FmtFlag) {
 	case EscHeap:
 		fmt.Fprint(s, " esc(h)")
 
-	case EscScope:
-		fmt.Fprint(s, " esc(s)")
-
 	case EscNone:
 		fmt.Fprint(s, " esc(no)")
 
@@ -333,8 +332,8 @@ func (n *Node) jconv(s fmt.State, flag FmtFlag) {
 		fmt.Fprintf(s, " esc(%d)", n.Esc)
 	}
 
-	if e, ok := n.Opt().(*NodeEscState); ok && e.Escloopdepth != 0 {
-		fmt.Fprintf(s, " ld(%d)", e.Escloopdepth)
+	if e, ok := n.Opt().(*NodeEscState); ok && e.Loopdepth != 0 {
+		fmt.Fprintf(s, " ld(%d)", e.Loopdepth)
 	}
 
 	if c == 0 && n.Typecheck != 0 {
@@ -994,6 +993,7 @@ func (n *Node) stmtfmt(s fmt.State) {
 }
 
 var opprec = []int{
+	OALIGNOF:      8,
 	OAPPEND:       8,
 	OARRAYBYTESTR: 8,
 	OARRAYLIT:     8,
@@ -1019,6 +1019,7 @@ var opprec = []int{
 	ONAME:         8,
 	ONEW:          8,
 	ONONAME:       8,
+	OOFFSETOF:     8,
 	OPACK:         8,
 	OPANIC:        8,
 	OPAREN:        8,
@@ -1026,6 +1027,7 @@ var opprec = []int{
 	OPRINT:        8,
 	ORISCVEXIT:    8,
 	ORUNESTR:      8,
+	OSIZEOF:       8,
 	OSTRARRAYBYTE: 8,
 	OSTRARRAYRUNE: 8,
 	OSTRUCTLIT:    8,
@@ -1135,9 +1137,6 @@ func (n *Node) exprfmt(s fmt.State, prec int) {
 
 	case ODDDARG:
 		fmt.Fprint(s, "... argument")
-
-	case OREGISTER:
-		fmt.Fprint(s, obj.Rconv(int(n.Reg)))
 
 	case OLITERAL: // this is a bit of a mess
 		if fmtmode == FErr {
@@ -1276,6 +1275,9 @@ func (n *Node) exprfmt(s fmt.State, prec int) {
 		}
 		fmt.Fprint(s, ":")
 
+	case OSTRUCTKEY:
+		fmt.Fprintf(s, "%v:%v", n.Sym, n.Left)
+
 	case OCALLPART:
 		n.Left.exprfmt(s, nprec)
 		if n.Right == nil || n.Right.Sym == nil {
@@ -1356,6 +1358,9 @@ func (n *Node) exprfmt(s fmt.State, prec int) {
 		OPANIC,
 		ORECOVER,
 		ORISCVEXIT,
+		OALIGNOF,
+		OOFFSETOF,
+		OSIZEOF,
 		OPRINT,
 		OPRINTN:
 		if n.Left != nil {
@@ -1504,8 +1509,8 @@ func (n *Node) nodedump(s fmt.State, flag FmtFlag) {
 	default:
 		fmt.Fprintf(s, "%v%j", n.Op, n)
 
-	case OREGISTER, OINDREG:
-		fmt.Fprintf(s, "%v-%v%j", n.Op, obj.Rconv(int(n.Reg)), n)
+	case OINDREGSP:
+		fmt.Fprintf(s, "%v-SP%j", n.Op, n)
 
 	case OLITERAL:
 		fmt.Fprintf(s, "%v-%v%j", n.Op, n.Val(), n)

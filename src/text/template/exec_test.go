@@ -932,7 +932,7 @@ func TestMessageForExecuteEmpty(t *testing.T) {
 		t.Fatal("expected second error")
 	}
 	got = err.Error()
-	want = `template: empty: "empty" is an incomplete or empty template; defined templates are: "secondary"`
+	want = `template: empty: "empty" is an incomplete or empty template`
 	if got != want {
 		t.Errorf("expected error %s got %s", want, got)
 	}
@@ -1308,5 +1308,28 @@ func TestMaxExecDepth(t *testing.T) {
 	const want = "exceeded maximum template depth"
 	if !strings.Contains(got, want) {
 		t.Errorf("got error %q; want %q", got, want)
+	}
+}
+
+func TestAddrOfIndex(t *testing.T) {
+	// golang.org/issue/14916.
+	// Before index worked on reflect.Values, the .String could not be
+	// found on the (incorrectly unaddressable) V value,
+	// in contrast to range, which worked fine.
+	// Also testing that passing a reflect.Value to tmpl.Execute works.
+	texts := []string{
+		`{{range .}}{{.String}}{{end}}`,
+		`{{with index . 0}}{{.String}}{{end}}`,
+	}
+	for _, text := range texts {
+		tmpl := Must(New("tmpl").Parse(text))
+		var buf bytes.Buffer
+		err := tmpl.Execute(&buf, reflect.ValueOf([]V{{1}}))
+		if err != nil {
+			t.Fatalf("%s: Execute: %v", text, err)
+		}
+		if buf.String() != "<1>" {
+			t.Fatalf("%s: template output = %q, want %q", text, buf, "<1>")
+		}
 	}
 }

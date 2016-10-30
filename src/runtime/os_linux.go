@@ -182,6 +182,7 @@ var failthreadcreate = []byte("runtime: failed to create new OS thread\n")
 const (
 	_AT_NULL   = 0  // End of vector
 	_AT_PAGESZ = 6  // System physical page size
+	_AT_HWCAP  = 16 // hardware capability bit vector
 	_AT_RANDOM = 25 // introduced in 2.6.29
 )
 
@@ -384,7 +385,7 @@ func getsig(i uint32) uintptr {
 // setSignaltstackSP sets the ss_sp field of a stackt.
 //go:nosplit
 func setSignalstackSP(s *stackt, sp uintptr) {
-	s.ss_sp = (*byte)(unsafe.Pointer(sp))
+	*(*uintptr)(unsafe.Pointer(&s.ss_sp)) = sp
 }
 
 func (c *sigctxt) fixsigcode(sig uint32) {

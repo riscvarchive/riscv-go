@@ -160,7 +160,6 @@ type Addr struct {
 	Class  int8
 	Offset int64
 	Sym    *LSym
-	Gotype *LSym
 
 	// argument value:
 	//	for TYPE_SCONST, a string
@@ -203,32 +202,55 @@ const (
 	TYPE_REGLIST
 )
 
-// TODO(rsc): Describe prog.
-// TODO(rsc): Describe TEXT/GLOBL flag in from3
+// Prog describes a single machine instruction.
+//
+// The general instruction form is:
+//
+//	As.Scond From, Reg, From3, To, RegTo2
+//
+// where As is an opcode and the others are arguments:
+// From, Reg, From3 are sources, and To, RegTo2 are destinations.
+// Usually, not all arguments are present.
+// For example, MOVL R1, R2 encodes using only As=MOVL, From=R1, To=R2.
+// The Scond field holds additional condition bits for systems (like arm)
+// that have generalized conditional execution.
+//
+// Jump instructions use the Pcond field to point to the target instruction,
+// which must be in the same linked list as the jump instruction.
+//
+// The Progs for a given function are arranged in a list linked through the Link field.
+//
+// Each Prog is charged to a specific source line in the debug information,
+// specified by Lineno, an index into the line history (see LineHist).
+// Every Prog has a Ctxt field that defines various context, including the current LineHist.
+// Progs should be allocated using ctxt.NewProg(), not new(Prog).
+//
+// The other fields not yet mentioned are for use by the back ends and should
+// be left zeroed by creators of Prog lists.
 type Prog struct {
-	Ctxt   *Link
-	Link   *Prog
-	From   Addr
-	From3  *Addr // optional
-	To     Addr
-	Opt    interface{}
-	Forwd  *Prog
-	Pcond  *Prog
-	Rel    *Prog // Source of forward jumps on x86; pcrel on arm
-	Pc     int64
-	Lineno int32
-	Spadj  int32
-	As     As // Assembler opcode.
-	Reg    int16
-	RegTo2 int16  // 2nd register output operand
-	Mark   uint16 // bitmask of arch-specific items
-	Optab  uint16
-	Scond  uint8
-	Back   uint8
-	Ft     uint8
-	Tt     uint8
-	Isize  uint8 // size of the instruction in bytes (x86 only)
-	Mode   int8
+	Ctxt   *Link       // linker context
+	Link   *Prog       // next Prog in linked list
+	From   Addr        // first source operand
+	From3  *Addr       // third source operand (second is Reg below)
+	To     Addr        // destination operand (second is RegTo2 below)
+	Pcond  *Prog       // target of conditional jump
+	Opt    interface{} // available to optimization passes to hold per-Prog state
+	Forwd  *Prog       // for x86 back end
+	Rel    *Prog       // for x86, arm back ends
+	Pc     int64       // for back ends or assembler: virtual or actual program counter, depending on phase
+	Lineno int32       // line number of this instruction
+	Spadj  int32       // effect of instruction on stack pointer (increment or decrement amount)
+	As     As          // assembler opcode
+	Reg    int16       // 2nd source operand
+	RegTo2 int16       // 2nd destination operand
+	Mark   uint16      // bitmask of arch-specific items
+	Optab  uint16      // arch-specific opcode index
+	Scond  uint8       // condition bits for conditional instruction (e.g., on ARM)
+	Back   uint8       // for x86 back end: backwards branch state
+	Ft     uint8       // for x86 back end: type index of Prog.From
+	Tt     uint8       // for x86 back end: type index of Prog.To
+	Isize  uint8       // for x86 back end: size of the instruction in bytes
+	Mode   int8        // for x86 back end: 32- or 64-bit mode
 }
 
 // From3Type returns From3.Type, or TYPE_NONE when From3 is nil.
@@ -299,31 +321,10 @@ const (
 
 // An LSym is the sort of symbol that is written to an object file.
 type LSym struct {
-	Name      string
-	Type      SymKind
-	Version   int16
-	Dupok     bool
-	Cfunc     bool
-	Nosplit   bool
-	Leaf      bool
-	Seenglobl bool
-	Onlist    bool
-
-	// ReflectMethod means the function may call reflect.Type.Method or
-	// reflect.Type.MethodByName. Matching is imprecise (as reflect.Type
-	// can be used through a custom interface), so ReflectMethod may be
-	// set in some cases when the reflect package is not called.
-	//
-	// Used by the linker to determine what methods can be pruned.
-	ReflectMethod bool
-
-	// Local means make the symbol local even when compiling Go code to reference Go
-	// symbols in other shared libraries, as in this mode symbols are global by
-	// default. "local" here means in the sense of the dynamic linker, i.e. not
-	// visible outside of the module (shared library or executable) that contains its
-	// definition. (When not compiling to support Go shared libraries, all symbols are
-	// local in this sense unless there is a cgo_export_* directive).
-	Local bool
+	Name    string
+	Type    SymKind
+	Version int16
+	Attribute
 
 	RefIdx int // Index of this symbol in the symbol reference list.
 	Args   int32
@@ -335,6 +336,55 @@ type LSym struct {
 	Pcln   *Pcln
 	P      []byte
 	R      []Reloc
+}
+
+// Attribute is a set of symbol attributes.
+type Attribute int16
+
+const (
+	AttrDuplicateOK Attribute = 1 << iota
+	AttrCFunc
+	AttrNoSplit
+	AttrLeaf
+	AttrSeenGlobl
+	AttrOnList
+
+	// MakeTypelink means that the type should have an entry in the typelink table.
+	AttrMakeTypelink
+
+	// ReflectMethod means the function may call reflect.Type.Method or
+	// reflect.Type.MethodByName. Matching is imprecise (as reflect.Type
+	// can be used through a custom interface), so ReflectMethod may be
+	// set in some cases when the reflect package is not called.
+	//
+	// Used by the linker to determine what methods can be pruned.
+	AttrReflectMethod
+
+	// Local means make the symbol local even when compiling Go code to reference Go
+	// symbols in other shared libraries, as in this mode symbols are global by
+	// default. "local" here means in the sense of the dynamic linker, i.e. not
+	// visible outside of the module (shared library or executable) that contains its
+	// definition. (When not compiling to support Go shared libraries, all symbols are
+	// local in this sense unless there is a cgo_export_* directive).
+	AttrLocal
+)
+
+func (a Attribute) DuplicateOK() bool   { return a&AttrDuplicateOK != 0 }
+func (a Attribute) MakeTypelink() bool  { return a&AttrMakeTypelink != 0 }
+func (a Attribute) CFunc() bool         { return a&AttrCFunc != 0 }
+func (a Attribute) NoSplit() bool       { return a&AttrNoSplit != 0 }
+func (a Attribute) Leaf() bool          { return a&AttrLeaf != 0 }
+func (a Attribute) SeenGlobl() bool     { return a&AttrSeenGlobl != 0 }
+func (a Attribute) OnList() bool        { return a&AttrOnList != 0 }
+func (a Attribute) ReflectMethod() bool { return a&AttrReflectMethod != 0 }
+func (a Attribute) Local() bool         { return a&AttrLocal != 0 }
+
+func (a *Attribute) Set(flag Attribute, value bool) {
+	if value {
+		*a |= flag
+	} else {
+		*a &^= flag
+	}
 }
 
 // The compiler needs LSym to satisfy fmt.Stringer, because it stores
@@ -372,7 +422,6 @@ const (
 	STYPE
 	SSTRING
 	SGOSTRING
-	SGOSTRINGHDR
 	SGOFUNC
 	SGCBITS
 	SRODATA
@@ -396,7 +445,6 @@ const (
 	STYPERELRO
 	SSTRINGRELRO
 	SGOSTRINGRELRO
-	SGOSTRINGHDRRELRO
 	SGOFUNCRELRO
 	SGCBITSRELRO
 	SRODATARELRO
@@ -445,7 +493,6 @@ var ReadOnly = []SymKind{
 	STYPE,
 	SSTRING,
 	SGOSTRING,
-	SGOSTRINGHDR,
 	SGOFUNC,
 	SGCBITS,
 	SRODATA,
@@ -455,14 +502,13 @@ var ReadOnly = []SymKind{
 // RelROMap describes the transformation of read-only symbols to rel-ro
 // symbols.
 var RelROMap = map[SymKind]SymKind{
-	STYPE:        STYPERELRO,
-	SSTRING:      SSTRINGRELRO,
-	SGOSTRING:    SGOSTRINGRELRO,
-	SGOSTRINGHDR: SGOSTRINGHDRRELRO,
-	SGOFUNC:      SGOFUNCRELRO,
-	SGCBITS:      SGCBITSRELRO,
-	SRODATA:      SRODATARELRO,
-	SFUNCTAB:     SFUNCTABRELRO,
+	STYPE:     STYPERELRO,
+	SSTRING:   SSTRINGRELRO,
+	SGOSTRING: SGOSTRINGRELRO,
+	SGOFUNC:   SGOFUNCRELRO,
+	SGCBITS:   SGCBITSRELRO,
+	SRODATA:   SRODATARELRO,
+	SFUNCTAB:  SFUNCTABRELRO,
 }
 
 type Reloc struct {
@@ -633,6 +679,20 @@ const (
 	// S-type instruction pair.
 	R_RISCV_PCREL_STYPE
 )
+
+// IsDirectJump returns whether r is a relocation for a direct jump.
+// A direct jump is a CALL or JMP instruction that takes the target address
+// as immediate. The address is embedded into the instruction, possibly
+// with limited width.
+// An indirect jump is a CALL or JMP instruction that takes the target address
+// in register or memory.
+func (r RelocType) IsDirectJump() bool {
+	switch r {
+	case R_CALL, R_CALLARM, R_CALLARM64, R_CALLPOWER, R_CALLMIPS, R_JMPMIPS:
+		return true
+	}
+	return false
+}
 
 type Auto struct {
 	Asym    *LSym

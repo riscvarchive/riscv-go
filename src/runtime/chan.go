@@ -7,10 +7,16 @@ package runtime
 // This file contains the implementation of Go channels.
 
 // Invariants:
-//  At least one of c.sendq and c.recvq is empty.
+//  At least one of c.sendq and c.recvq is empty,
+//  except for the case of an unbuffered channel with a single goroutine
+//  blocked on it for both sending and receiving using a select statement,
+//  in which case the length of c.sendq and c.recvq is limited only by the
+//  size of the select statement.
+//
 // For buffered channels, also:
 //  c.qcount > 0 implies that c.recvq is empty.
 //  c.qcount < c.dataqsiz implies that c.sendq is empty.
+
 import (
 	"runtime/internal/atomic"
 	"unsafe"
@@ -288,7 +294,7 @@ func sendDirect(t *_type, sg *sudog, src unsafe.Pointer) {
 	// stack writes only happen when the goroutine is running and are
 	// only done by that goroutine. Using a write barrier is sufficient to
 	// make up for violating that assumption, but the write barrier has to work.
-	// typedmemmove will call heapBitsBulkBarrier, but the target bytes
+	// typedmemmove will call bulkBarrierPreWrite, but the target bytes
 	// are not in the heap, so that will not help. We arrange to call
 	// memmove and typeBitsBulkBarrier instead.
 
@@ -296,8 +302,8 @@ func sendDirect(t *_type, sg *sudog, src unsafe.Pointer) {
 	// be updated if the destination's stack gets copied (shrunk).
 	// So make sure that no preemption points can happen between read & use.
 	dst := sg.elem
+	typeBitsBulkBarrier(t, uintptr(dst), uintptr(src), t.size)
 	memmove(dst, src, t.size)
-	typeBitsBulkBarrier(t, uintptr(dst), t.size)
 }
 
 func closechan(c *hchan) {
@@ -328,7 +334,7 @@ func closechan(c *hchan) {
 			break
 		}
 		if sg.elem != nil {
-			memclr(sg.elem, uintptr(c.elemsize))
+			typedmemclr(c.elemtype, sg.elem)
 			sg.elem = nil
 		}
 		if sg.releasetime != 0 {
@@ -437,7 +443,7 @@ func chanrecv(t *chantype, c *hchan, ep unsafe.Pointer, block bool) (selected, r
 		}
 		unlock(&c.lock)
 		if ep != nil {
-			memclr(ep, uintptr(c.elemsize))
+			typedmemclr(c.elemtype, ep)
 		}
 		return true, false
 	}
@@ -461,7 +467,7 @@ func chanrecv(t *chantype, c *hchan, ep unsafe.Pointer, block bool) (selected, r
 		if ep != nil {
 			typedmemmove(c.elemtype, ep, qp)
 		}
-		memclr(qp, uintptr(c.elemsize))
+		typedmemclr(c.elemtype, qp)
 		c.recvx++
 		if c.recvx == c.dataqsiz {
 			c.recvx = 0

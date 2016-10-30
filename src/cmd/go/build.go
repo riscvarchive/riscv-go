@@ -470,6 +470,11 @@ func runBuild(cmd *Command, args []string) {
 		*buildO += exeSuffix
 	}
 
+	// Special case -o /dev/null by not writing at all.
+	if *buildO == os.DevNull {
+		*buildO = ""
+	}
+
 	// sanity check some often mis-used options
 	switch buildContext.Compiler {
 	case "gccgo":
@@ -3188,11 +3193,8 @@ func envList(key, def string) []string {
 }
 
 // Return the flags to use when invoking the C, C++ or Fortran compilers, or cgo.
-func (b *builder) cflags(p *Package, def bool) (cppflags, cflags, cxxflags, fflags, ldflags []string) {
-	var defaults string
-	if def {
-		defaults = "-g -O2"
-	}
+func (b *builder) cflags(p *Package) (cppflags, cflags, cxxflags, fflags, ldflags []string) {
+	defaults := "-g -O2"
 
 	cppflags = stringList(envList("CGO_CPPFLAGS", ""), p.CgoCPPFLAGS)
 	cflags = stringList(envList("CGO_CFLAGS", defaults), p.CgoCFLAGS)
@@ -3205,8 +3207,7 @@ func (b *builder) cflags(p *Package, def bool) (cppflags, cflags, cxxflags, ffla
 var cgoRe = regexp.MustCompile(`[/\\:]`)
 
 func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofiles, gccfiles, gxxfiles, mfiles, ffiles []string) (outGo, outObj []string, err error) {
-	cgoCPPFLAGS, cgoCFLAGS, cgoCXXFLAGS, cgoFFLAGS, cgoLDFLAGS := b.cflags(p, true)
-	_, cgoexeCFLAGS, _, _, _ := b.cflags(p, false)
+	cgoCPPFLAGS, cgoCFLAGS, cgoCXXFLAGS, cgoFFLAGS, cgoLDFLAGS := b.cflags(p)
 	cgoCPPFLAGS = append(cgoCPPFLAGS, pcCFLAGS...)
 	cgoLDFLAGS = append(cgoLDFLAGS, pcLDFLAGS...)
 	// If we are compiling Objective-C code, then we need to link against libobjc
@@ -3284,7 +3285,7 @@ func (b *builder) cgo(p *Package, cgoExe, obj string, pcCFLAGS, pcLDFLAGS, cgofi
 		cgoflags = append(cgoflags, "-exportheader="+obj+"_cgo_install.h")
 	}
 
-	if err := b.run(p.Dir, p.ImportPath, cgoenv, buildToolExec, cgoExe, "-objdir", obj, "-importpath", p.ImportPath, cgoflags, "--", cgoCPPFLAGS, cgoexeCFLAGS, cgofiles); err != nil {
+	if err := b.run(p.Dir, p.ImportPath, cgoenv, buildToolExec, cgoExe, "-objdir", obj, "-importpath", p.ImportPath, cgoflags, "--", cgoCPPFLAGS, cgoCFLAGS, cgofiles); err != nil {
 		return nil, nil, err
 	}
 	outGo = append(outGo, gofiles...)
@@ -3602,7 +3603,7 @@ func (b *builder) swigIntSize(obj string) (intsize string, err error) {
 
 // Run SWIG on one SWIG input file.
 func (b *builder) swigOne(p *Package, file, obj string, pcCFLAGS []string, cxx bool, intgosize string) (outGo, outC string, err error) {
-	cgoCPPFLAGS, cgoCFLAGS, cgoCXXFLAGS, _, _ := b.cflags(p, true)
+	cgoCPPFLAGS, cgoCFLAGS, cgoCXXFLAGS, _, _ := b.cflags(p)
 	var cflags []string
 	if cxx {
 		cflags = stringList(cgoCPPFLAGS, pcCFLAGS, cgoCXXFLAGS)

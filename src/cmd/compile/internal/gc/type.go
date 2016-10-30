@@ -146,6 +146,9 @@ type Type struct {
 	nod  *Node // canonical OTYPE node
 	Orig *Type // original type (type literal or predefined type)
 
+	sliceOf *Type
+	ptrTo   *Type
+
 	Sym    *Sym  // symbol containing name, for named types
 	Vargen int32 // unique name for OTYPE/ONAME
 	Lineno int32 // line at which this type was declared, implicitly or explicitly
@@ -157,6 +160,7 @@ type Type struct {
 	Deferwidth bool
 	Broke      bool  // broken type definition.
 	Align      uint8 // the required alignment of this type, in bytes
+	NotInHeap  bool  // type cannot be heap allocated
 }
 
 // MapType contains Type fields specific to maps.
@@ -411,13 +415,22 @@ func typArray(elem *Type, bound int64) *Type {
 	}
 	t := typ(TARRAY)
 	t.Extra = &ArrayType{Elem: elem, Bound: bound}
+	t.NotInHeap = elem.NotInHeap
 	return t
 }
 
-// typSlice returns a new slice Type.
+// typSlice returns the slice Type with element type elem.
 func typSlice(elem *Type) *Type {
+	if t := elem.sliceOf; t != nil {
+		if t.Elem() != elem {
+			Fatalf("elem mismatch")
+		}
+		return t
+	}
+
 	t := typ(TSLICE)
 	t.Extra = SliceType{Elem: elem}
+	elem.sliceOf = t
 	return t
 }
 
@@ -425,6 +438,7 @@ func typSlice(elem *Type) *Type {
 func typDDDArray(elem *Type) *Type {
 	t := typ(TARRAY)
 	t.Extra = &ArrayType{Elem: elem, Bound: -1}
+	t.NotInHeap = elem.NotInHeap
 	return t
 }
 
@@ -446,12 +460,20 @@ func typMap(k, v *Type) *Type {
 	return t
 }
 
-// typPtr returns a new pointer type pointing to t.
+// typPtr returns the pointer type pointing to t.
 func typPtr(elem *Type) *Type {
+	if t := elem.ptrTo; t != nil {
+		if t.Elem() != elem {
+			Fatalf("elem mismatch")
+		}
+		return t
+	}
+
 	t := typ(Tptr)
 	t.Extra = PtrType{Elem: elem}
 	t.Width = int64(Widthptr)
 	t.Align = uint8(Widthptr)
+	elem.ptrTo = t
 	return t
 }
 
@@ -803,6 +825,17 @@ func (t *Type) FieldSlice() []*Field {
 
 // SetFields sets struct/interface type t's fields/methods to fields.
 func (t *Type) SetFields(fields []*Field) {
+	for _, f := range fields {
+		// If type T contains a field F with a go:notinheap
+		// type, then T must also be go:notinheap. Otherwise,
+		// you could heap allocate T and then get a pointer F,
+		// which would be a heap pointer to a go:notinheap
+		// type.
+		if f.Type != nil && f.Type.NotInHeap {
+			t.NotInHeap = true
+			break
+		}
+	}
 	t.Fields().Set(fields)
 }
 

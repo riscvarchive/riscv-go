@@ -57,19 +57,26 @@ import (
 // []byte encodes as a base64-encoded string, and a nil slice
 // encodes as the null JSON value.
 //
-// Struct values encode as JSON objects. Each exported struct field
-// becomes a member of the object unless
-//   - the field's tag is "-", or
-//   - the field is empty and its tag specifies the "omitempty" option.
-// The empty values are false, 0, any
-// nil pointer or interface value, and any array, slice, map, or string of
-// length zero. The object's default key string is the struct field name
-// but can be specified in the struct field's tag value. The "json" key in
-// the struct field's tag value is the key name, followed by an optional comma
-// and options. Examples:
+// Struct values encode as JSON objects.
+// Each exported struct field becomes a member of the object, using the
+// field name as the object key, unless the field is omitted for one of the
+// reasons given below.
 //
-//   // Field is ignored by this package.
-//   Field int `json:"-"`
+// The encoding of each struct field can be customized by the format string
+// stored under the "json" key in the struct field's tag.
+// The format string gives the name of the field, possibly followed by a
+// comma-separated list of options. The name may be empty in order to
+// specify options without overriding the default field name.
+//
+// The "omitempty" option specifies that the field should be omitted
+// from the encoding if the field has an empty value, defined as
+// false, 0, a nil pointer, a nil interface value, and any empty array,
+// slice, map, or string.
+//
+// As a special case, if the field tag is "-", the field is always omitted.
+// Note that a field with name "-" can still be generated using the tag "-,".
+//
+// Examples of struct field tags and their meanings:
 //
 //   // Field appears in JSON as key "myName".
 //   Field int `json:"myName"`
@@ -83,6 +90,12 @@ import (
 //   // the field is skipped if empty.
 //   // Note the leading comma.
 //   Field int `json:",omitempty"`
+//
+//   // Field is ignored by this package.
+//   Field int `json:"-"`
+//
+//   // Field appears in JSON as key "-".
+//   Field int `json:"-,"`
 //
 // The "string" option signals that a field is stored as JSON inside a
 // JSON-encoded string. It applies only to fields of string, floating point,
@@ -111,7 +124,9 @@ import (
 //
 // 1) Of those fields, if any are JSON-tagged, only tagged fields are considered,
 // even if there are multiple untagged fields that would otherwise conflict.
+//
 // 2) If there is exactly one field (tagged or not according to the first rule), that is selected.
+//
 // 3) Otherwise there are multiple fields, and all are ignored; no error occurs.
 //
 // Handling of anonymous struct fields is new in Go 1.1.
@@ -526,7 +541,31 @@ func (bits floatEncoder) encode(e *encodeState, v reflect.Value, opts encOpts) {
 	if math.IsInf(f, 0) || math.IsNaN(f) {
 		e.error(&UnsupportedValueError{v, strconv.FormatFloat(f, 'g', -1, int(bits))})
 	}
-	b := strconv.AppendFloat(e.scratch[:0], f, 'g', -1, int(bits))
+
+	// Convert as if by ES6 number to string conversion.
+	// This matches most other JSON generators.
+	// See golang.org/issue/6384 and golang.org/issue/14135.
+	// Like fmt %g, but the exponent cutoffs are different
+	// and exponents themselves are not padded to two digits.
+	b := e.scratch[:0]
+	abs := math.Abs(f)
+	fmt := byte('f')
+	// Note: Must use float32 comparisons for underlying float32 value to get precise cutoffs right.
+	if abs != 0 {
+		if bits == 64 && (abs < 1e-6 || abs >= 1e21) || bits == 32 && (float32(abs) < 1e-6 || float32(abs) >= 1e21) {
+			fmt = 'e'
+		}
+	}
+	b = strconv.AppendFloat(b, f, fmt, -1, int(bits))
+	if fmt == 'e' {
+		// clean up e-09 to e-9
+		n := len(b)
+		if n >= 4 && b[n-4] == 'e' && b[n-3] == '-' && b[n-2] == '0' {
+			b[n-2] = b[n-1]
+			b = b[:n-1]
+		}
+	}
+
 	if opts.quoted {
 		e.WriteByte('"')
 	}

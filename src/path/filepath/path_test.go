@@ -962,6 +962,28 @@ func TestEvalSymlinks(t *testing.T) {
 	}
 }
 
+func TestEvalSymlinksIsNotExist(t *testing.T) {
+	testenv.MustHaveSymlink(t)
+
+	defer chtmpdir(t)()
+
+	_, err := filepath.EvalSymlinks("notexist")
+	if !os.IsNotExist(err) {
+		t.Errorf("expected the file is not found, got %v\n", err)
+	}
+
+	err = os.Symlink("notexist", "link")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("link")
+
+	_, err = filepath.EvalSymlinks("link")
+	if !os.IsNotExist(err) {
+		t.Errorf("expected the file is not found, got %v\n", err)
+	}
+}
+
 func TestIssue13582(t *testing.T) {
 	testenv.MustHaveSymlink(t)
 
@@ -1039,13 +1061,16 @@ var absTestDirs = []string{
 var absTests = []string{
 	".",
 	"b",
+	"b/",
 	"../a",
 	"../a/b",
 	"../a/b/./c/../../.././a",
+	"../a/b/./c/../../.././a/",
 	"$",
 	"$/.",
 	"$/a/../a/b",
 	"$/a/b/c/../../.././a",
+	"$/a/b/c/../../.././a/",
 }
 
 func TestAbs(t *testing.T) {
@@ -1110,7 +1135,7 @@ func TestAbs(t *testing.T) {
 		if !filepath.IsAbs(abspath) {
 			t.Errorf("Abs(%q)=%q, not an absolute path", path, abspath)
 		}
-		if filepath.IsAbs(path) && abspath != filepath.Clean(path) {
+		if filepath.IsAbs(abspath) && abspath != filepath.Clean(abspath) {
 			t.Errorf("Abs(%q)=%q, isn't clean", path, abspath)
 		}
 	}
@@ -1273,7 +1298,7 @@ func TestBug3486(t *testing.T) { // https://golang.org/issue/3486
 	if err != nil {
 		t.Fatal(err)
 	}
-	bugs := filepath.Join(root, "bugs")
+	bugs := filepath.Join(root, "fixedbugs")
 	ken := filepath.Join(root, "ken")
 	seenBugs := false
 	seenKen := false
@@ -1288,7 +1313,7 @@ func TestBug3486(t *testing.T) { // https://golang.org/issue/3486
 			return filepath.SkipDir
 		case ken:
 			if !seenBugs {
-				t.Fatal("filepath.Walk out of order - ken before bugs")
+				t.Fatal("filepath.Walk out of order - ken before fixedbugs")
 			}
 			seenKen = true
 		}

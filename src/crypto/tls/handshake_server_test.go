@@ -558,6 +558,8 @@ func (test *serverTest) loadData() (flows [][]byte, err error) {
 }
 
 func (test *serverTest) run(t *testing.T, write bool) {
+	checkOpenSSLVersion(t)
+
 	var clientConn, serverConn net.Conn
 	var recordingConn *recordingConn
 	var childProcess *exec.Cmd
@@ -747,6 +749,18 @@ func TestHandshakeServerECDHEECDSAAES(t *testing.T) {
 	runServerTestTLS12(t, test)
 }
 
+func TestHandshakeServerX25519(t *testing.T) {
+	config := testConfig.Clone()
+	config.CurvePreferences = []CurveID{X25519}
+
+	test := &serverTest{
+		name:    "X25519-ECDHE-RSA-AES-GCM",
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "ECDHE-RSA-AES128-GCM-SHA256"},
+		config:  config,
+	}
+	runServerTestTLS12(t, test)
+}
+
 func TestHandshakeServerALPN(t *testing.T) {
 	config := testConfig.Clone()
 	config.NextProtos = []string{"proto1", "proto2"}
@@ -925,13 +939,13 @@ func TestResumption(t *testing.T) {
 
 	test := &serverTest{
 		name:    "IssueTicket",
-		command: []string{"openssl", "s_client", "-cipher", "RC4-SHA", "-sess_out", sessionFilePath},
+		command: []string{"openssl", "s_client", "-cipher", "AES128-SHA", "-sess_out", sessionFilePath},
 	}
 	runServerTestTLS12(t, test)
 
 	test = &serverTest{
 		name:    "Resume",
-		command: []string{"openssl", "s_client", "-cipher", "RC4-SHA", "-sess_in", sessionFilePath},
+		command: []string{"openssl", "s_client", "-cipher", "AES128-SHA", "-sess_in", sessionFilePath},
 	}
 	runServerTestTLS12(t, test)
 }
@@ -944,7 +958,7 @@ func TestResumptionDisabled(t *testing.T) {
 
 	test := &serverTest{
 		name:    "IssueTicketPreDisable",
-		command: []string{"openssl", "s_client", "-cipher", "RC4-SHA", "-sess_out", sessionFilePath},
+		command: []string{"openssl", "s_client", "-cipher", "AES128-SHA", "-sess_out", sessionFilePath},
 		config:  config,
 	}
 	runServerTestTLS12(t, test)
@@ -953,7 +967,7 @@ func TestResumptionDisabled(t *testing.T) {
 
 	test = &serverTest{
 		name:    "ResumeDisabled",
-		command: []string{"openssl", "s_client", "-cipher", "RC4-SHA", "-sess_in", sessionFilePath},
+		command: []string{"openssl", "s_client", "-cipher", "AES128-SHA", "-sess_in", sessionFilePath},
 		config:  config,
 	}
 	runServerTestTLS12(t, test)
@@ -1058,14 +1072,14 @@ func TestClientAuth(t *testing.T) {
 
 	test := &serverTest{
 		name:    "ClientAuthRequestedNotGiven",
-		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "RC4-SHA"},
+		command: []string{"openssl", "s_client", "-no_ticket", "-cipher", "AES128-SHA"},
 		config:  config,
 	}
 	runServerTestTLS12(t, test)
 
 	test = &serverTest{
 		name:              "ClientAuthRequestedAndGiven",
-		command:           []string{"openssl", "s_client", "-no_ticket", "-cipher", "RC4-SHA", "-cert", certPath, "-key", keyPath},
+		command:           []string{"openssl", "s_client", "-no_ticket", "-cipher", "AES128-SHA", "-cert", certPath, "-key", keyPath},
 		config:            config,
 		expectedPeerCerts: []string{clientCertificatePEM},
 	}
@@ -1073,7 +1087,7 @@ func TestClientAuth(t *testing.T) {
 
 	test = &serverTest{
 		name:              "ClientAuthRequestedAndECDSAGiven",
-		command:           []string{"openssl", "s_client", "-no_ticket", "-cipher", "RC4-SHA", "-cert", ecdsaCertPath, "-key", ecdsaKeyPath},
+		command:           []string{"openssl", "s_client", "-no_ticket", "-cipher", "AES128-SHA", "-cert", ecdsaCertPath, "-key", ecdsaKeyPath},
 		config:            config,
 		expectedPeerCerts: []string{clientECDSACertificatePEM},
 	}
@@ -1118,6 +1132,141 @@ func TestSNIGivenOnFailure(t *testing.T) {
 
 	if cs.ServerName != expectedServerName {
 		t.Errorf("Expected ServerName of %q, but got %q", expectedServerName, cs.ServerName)
+	}
+}
+
+var getConfigForClientTests = []struct {
+	setup          func(config *Config)
+	callback       func(clientHello *ClientHelloInfo) (*Config, error)
+	errorSubstring string
+	verify         func(config *Config) error
+}{
+	{
+		nil,
+		func(clientHello *ClientHelloInfo) (*Config, error) {
+			return nil, nil
+		},
+		"",
+		nil,
+	},
+	{
+		nil,
+		func(clientHello *ClientHelloInfo) (*Config, error) {
+			return nil, errors.New("should bubble up")
+		},
+		"should bubble up",
+		nil,
+	},
+	{
+		nil,
+		func(clientHello *ClientHelloInfo) (*Config, error) {
+			config := testConfig.Clone()
+			// Setting a maximum version of TLS 1.1 should cause
+			// the handshake to fail.
+			config.MaxVersion = VersionTLS11
+			return config, nil
+		},
+		"version 301 when expecting version 302",
+		nil,
+	},
+	{
+		func(config *Config) {
+			for i := range config.SessionTicketKey {
+				config.SessionTicketKey[i] = byte(i)
+			}
+			config.sessionTicketKeys = nil
+		},
+		func(clientHello *ClientHelloInfo) (*Config, error) {
+			config := testConfig.Clone()
+			for i := range config.SessionTicketKey {
+				config.SessionTicketKey[i] = 0
+			}
+			config.sessionTicketKeys = nil
+			return config, nil
+		},
+		"",
+		func(config *Config) error {
+			// The value of SessionTicketKey should have been
+			// duplicated into the per-connection Config.
+			for i := range config.SessionTicketKey {
+				if b := config.SessionTicketKey[i]; b != byte(i) {
+					return fmt.Errorf("SessionTicketKey was not duplicated from original Config: byte %d has value %d", i, b)
+				}
+			}
+			return nil
+		},
+	},
+	{
+		func(config *Config) {
+			var dummyKey [32]byte
+			for i := range dummyKey {
+				dummyKey[i] = byte(i)
+			}
+
+			config.SetSessionTicketKeys([][32]byte{dummyKey})
+		},
+		func(clientHello *ClientHelloInfo) (*Config, error) {
+			config := testConfig.Clone()
+			config.sessionTicketKeys = nil
+			return config, nil
+		},
+		"",
+		func(config *Config) error {
+			// The session ticket keys should have been duplicated
+			// into the per-connection Config.
+			if l := len(config.sessionTicketKeys); l != 1 {
+				return fmt.Errorf("got len(sessionTicketKeys) == %d, wanted 1", l)
+			}
+			return nil
+		},
+	},
+}
+
+func TestGetConfigForClient(t *testing.T) {
+	serverConfig := testConfig.Clone()
+	clientConfig := testConfig.Clone()
+	clientConfig.MinVersion = VersionTLS12
+
+	for i, test := range getConfigForClientTests {
+		if test.setup != nil {
+			test.setup(serverConfig)
+		}
+
+		var configReturned *Config
+		serverConfig.GetConfigForClient = func(clientHello *ClientHelloInfo) (*Config, error) {
+			config, err := test.callback(clientHello)
+			configReturned = config
+			return config, err
+		}
+		c, s := net.Pipe()
+		done := make(chan error)
+
+		go func() {
+			defer s.Close()
+			done <- Server(s, serverConfig).Handshake()
+		}()
+
+		clientErr := Client(c, clientConfig).Handshake()
+		c.Close()
+
+		serverErr := <-done
+
+		if len(test.errorSubstring) == 0 {
+			if serverErr != nil || clientErr != nil {
+				t.Errorf("test[%d]: expected no error but got serverErr: %q, clientErr: %q", i, serverErr, clientErr)
+			}
+			if test.verify != nil {
+				if err := test.verify(configReturned); err != nil {
+					t.Errorf("test[%d]: verify returned error: %v", i, err)
+				}
+			}
+		} else {
+			if serverErr == nil {
+				t.Errorf("test[%d]: expected error containing %q but got no error", i, test.errorSubstring)
+			} else if !strings.Contains(serverErr.Error(), test.errorSubstring) {
+				t.Errorf("test[%d]: expected error to contain %q but it was %q", i, test.errorSubstring, serverErr)
+			}
+		}
 	}
 }
 

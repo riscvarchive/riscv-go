@@ -25,7 +25,7 @@ import (
 
 var (
 	verbose = flag.Bool("v", false, "verbose")
-	tags    = flag.String("tags", "", "comma-separated list of build tags to apply when parsing")
+	tags    = flag.String("tags", "", "space-separated list of build tags to apply when parsing")
 	tagList = []string{} // exploded version of tags flag; set in main
 )
 
@@ -133,13 +133,13 @@ var (
 	callExpr      *ast.CallExpr
 	compositeLit  *ast.CompositeLit
 	exprStmt      *ast.ExprStmt
-	field         *ast.Field
 	funcDecl      *ast.FuncDecl
 	funcLit       *ast.FuncLit
 	genDecl       *ast.GenDecl
 	interfaceType *ast.InterfaceType
 	rangeStmt     *ast.RangeStmt
 	returnStmt    *ast.ReturnStmt
+	structType    *ast.StructType
 
 	// checkers is a two-level map.
 	// The outer level is keyed by a nil pointer, one of the AST vars above.
@@ -208,7 +208,10 @@ func main() {
 		}
 	}
 
-	tagList = strings.Split(*tags, ",")
+	// Accept space-separated tags because that matches
+	// the go command's other subcommands.
+	// Accept commas because go tool vet traditionally has.
+	tagList = strings.Fields(strings.Replace(*tags, ",", " ", -1))
 
 	initPrintFlags()
 	initUnusedFlags()
@@ -478,8 +481,6 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 		key = compositeLit
 	case *ast.ExprStmt:
 		key = exprStmt
-	case *ast.Field:
-		key = field
 	case *ast.FuncDecl:
 		key = funcDecl
 	case *ast.FuncLit:
@@ -492,6 +493,8 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 		key = rangeStmt
 	case *ast.ReturnStmt:
 		key = returnStmt
+	case *ast.StructType:
+		key = structType
 	}
 	for _, fn := range f.checkers[key] {
 		fn(f, node)

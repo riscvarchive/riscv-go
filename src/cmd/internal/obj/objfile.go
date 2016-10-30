@@ -52,7 +52,9 @@
 //	- type [int]
 //	- name & version [symref index]
 //	- flags [int]
-//		1 dupok
+//		1<<0 dupok
+//		1<<1 local
+//		1<<2 add to typelink table
 //	- size [int]
 //	- gotype [symref index]
 //	- p [data block]
@@ -318,19 +320,19 @@ func (w *objWriter) writeSymDebug(s *LSym) {
 	if s.Type != 0 {
 		fmt.Fprintf(ctxt.Bso, "t=%d ", s.Type)
 	}
-	if s.Dupok {
+	if s.DuplicateOK() {
 		fmt.Fprintf(ctxt.Bso, "dupok ")
 	}
-	if s.Cfunc {
+	if s.CFunc() {
 		fmt.Fprintf(ctxt.Bso, "cfunc ")
 	}
-	if s.Nosplit {
+	if s.NoSplit() {
 		fmt.Fprintf(ctxt.Bso, "nosplit ")
 	}
 	fmt.Fprintf(ctxt.Bso, "size=%d", s.Size)
 	if s.Type == STEXT {
 		fmt.Fprintf(ctxt.Bso, " args=%#x locals=%#x", uint64(s.Args), uint64(s.Locals))
-		if s.Leaf {
+		if s.Leaf() {
 			fmt.Fprintf(ctxt.Bso, " leaf")
 		}
 	}
@@ -389,11 +391,14 @@ func (w *objWriter) writeSym(s *LSym) {
 	w.writeInt(int64(s.Type))
 	w.writeRefIndex(s)
 	flags := int64(0)
-	if s.Dupok {
+	if s.DuplicateOK() {
 		flags |= 1
 	}
-	if s.Local {
+	if s.Local() {
 		flags |= 1 << 1
+	}
+	if s.MakeTypelink() {
+		flags |= 1 << 2
 	}
 	w.writeInt(flags)
 	w.writeInt(s.Size)
@@ -417,19 +422,19 @@ func (w *objWriter) writeSym(s *LSym) {
 
 	w.writeInt(int64(s.Args))
 	w.writeInt(int64(s.Locals))
-	if s.Nosplit {
+	if s.NoSplit() {
 		w.writeInt(1)
 	} else {
 		w.writeInt(0)
 	}
 	flags = int64(0)
-	if s.Leaf {
+	if s.Leaf() {
 		flags |= 1
 	}
-	if s.Cfunc {
+	if s.CFunc() {
 		flags |= 1 << 1
 	}
-	if s.ReflectMethod {
+	if s.ReflectMethod() {
 		flags |= 1 << 2
 	}
 	w.writeInt(flags)
@@ -555,7 +560,7 @@ func gendwarf(ctxt *Link, text []*LSym) []*LSym {
 		}
 		dw = append(dw, dsym)
 		dsym.Type = SDWARFINFO
-		dsym.Dupok = s.Dupok
+		dsym.Set(AttrDuplicateOK, s.DuplicateOK())
 		var vars dwarf.Var
 		var abbrev int
 		var offs int32

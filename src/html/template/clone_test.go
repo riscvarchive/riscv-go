@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"io/ioutil"
+	"sync"
 	"testing"
 	"text/template/parse"
 )
@@ -192,5 +193,51 @@ func TestFuncMapWorksAfterClone(t *testing.T) {
 
 	if wantErr.Error() != gotErr.Error() {
 		t.Errorf("clone error message mismatch want %q got %q", wantErr, gotErr)
+	}
+}
+
+// https://golang.org/issue/16101
+func TestTemplateCloneExecuteRace(t *testing.T) {
+	const (
+		input   = `<title>{{block "a" .}}a{{end}}</title><body>{{block "b" .}}b{{end}}<body>`
+		overlay = `{{define "b"}}A{{end}}`
+	)
+	outer := Must(New("outer").Parse(input))
+	tmpl := Must(Must(outer.Clone()).Parse(overlay))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				if err := tmpl.Execute(ioutil.Discard, "data"); err != nil {
+					panic(err)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestTemplateCloneLookup(t *testing.T) {
+	// Template.escape makes an assumption that the template associated
+	// with t.Name() is t. Check that this holds.
+	tmpl := Must(New("x").Parse("a"))
+	tmpl = Must(tmpl.Clone())
+	if tmpl.Lookup(tmpl.Name()) != tmpl {
+		t.Error("after Clone, tmpl.Lookup(tmpl.Name()) != tmpl")
+	}
+}
+
+func TestCloneGrowth(t *testing.T) {
+	tmpl := Must(New("root").Parse(`<title>{{block "B". }}Arg{{end}}</title>`))
+	tmpl = Must(tmpl.Clone())
+	Must(tmpl.Parse(`{{define "B"}}Text{{end}}`))
+	for i := 0; i < 10; i++ {
+		tmpl.Execute(ioutil.Discard, nil)
+	}
+	if len(tmpl.DefinedTemplates()) > 200 {
+		t.Fatalf("too many templates: %v", len(tmpl.DefinedTemplates()))
 	}
 }

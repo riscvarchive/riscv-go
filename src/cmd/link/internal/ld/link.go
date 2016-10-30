@@ -105,6 +105,7 @@ const (
 	AttrOnList
 	AttrLocal
 	AttrReflectMethod
+	AttrMakeTypelink
 )
 
 func (a Attribute) DuplicateOK() bool      { return a&AttrDuplicateOK != 0 }
@@ -119,6 +120,7 @@ func (a Attribute) Hidden() bool           { return a&AttrHidden != 0 }
 func (a Attribute) OnList() bool           { return a&AttrOnList != 0 }
 func (a Attribute) Local() bool            { return a&AttrLocal != 0 }
 func (a Attribute) ReflectMethod() bool    { return a&AttrReflectMethod != 0 }
+func (a Attribute) MakeTypelink() bool     { return a&AttrMakeTypelink != 0 }
 
 func (a Attribute) CgoExport() bool {
 	return a.CgoExportDynamic() || a.CgoExportStatic()
@@ -189,6 +191,8 @@ type Link struct {
 	Textp      []*Symbol
 	Filesyms   []*Symbol
 	Moduledata *Symbol
+
+	tramps []*Symbol // trampolines
 }
 
 // The smallest possible offset from the hardware stack pointer to a local
@@ -214,12 +218,19 @@ func (l *Link) Logf(format string, args ...interface{}) {
 }
 
 type Library struct {
-	Objref string
-	Srcref string
-	File   string
-	Pkg    string
-	Shlib  string
-	hash   []byte
+	Objref      string
+	Srcref      string
+	File        string
+	Pkg         string
+	Shlib       string
+	hash        []byte
+	imports     []*Library
+	textp       []*Symbol // text symbols defined in this library
+	dupTextSyms []*Symbol // dupok text symbols defined in this library
+}
+
+func (l Library) String() string {
+	return l.Pkg
 }
 
 type FuncInfo struct {

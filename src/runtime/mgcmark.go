@@ -14,7 +14,6 @@ import (
 
 const (
 	fixedRootFinalizers = iota
-	fixedRootFlushCaches
 	fixedRootFreeGStacks
 	fixedRootCount
 
@@ -45,6 +44,12 @@ const (
 //
 //go:nowritebarrier
 func gcMarkRootPrepare() {
+	if gcphase == _GCmarktermination {
+		work.nFlushCacheRoots = int(gomaxprocs)
+	} else {
+		work.nFlushCacheRoots = 0
+	}
+
 	// Compute how many data and BSS root blocks there are.
 	nBlocks := func(bytes uintptr) int {
 		return int((bytes + rootBlockBytes - 1) / rootBlockBytes)
@@ -77,7 +82,13 @@ func gcMarkRootPrepare() {
 		// above invariants for objects that get finalizers
 		// after concurrent mark. In STW GC, this will happen
 		// during mark termination.
-		work.nSpanRoots = (len(work.spans) + rootBlockSpans - 1) / rootBlockSpans
+		//
+		// We're only interested in scanning the in-use spans,
+		// which will all be swept at this point. More spans
+		// may be added to this list during concurrent GC, but
+		// we only care about spans that were allocated before
+		// this mark phase.
+		work.nSpanRoots = mheap_.sweepSpans[mheap_.sweepgen/2%2].numBlocks()
 
 		// On the first markroot, we need to scan all Gs. Gs
 		// may be created after this point, but it's okay that
@@ -102,7 +113,7 @@ func gcMarkRootPrepare() {
 	}
 
 	work.markrootNext = 0
-	work.markrootJobs = uint32(fixedRootCount + work.nDataRoots + work.nBSSRoots + work.nSpanRoots + work.nStackRoots + work.nRescanRoots)
+	work.markrootJobs = uint32(fixedRootCount + work.nFlushCacheRoots + work.nDataRoots + work.nBSSRoots + work.nSpanRoots + work.nStackRoots + work.nRescanRoots)
 }
 
 // gcMarkRootCheck checks that all roots have been scanned. It is
@@ -115,7 +126,7 @@ func gcMarkRootCheck() {
 
 	lock(&allglock)
 	// Check that stacks have been scanned.
-	if gcphase == _GCmarktermination {
+	if gcphase == _GCmarktermination && debug.gcrescanstacks > 0 {
 		for i := 0; i < len(allgs); i++ {
 			gp := allgs[i]
 			if !(gp.gcscandone && gp.gcscanvalid) && readgstatus(gp) != _Gdead {
@@ -150,7 +161,8 @@ var oneptrmask = [...]uint8{1}
 func markroot(gcw *gcWork, i uint32) {
 	// TODO(austin): This is a bit ridiculous. Compute and store
 	// the bases in gcMarkRootPrepare instead of the counts.
-	baseData := uint32(fixedRootCount)
+	baseFlushCache := uint32(fixedRootCount)
+	baseData := baseFlushCache + uint32(work.nFlushCacheRoots)
 	baseBSS := baseData + uint32(work.nDataRoots)
 	baseSpans := baseBSS + uint32(work.nBSSRoots)
 	baseStacks := baseSpans + uint32(work.nSpanRoots)
@@ -159,6 +171,9 @@ func markroot(gcw *gcWork, i uint32) {
 
 	// Note: if you add a case here, please also update heapdump.go:dumproots.
 	switch {
+	case baseFlushCache <= i && i < baseData:
+		flushmcache(int(i - baseFlushCache))
+
 	case baseData <= i && i < baseBSS:
 		for datap := &firstmoduledata; datap != nil; datap = datap.next {
 			markrootBlock(datap.data, datap.edata-datap.data, datap.gcdatamask.bytedata, gcw, int(i-baseData))
@@ -171,12 +186,8 @@ func markroot(gcw *gcWork, i uint32) {
 
 	case i == fixedRootFinalizers:
 		for fb := allfin; fb != nil; fb = fb.alllink {
-			scanblock(uintptr(unsafe.Pointer(&fb.fin[0])), uintptr(fb.cnt)*unsafe.Sizeof(fb.fin[0]), &finptrmask[0], gcw)
-		}
-
-	case i == fixedRootFlushCaches:
-		if gcphase == _GCmarktermination { // Do not flush mcaches during concurrent phase.
-			flushallmcaches()
+			cnt := uintptr(atomic.Load(&fb.cnt))
+			scanblock(uintptr(unsafe.Pointer(&fb.fin[0])), cnt*unsafe.Sizeof(fb.fin[0]), &finptrmask[0], gcw)
 		}
 
 	case i == fixedRootFreeGStacks:
@@ -215,24 +226,13 @@ func markroot(gcw *gcWork, i uint32) {
 			gp.waitsince = work.tstart
 		}
 
-		if gcphase != _GCmarktermination && gp.startpc == gcBgMarkWorkerPC && readgstatus(gp) != _Gdead {
-			// GC background workers may be
-			// non-preemptible, so we may deadlock if we
-			// try to scan them during a concurrent phase.
-			// They also have tiny stacks, so just ignore
-			// them until mark termination.
-			gp.gcscandone = true
-			queueRescan(gp)
-			break
-		}
-
 		// scang must be done on the system stack in case
 		// we're trying to scan our own stack.
 		systemstack(func() {
 			// If this is a self-scan, put the user G in
 			// _Gwaiting to prevent self-deadlock. It may
-			// already be in _Gwaiting if this is mark
-			// termination.
+			// already be in _Gwaiting if this is a mark
+			// worker or we're in mark termination.
 			userG := getg().m.curg
 			selfScan := gp == userG && readgstatus(userG) == _Grunning
 			if selfScan {
@@ -332,18 +332,14 @@ func markrootSpans(gcw *gcWork, shard int) {
 	}
 
 	sg := mheap_.sweepgen
-	startSpan := shard * rootBlockSpans
-	endSpan := (shard + 1) * rootBlockSpans
-	if endSpan > len(work.spans) {
-		endSpan = len(work.spans)
-	}
+	spans := mheap_.sweepSpans[mheap_.sweepgen/2%2].block(shard)
 	// Note that work.spans may not include spans that were
 	// allocated between entering the scan phase and now. This is
 	// okay because any objects with finalizers in those spans
 	// must have been allocated and given finalizers after we
 	// entered the scan phase, so addfinalizer will have ensured
 	// the above invariants for them.
-	for _, s := range work.spans[startSpan:endSpan] {
+	for _, s := range spans {
 		if s.state != mSpanInUse {
 			continue
 		}
@@ -406,6 +402,7 @@ func gcAssistAlloc(gp *g) {
 		return
 	}
 
+retry:
 	// Compute the amount of scan work we need to do to make the
 	// balance positive. When the required amount of work is low,
 	// we over-assist to build up credit for future allocations
@@ -417,7 +414,6 @@ func gcAssistAlloc(gp *g) {
 		debtBytes = int64(gcController.assistBytesPerWork * float64(scanWork))
 	}
 
-retry:
 	// Steal as much credit as we can from the background GC's
 	// scan credit. This is racy and may drop the background
 	// credit below 0 if two mutators steal at the same time. This
@@ -538,40 +534,9 @@ retry:
 		// there wasn't enough work to do anyway, so we might
 		// as well let background marking take care of the
 		// work that is available.
-		lock(&work.assistQueue.lock)
-
-		// If the GC cycle is over, just return. This is the
-		// likely path if we completed above. We do this
-		// under the lock to prevent a GC cycle from ending
-		// between this check and queuing the assist.
-		if atomic.Load(&gcBlackenEnabled) == 0 {
-			unlock(&work.assistQueue.lock)
-			return
-		}
-
-		oldHead, oldTail := work.assistQueue.head, work.assistQueue.tail
-		if oldHead == 0 {
-			work.assistQueue.head.set(gp)
-		} else {
-			oldTail.ptr().schedlink.set(gp)
-		}
-		work.assistQueue.tail.set(gp)
-		gp.schedlink.set(nil)
-		// Recheck for background credit now that this G is in
-		// the queue, but can still back out. This avoids a
-		// race in case background marking has flushed more
-		// credit since we checked above.
-		if atomic.Loadint64(&gcController.bgScanCredit) > 0 {
-			work.assistQueue.head = oldHead
-			work.assistQueue.tail = oldTail
-			if oldTail != 0 {
-				oldTail.ptr().schedlink.set(nil)
-			}
-			unlock(&work.assistQueue.lock)
+		if !gcParkAssist() {
 			goto retry
 		}
-		// Park for real.
-		goparkunlock(&work.assistQueue.lock, "GC assist wait", traceEvGoBlock, 2)
 
 		// At this point either background GC has satisfied
 		// this G's assist debt, or the GC cycle is over.
@@ -587,6 +552,50 @@ func gcWakeAllAssists() {
 	work.assistQueue.head.set(nil)
 	work.assistQueue.tail.set(nil)
 	unlock(&work.assistQueue.lock)
+}
+
+// gcParkAssist puts the current goroutine on the assist queue and parks.
+//
+// gcParkAssist returns whether the assist is now satisfied. If it
+// returns false, the caller must retry the assist.
+//
+//go:nowritebarrier
+func gcParkAssist() bool {
+	lock(&work.assistQueue.lock)
+	// If the GC cycle finished while we were getting the lock,
+	// exit the assist. The cycle can't finish while we hold the
+	// lock.
+	if atomic.Load(&gcBlackenEnabled) == 0 {
+		unlock(&work.assistQueue.lock)
+		return true
+	}
+
+	gp := getg()
+	oldHead, oldTail := work.assistQueue.head, work.assistQueue.tail
+	if oldHead == 0 {
+		work.assistQueue.head.set(gp)
+	} else {
+		oldTail.ptr().schedlink.set(gp)
+	}
+	work.assistQueue.tail.set(gp)
+	gp.schedlink.set(nil)
+
+	// Recheck for background credit now that this G is in
+	// the queue, but can still back out. This avoids a
+	// race in case background marking has flushed more
+	// credit since we checked above.
+	if atomic.Loadint64(&gcController.bgScanCredit) > 0 {
+		work.assistQueue.head = oldHead
+		work.assistQueue.tail = oldTail
+		if oldTail != 0 {
+			oldTail.ptr().schedlink.set(nil)
+		}
+		unlock(&work.assistQueue.lock)
+		return false
+	}
+	// Park.
+	goparkunlock(&work.assistQueue.lock, "GC assist wait", traceEvGoBlockGC, 2)
+	return true
 }
 
 // gcFlushBgCredit flushes scanWork units of background scan work
@@ -879,6 +888,15 @@ func scanframeworker(frame *stkframe, cache *pcvalueCache, gcw *gcWork) {
 // gp.gcscanvalid. The caller must own gp and ensure that gp isn't
 // already on the rescan list.
 func queueRescan(gp *g) {
+	if debug.gcrescanstacks == 0 {
+		// Clear gcscanvalid to keep assertions happy.
+		//
+		// TODO: Remove gcscanvalid entirely when we remove
+		// stack rescanning.
+		gp.gcscanvalid = false
+		return
+	}
+
 	if gcphase == _GCoff {
 		gp.gcscanvalid = false
 		return
@@ -908,6 +926,10 @@ func queueRescan(gp *g) {
 // dequeueRescan removes gp from the stack rescan list, if gp is on
 // the rescan list. The caller must own gp.
 func dequeueRescan(gp *g) {
+	if debug.gcrescanstacks == 0 {
+		return
+	}
+
 	if gp.gcRescan == -1 {
 		return
 	}
@@ -962,14 +984,14 @@ func gcDrain(gcw *gcWork, flags gcDrainFlags) {
 		throw("gcDrain phase incorrect")
 	}
 
-	gp := getg()
+	gp := getg().m.curg
 	preemptible := flags&gcDrainUntilPreempt != 0
 	blocking := flags&(gcDrainUntilPreempt|gcDrainNoBlock) == 0
 	flushBgCredit := flags&gcDrainFlushBgCredit != 0
 
 	// Drain root marking jobs.
 	if work.markrootNext < work.markrootJobs {
-		for blocking || !gp.preempt {
+		for !(preemptible && gp.preempt) {
 			job := atomic.Xadd(&work.markrootNext, +1) - 1
 			if job >= work.markrootJobs {
 				break
@@ -1279,6 +1301,13 @@ func greyobject(obj, base, off uintptr, hbits heapBits, span *mspan, gcw *gcWork
 			throw("setCheckmarked and isCheckmarked disagree")
 		}
 	} else {
+		if debug.gccheckmark > 0 && span.isFree(objIndex) {
+			print("runtime: marking free object ", hex(obj), " found at *(", hex(base), "+", hex(off), ")\n")
+			gcDumpObject("base", base, off)
+			gcDumpObject("obj", obj, ^uintptr(0))
+			throw("marking free object")
+		}
+
 		// If marked we have nothing to do.
 		if mbits.isMarked() {
 			return
@@ -1314,7 +1343,7 @@ func gcDumpObject(label string, obj, off uintptr) {
 	k := obj >> _PageShift
 	x := k
 	x -= mheap_.arena_start >> _PageShift
-	s := h_spans[x]
+	s := mheap_.spans[x]
 	print(label, "=", hex(obj), " k=", hex(k))
 	if s == nil {
 		print(" s=nil\n")
@@ -1373,6 +1402,32 @@ func gcmarknewobject(obj, size, scanSize uintptr) {
 	gcw := &getg().m.p.ptr().gcw
 	gcw.bytesMarked += uint64(size)
 	gcw.scanWork += int64(scanSize)
+	if gcBlackenPromptly {
+		// There shouldn't be anything in the work queue, but
+		// we still need to flush stats.
+		gcw.dispose()
+	}
+}
+
+// gcMarkTinyAllocs greys all active tiny alloc blocks.
+//
+// The world must be stopped.
+func gcMarkTinyAllocs() {
+	for _, p := range &allp {
+		if p == nil || p.status == _Pdead {
+			break
+		}
+		c := p.mcache
+		if c == nil || c.tiny == 0 {
+			continue
+		}
+		_, hbits, span, objIndex := heapBitsForObject(c.tiny, 0, 0)
+		gcw := &p.gcw
+		greyobject(c.tiny, 0, 0, hbits, span, gcw, objIndex)
+		if gcBlackenPromptly {
+			gcw.dispose()
+		}
+	}
 }
 
 // Checkmarking
@@ -1401,7 +1456,7 @@ var useCheckmark = false
 //go:nowritebarrier
 func initCheckmarks() {
 	useCheckmark = true
-	for _, s := range work.spans {
+	for _, s := range mheap_.allspans {
 		if s.state == _MSpanInUse {
 			heapBitsForSpan(s.base()).initCheckmarkSpan(s.layout())
 		}
@@ -1410,7 +1465,7 @@ func initCheckmarks() {
 
 func clearCheckmarks() {
 	useCheckmark = false
-	for _, s := range work.spans {
+	for _, s := range mheap_.allspans {
 		if s.state == _MSpanInUse {
 			heapBitsForSpan(s.base()).clearCheckmarkSpan(s.layout())
 		}

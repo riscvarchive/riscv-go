@@ -41,8 +41,11 @@ var progtable = [s390x.ALAST & obj.AMask]gc.ProgInfo{
 	s390x.ANEG & obj.AMask:    {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.ANEGW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AAND & obj.AMask:    {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
+	s390x.AANDW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AOR & obj.AMask:     {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
+	s390x.AORW & obj.AMask:    {Flags: gc.SizeL | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AXOR & obj.AMask:    {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
+	s390x.AXORW & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AMULLD & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AMULLW & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RegRead | gc.RightWrite},
 	s390x.AMULHD & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.RegRead | gc.RightWrite},
@@ -154,6 +157,12 @@ var progtable = [s390x.ALAST & obj.AMask]gc.ProgInfo{
 	s390x.ACMPUBLT & obj.AMask: {Flags: gc.Cjmp},
 	s390x.ACMPUBGT & obj.AMask: {Flags: gc.Cjmp},
 	s390x.ACMPUBLE & obj.AMask: {Flags: gc.Cjmp},
+
+	// Atomic
+	s390x.ACS & obj.AMask:   {Flags: gc.SizeL | gc.LeftRead | gc.LeftWrite | gc.RegRead | gc.RightRead | gc.RightWrite},
+	s390x.ACSG & obj.AMask:  {Flags: gc.SizeQ | gc.LeftRead | gc.LeftWrite | gc.RegRead | gc.RightRead | gc.RightWrite},
+	s390x.ALAA & obj.AMask:  {Flags: gc.SizeL | gc.LeftRead | gc.RightRead | gc.RightWrite},
+	s390x.ALAAG & obj.AMask: {Flags: gc.SizeQ | gc.LeftRead | gc.RightRead | gc.RightWrite},
 
 	// Macros
 	s390x.ACLEAR & obj.AMask: {Flags: gc.SizeQ | gc.LeftRead | gc.RightAddr | gc.RightWrite},

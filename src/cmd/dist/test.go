@@ -367,7 +367,7 @@ func (t *tester) registerTests() {
 		if !t.race {
 			cmd.Args = append(cmd.Args, "cmd")
 		}
-		all, err := cmd.CombinedOutput()
+		all, err := cmd.Output()
 		if err != nil {
 			log.Fatalf("Error running go list std cmd: %v, %s", err, all)
 		}
@@ -1061,8 +1061,7 @@ func (t *tester) raceTest(dt *distTest) error {
 	// The race builder should catch any error here, but doesn't.
 	// TODO(iant): Figure out how to catch this.
 	// t.addCmd(dt, "src", "go", "test", "-race", "-run=TestParallelTest", "cmd/go")
-	// TODO: Remove t.goos != "darwin" when issue 17065 is fixed.
-	if t.cgoEnabled && t.goos != "darwin" {
+	if t.cgoEnabled {
 		env := mergeEnvLists([]string{"GOTRACEBACK=2"}, os.Environ())
 		cmd := t.addCmd(dt, "misc/cgo/test", "go", "test", "-race", "-short", t.runFlag(""))
 		cmd.Env = env

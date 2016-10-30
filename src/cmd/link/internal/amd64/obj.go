@@ -43,11 +43,11 @@ func Init() {
 		ld.SysArch = sys.ArchAMD64P32
 	}
 
-	ld.Thearch.Funcalign = FuncAlign
-	ld.Thearch.Maxalign = MaxAlign
-	ld.Thearch.Minalign = MinAlign
-	ld.Thearch.Dwarfregsp = DWARFREGSP
-	ld.Thearch.Dwarfreglr = DWARFREGLR
+	ld.Thearch.Funcalign = funcAlign
+	ld.Thearch.Maxalign = maxAlign
+	ld.Thearch.Minalign = minAlign
+	ld.Thearch.Dwarfregsp = dwarfRegSP
+	ld.Thearch.Dwarfreglr = dwarfRegLR
 
 	ld.Thearch.Adddynrel = adddynrel
 	ld.Thearch.Archinit = archinit
@@ -101,7 +101,7 @@ func archinit(ctxt *ld.Link) {
 			*ld.FlagRound = 4096
 		}
 		if *ld.FlagTextAddr == -1 {
-			*ld.FlagTextAddr = 4096 + int64(ld.HEADR)
+			*ld.FlagTextAddr = 0x1000000 + int64(ld.HEADR)
 		}
 		if *ld.FlagDataAddr == -1 {
 			*ld.FlagDataAddr = 0

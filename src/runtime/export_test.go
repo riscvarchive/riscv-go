@@ -155,7 +155,11 @@ var Int32Hash = int32Hash
 var Int64Hash = int64Hash
 var EfaceHash = efaceHash
 var IfaceHash = ifaceHash
-var MemclrBytes = memclrBytes
+
+func MemclrBytes(b []byte) {
+	s := (*slice)(unsafe.Pointer(&b))
+	memclrNoHeapPointers(s.array, uintptr(s.len))
+}
 
 var HashLoad = &hashLoad
 
@@ -231,7 +235,7 @@ func CountPagesInUse() (pagesInUse, counted uintptr) {
 
 	pagesInUse = uintptr(mheap_.pagesInUse)
 
-	for _, s := range h_allspans {
+	for _, s := range mheap_.allspans {
 		if s.state == mSpanInUse {
 			counted += s.npages
 		}

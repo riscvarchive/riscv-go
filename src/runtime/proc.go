@@ -169,7 +169,8 @@ func main() {
 		cgocall(_cgo_notify_runtime_init_done, nil)
 	}
 
-	main_init()
+	fn := main_init // make an indirect call, as the linker doesn't know the address of the main package when laying down the runtime
+	fn()
 	close(main_init_done)
 
 	needUnlock = false
@@ -180,7 +181,8 @@ func main() {
 		// has a main, but it is not executed.
 		return
 	}
-	main_main()
+	fn = main_main // make an indirect call, as the linker doesn't know the address of the main package when laying down the runtime
+	fn()
 	if raceenabled {
 		racefini()
 	}
@@ -377,6 +379,29 @@ func badmcall2(fn func(*g)) {
 
 func badreflectcall() {
 	panic(plainError("arg size to reflect.call more than 1GB"))
+}
+
+var badmorestackg0Msg = "fatal: morestack on g0\n"
+
+//go:nosplit
+//go:nowritebarrierrec
+func badmorestackg0() {
+	sp := stringStructOf(&badmorestackg0Msg)
+	write(2, sp.str, int32(sp.len))
+}
+
+var badmorestackgsignalMsg = "fatal: morestack on gsignal\n"
+
+//go:nosplit
+//go:nowritebarrierrec
+func badmorestackgsignal() {
+	sp := stringStructOf(&badmorestackgsignalMsg)
+	write(2, sp.str, int32(sp.len))
+}
+
+//go:nosplit
+func badctxt() {
+	throw("ctxt != 0")
 }
 
 func lockedOSThread() bool {
@@ -903,7 +928,7 @@ func restartg(gp *g) {
 // in panic or being exited, this may not reliably stop all
 // goroutines.
 func stopTheWorld(reason string) {
-	semacquire(&worldsema, false)
+	semacquire(&worldsema, 0)
 	getg().m.preemptoff = reason
 	systemstack(stopTheWorldWithSema)
 }
@@ -926,7 +951,7 @@ var worldsema uint32 = 1
 // preemption first and then should stopTheWorldWithSema on the system
 // stack:
 //
-//	semacquire(&worldsema, false)
+//	semacquire(&worldsema, 0)
 //	m.preemptoff = "reason"
 //	systemstack(stopTheWorldWithSema)
 //
@@ -1273,8 +1298,10 @@ type cgothreadstart struct {
 // Can use p for allocation context if needed.
 // fn is recorded as the new m's m.mstartfn.
 //
-// This function it known to the compiler to inhibit the
-// go:nowritebarrierrec annotation because it uses P for allocation.
+// This function is allowed to have write barriers even if the caller
+// isn't because it borrows _p_.
+//
+//go:yeswritebarrierrec
 func allocm(_p_ *p, fn func()) *m {
 	_g_ := getg()
 	_g_.m.locks++ // disable GC because it can be called from sysmon
@@ -1427,6 +1454,7 @@ func oneNewExtraM() {
 	gp.syscallsp = gp.sched.sp
 	gp.stktopsp = gp.sched.sp
 	gp.gcscanvalid = true // fresh G, so no dequeueRescan necessary
+	gp.gcscandone = true
 	gp.gcRescan = -1
 	// malg returns status as Gidle, change to Gsyscall before adding to allg
 	// where GC will see it.
@@ -1550,7 +1578,7 @@ func unlockextra(mp *m) {
 // Create a new m. It will start off with a call to fn, or else the scheduler.
 // fn needs to be static and not a heap allocated closure.
 // May run with m.p==nil, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func newm(fn func(), _p_ *p) {
 	mp := allocm(_p_, fn)
 	mp.nextp.set(_p_)
@@ -1614,7 +1642,7 @@ func mspinning() {
 // May run with m.p==nil, so write barriers are not allowed.
 // If spinning is set, the caller has incremented nmspinning and startm will
 // either decrement nmspinning or set m.spinning in the newly started M.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func startm(_p_ *p, spinning bool) {
 	lock(&sched.lock)
 	if _p_ == nil {
@@ -1659,7 +1687,7 @@ func startm(_p_ *p, spinning bool) {
 
 // Hands off P from syscall or locked M.
 // Always runs without a P, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func handoffp(_p_ *p) {
 	// handoffp must start an M in any situation where
 	// findrunnable would return a G to run on _p_.
@@ -1752,7 +1780,7 @@ func stoplockedm() {
 
 // Schedules the locked m to run the locked gp.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func startlockedm(gp *g) {
 	_g_ := getg()
 
@@ -1802,6 +1830,11 @@ func gcstopm() {
 // If inheritTime is true, gp inherits the remaining time in the
 // current time slice. Otherwise, it starts a new time slice.
 // Never returns.
+//
+// Write barriers are allowed because this is called immediately after
+// acquiring a P in several places.
+//
+//go:yeswritebarrierrec
 func execute(gp *g, inheritTime bool) {
 	_g_ := getg()
 
@@ -2147,8 +2180,8 @@ top:
 func dropg() {
 	_g_ := getg()
 
-	_g_.m.curg.m = nil
-	_g_.m.curg = nil
+	setMNoWB(&_g_.m.curg.m, nil)
+	setGNoWB(&_g_.m.curg, nil)
 }
 
 func parkunlock_c(gp *g, lock unsafe.Pointer) bool {
@@ -2257,8 +2290,14 @@ func goexit0(gp *g) {
 	schedule()
 }
 
+// save updates getg().sched to refer to pc and sp so that a following
+// gogo will restore pc and sp.
+//
+// save must not have write barriers because invoking a write barrier
+// can clobber getg().sched.
+//
 //go:nosplit
-//go:nowritebarrier
+//go:nowritebarrierrec
 func save(pc, sp uintptr) {
 	_g_ := getg()
 
@@ -2266,8 +2305,13 @@ func save(pc, sp uintptr) {
 	_g_.sched.sp = sp
 	_g_.sched.lr = 0
 	_g_.sched.ret = 0
-	_g_.sched.ctxt = nil
 	_g_.sched.g = guintptr(unsafe.Pointer(_g_))
+	// We need to ensure ctxt is zero, but can't have a write
+	// barrier here. However, it should always already be zero.
+	// Assert that.
+	if _g_.sched.ctxt != nil {
+		badctxt()
+	}
 }
 
 // The goroutine g is about to enter a system call.
@@ -2457,7 +2501,11 @@ func entersyscallblock_handoff() {
 // Arrange for it to run on a cpu again.
 // This is called only from the go syscall library, not
 // from the low-level system calls used by the runtime.
+//
+// Write barriers are not allowed because our P may have been stolen.
+//
 //go:nosplit
+//go:nowritebarrierrec
 func exitsyscall(dummy int32) {
 	_g_ := getg()
 
@@ -2550,22 +2598,7 @@ func exitsyscallfast() bool {
 	// Try to re-acquire the last P.
 	if _g_.m.p != 0 && _g_.m.p.ptr().status == _Psyscall && atomic.Cas(&_g_.m.p.ptr().status, _Psyscall, _Prunning) {
 		// There's a cpu for us, so we can run.
-		_g_.m.mcache = _g_.m.p.ptr().mcache
-		_g_.m.p.ptr().m.set(_g_.m)
-		if _g_.m.syscalltick != _g_.m.p.ptr().syscalltick {
-			if trace.enabled {
-				// The p was retaken and then enter into syscall again (since _g_.m.syscalltick has changed).
-				// traceGoSysBlock for this syscall was already emitted,
-				// but here we effectively retake the p from the new syscall running on the same p.
-				systemstack(func() {
-					// Denote blocking of the new syscall.
-					traceGoSysBlock(_g_.m.p.ptr())
-					// Denote completion of the current syscall.
-					traceGoSysExit(0)
-				})
-			}
-			_g_.m.p.ptr().syscalltick++
-		}
+		exitsyscallfast_reacquired()
 		return true
 	}
 
@@ -2595,6 +2628,35 @@ func exitsyscallfast() bool {
 	return false
 }
 
+// exitsyscallfast_reacquired is the exitsyscall path on which this G
+// has successfully reacquired the P it was running on before the
+// syscall.
+//
+// This function is allowed to have write barriers because exitsyscall
+// has acquired a P at this point.
+//
+//go:yeswritebarrierrec
+//go:nosplit
+func exitsyscallfast_reacquired() {
+	_g_ := getg()
+	_g_.m.mcache = _g_.m.p.ptr().mcache
+	_g_.m.p.ptr().m.set(_g_.m)
+	if _g_.m.syscalltick != _g_.m.p.ptr().syscalltick {
+		if trace.enabled {
+			// The p was retaken and then enter into syscall again (since _g_.m.syscalltick has changed).
+			// traceGoSysBlock for this syscall was already emitted,
+			// but here we effectively retake the p from the new syscall running on the same p.
+			systemstack(func() {
+				// Denote blocking of the new syscall.
+				traceGoSysBlock(_g_.m.p.ptr())
+				// Denote completion of the current syscall.
+				traceGoSysExit(0)
+			})
+		}
+		_g_.m.p.ptr().syscalltick++
+	}
+}
+
 func exitsyscallfast_pidle() bool {
 	lock(&sched.lock)
 	_p_ := pidleget()
@@ -2612,6 +2674,8 @@ func exitsyscallfast_pidle() bool {
 
 // exitsyscall slow path on g0.
 // Failed to acquire P, enqueue gp as runnable.
+//
+//go:nowritebarrierrec
 func exitsyscall0(gp *g) {
 	_g_ := getg()
 
@@ -2758,13 +2822,28 @@ func newproc1(fn *funcval, argp *uint8, narg int32, nret int32, callerpc uintptr
 	spArg := sp
 	if usesLR {
 		// caller's LR
-		*(*unsafe.Pointer)(unsafe.Pointer(sp)) = nil
+		*(*uintptr)(unsafe.Pointer(sp)) = 0
 		prepGoExitFrame(sp)
 		spArg += sys.MinFrameSize
 	}
-	memmove(unsafe.Pointer(spArg), unsafe.Pointer(argp), uintptr(narg))
+	if narg > 0 {
+		memmove(unsafe.Pointer(spArg), unsafe.Pointer(argp), uintptr(narg))
+		// This is a stack-to-stack copy. If write barriers
+		// are enabled and the source stack is grey (the
+		// destination is always black), then perform a
+		// barrier copy. We do this *after* the memmove
+		// because the destination stack may have garbage on
+		// it.
+		if writeBarrier.needed && !_g_.m.curg.gcscandone {
+			f := findfunc(fn.fn)
+			stkmap := (*stackmap)(funcdata(f, _FUNCDATA_ArgsPointerMaps))
+			// We're in the prologue, so it's always stack map index 0.
+			bv := stackmapdata(stkmap, 0)
+			bulkBarrierBitmap(spArg, spArg, uintptr(narg), 0, bv.bytedata)
+		}
+	}
 
-	memclr(unsafe.Pointer(&newg.sched), unsafe.Sizeof(newg.sched))
+	memclrNoHeapPointers(unsafe.Pointer(&newg.sched), unsafe.Sizeof(newg.sched))
 	newg.sched.sp = sp
 	newg.stktopsp = sp
 	newg.sched.pc = funcPC(goexit) + sys.PCQuantum // +PCQuantum so that previous instruction is in same function
@@ -3194,7 +3273,8 @@ func sigprof(pc, sp, lr uintptr, gp *g, mp *m) {
 var sigprofCallers cgoCallers
 var sigprofCallersUse uint32
 
-// Called if we receive a SIGPROF signal on a non-Go thread.
+// sigprofNonGo is called if we receive a SIGPROF signal on a non-Go thread,
+// and the signal handler collected a stack trace in sigprofCallers.
 // When this is called, sigprofCallersUse will be non-zero.
 // g is nil, and what we can do is very limited.
 //go:nosplit
@@ -3207,15 +3287,39 @@ func sigprofNonGo() {
 		}
 
 		// Simple cas-lock to coordinate with setcpuprofilerate.
-		if atomic.Cas(&prof.lock, 0, 1) {
-			if prof.hz != 0 {
-				cpuprof.addNonGo(sigprofCallers[:n])
-			}
-			atomic.Store(&prof.lock, 0)
+		for !atomic.Cas(&prof.lock, 0, 1) {
+			osyield()
 		}
+		if prof.hz != 0 {
+			cpuprof.addNonGo(sigprofCallers[:n])
+		}
+		atomic.Store(&prof.lock, 0)
 	}
 
 	atomic.Store(&sigprofCallersUse, 0)
+}
+
+// sigprofNonGoPC is called when a profiling signal arrived on a
+// non-Go thread and we have a single PC value, not a stack trace.
+// g is nil, and what we can do is very limited.
+//go:nosplit
+//go:nowritebarrierrec
+func sigprofNonGoPC(pc uintptr) {
+	if prof.hz != 0 {
+		pc := []uintptr{
+			pc,
+			funcPC(_ExternalCode) + sys.PCQuantum,
+		}
+
+		// Simple cas-lock to coordinate with setcpuprofilerate.
+		for !atomic.Cas(&prof.lock, 0, 1) {
+			osyield()
+		}
+		if prof.hz != 0 {
+			cpuprof.addNonGo(pc)
+		}
+		atomic.Store(&prof.lock, 0)
+	}
 }
 
 // Reports whether a function will set the SP
@@ -3427,7 +3531,13 @@ func procresize(nprocs int32) *p {
 }
 
 // Associate p and the current m.
+//
+// This function is allowed to have write barriers even if the caller
+// isn't because it immediately acquires _p_.
+//
+//go:yeswritebarrierrec
 func acquirep(_p_ *p) {
+	// Do the part that isn't allowed to have write barriers.
 	acquirep1(_p_)
 
 	// have p; write barriers now allowed
@@ -3439,8 +3549,11 @@ func acquirep(_p_ *p) {
 	}
 }
 
-// May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+// acquirep1 is the first step of acquirep, which actually acquires
+// _p_. This is broken out so we can disallow write barriers for this
+// part, since we don't yet have a P.
+//
+//go:nowritebarrierrec
 func acquirep1(_p_ *p) {
 	_g_ := getg()
 
@@ -3878,7 +3991,7 @@ func schedtrace(detailed bool) {
 // Put mp on midle list.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func mput(mp *m) {
 	mp.schedlink = sched.midle
 	sched.midle.set(mp)
@@ -3889,7 +4002,7 @@ func mput(mp *m) {
 // Try to get an m from midle list.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func mget() *m {
 	mp := sched.midle.ptr()
 	if mp != nil {
@@ -3902,7 +4015,7 @@ func mget() *m {
 // Put gp on the global runnable queue.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func globrunqput(gp *g) {
 	gp.schedlink = 0
 	if sched.runqtail != 0 {
@@ -3917,7 +4030,7 @@ func globrunqput(gp *g) {
 // Put gp at the head of the global runnable queue.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func globrunqputhead(gp *g) {
 	gp.schedlink = sched.runqhead
 	sched.runqhead.set(gp)
@@ -3977,7 +4090,7 @@ func globrunqget(_p_ *p, max int32) *g {
 // Put p to on _Pidle list.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func pidleput(_p_ *p) {
 	if !runqempty(_p_) {
 		throw("pidleput: P has non-empty run queue")
@@ -3990,7 +4103,7 @@ func pidleput(_p_ *p) {
 // Try get a p from _Pidle list.
 // Sched must be locked.
 // May run during STW, so write barriers are not allowed.
-//go:nowritebarrier
+//go:nowritebarrierrec
 func pidleget() *p {
 	_p_ := sched.pidle.ptr()
 	if _p_ != nil {
@@ -4212,7 +4325,11 @@ func runqsteal(_p_, p2 *p, stealRunNextG bool) *g {
 func setMaxThreads(in int) (out int) {
 	lock(&sched.lock)
 	out = int(sched.maxmcount)
-	sched.maxmcount = int32(in)
+	if in > 0x7fffffff { // MaxInt32
+		sched.maxmcount = 0x7fffffff
+	} else {
+		sched.maxmcount = int32(in)
+	}
 	checkmcount()
 	unlock(&sched.lock)
 	return

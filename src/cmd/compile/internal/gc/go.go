@@ -30,7 +30,7 @@ type Pkg struct {
 // an object declared within a package, but Syms are also used to name internal
 // synthesized objects.
 //
-// As a special exception, field and method names that are exported use the Sym
+// As an exception, field and method names that are exported use the Sym
 // associated with localpkg instead of the package that declared them. This
 // allows using Sym pointer equality to test for Go identifier uniqueness when
 // handling selector expressions.
@@ -42,19 +42,15 @@ type Sym struct {
 
 	// saved and restored by dcopy
 	Pkg        *Pkg
-	Name       string // variable name
+	Name       string // object name
 	Def        *Node  // definition: ONAME OTYPE OPACK or OLITERAL
 	Block      int32  // blocknumber to catch redeclaration
 	Lastlineno int32  // last declaration for diagnostic
 
-	Label   *Label // corresponding label (ephemeral)
-	Origpkg *Pkg   // original package for . import
+	Label   *Node // corresponding label (ephemeral)
+	Origpkg *Pkg  // original package for . import
 	Lsym    *obj.LSym
 	Fsym    *Sym // funcsym
-}
-
-type Label struct {
-	Def *Node
 }
 
 type SymFlags uint8
@@ -67,6 +63,7 @@ const (
 	SymSiggen
 	SymAsm
 	SymAlgGen
+	SymAlias // alias, original is Sym.Def.Sym
 )
 
 // The Class of a variable/function describes the "storage class"
@@ -220,7 +217,7 @@ var dclcontext Class // PEXTERN/PAUTO
 
 var statuniqgen int // name generator for static temps
 
-var iota_ int32
+var iota_ int64
 
 var lastconst []*Node
 
@@ -274,7 +271,7 @@ var writearchive bool
 
 var Nacl bool
 
-var Pc *obj.Prog
+var pc *obj.Prog
 
 var nodfp *Node
 
@@ -379,8 +376,5 @@ var panicslice *Node
 var panicdivide *Node
 
 var growslice *Node
-
-var writebarrierptr *Node
-var typedmemmove *Node
 
 var panicdottype *Node

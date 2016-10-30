@@ -40,16 +40,17 @@ import (
 func Init() {
 	ld.SysArch = sys.ArchARM
 
-	ld.Thearch.Funcalign = FuncAlign
-	ld.Thearch.Maxalign = MaxAlign
-	ld.Thearch.Minalign = MinAlign
-	ld.Thearch.Dwarfregsp = DWARFREGSP
-	ld.Thearch.Dwarfreglr = DWARFREGLR
+	ld.Thearch.Funcalign = funcAlign
+	ld.Thearch.Maxalign = maxAlign
+	ld.Thearch.Minalign = minAlign
+	ld.Thearch.Dwarfregsp = dwarfRegSP
+	ld.Thearch.Dwarfreglr = dwarfRegLR
 
 	ld.Thearch.Adddynrel = adddynrel
 	ld.Thearch.Archinit = archinit
 	ld.Thearch.Archreloc = archreloc
 	ld.Thearch.Archrelocvariant = archrelocvariant
+	ld.Thearch.Trampoline = trampoline
 	ld.Thearch.Asmb = asmb
 	ld.Thearch.Elfreloc1 = elfreloc1
 	ld.Thearch.Elfsetupplt = elfsetupplt

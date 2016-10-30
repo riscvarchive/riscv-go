@@ -64,6 +64,13 @@ type Conn struct {
 	// the first transmitted Finished message is the tls-unique
 	// channel-binding value.
 	clientFinishedIsFirst bool
+
+	// closeNotifyErr is any error from sending the alertCloseNotify record.
+	closeNotifyErr error
+	// closeNotifySent is true if the Conn attempted to send an
+	// alertCloseNotify record.
+	closeNotifySent bool
+
 	// clientFinished and serverFinished contain the Finished message sent
 	// by the client or server in the most recent handshake. This is
 	// retained to support the renegotiation extension and tls-unique
@@ -278,13 +285,17 @@ func (hc *halfConn) decrypt(b *block) (ok bool, prefixLen int, alertValue alert)
 		switch c := hc.cipher.(type) {
 		case cipher.Stream:
 			c.XORKeyStream(payload, payload)
-		case cipher.AEAD:
-			explicitIVLen = 8
+		case aead:
+			explicitIVLen = c.explicitNonceLen()
 			if len(payload) < explicitIVLen {
 				return false, 0, alertBadRecordMAC
 			}
-			nonce := payload[:8]
-			payload = payload[8:]
+			nonce := payload[:explicitIVLen]
+			payload = payload[explicitIVLen:]
+
+			if len(nonce) == 0 {
+				nonce = hc.seq[:]
+			}
 
 			copy(hc.additionalData[:], hc.seq[:])
 			copy(hc.additionalData[8:], b.data[:3])
@@ -391,10 +402,13 @@ func (hc *halfConn) encrypt(b *block, explicitIVLen int) (bool, alert) {
 		switch c := hc.cipher.(type) {
 		case cipher.Stream:
 			c.XORKeyStream(payload, payload)
-		case cipher.AEAD:
+		case aead:
 			payloadLen := len(b.data) - recordHeaderLen - explicitIVLen
 			b.resize(len(b.data) + c.Overhead())
 			nonce := b.data[recordHeaderLen : recordHeaderLen+explicitIVLen]
+			if len(nonce) == 0 {
+				nonce = hc.seq[:]
+			}
 			payload := b.data[recordHeaderLen+explicitIVLen:]
 			payload = payload[:payloadLen]
 
@@ -852,15 +866,16 @@ func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {
 			}
 		}
 		if explicitIVLen == 0 {
-			if _, ok := c.out.cipher.(cipher.AEAD); ok {
-				explicitIVLen = 8
+			if c, ok := c.out.cipher.(aead); ok {
+				explicitIVLen = c.explicitNonceLen()
+
 				// The AES-GCM construction in TLS has an
 				// explicit nonce so that the nonce can be
 				// random. However, the nonce is only 8 bytes
 				// which is too small for a secure, random
 				// nonce. Therefore we use the sequence number
 				// as the nonce.
-				explicitIVIsSeq = true
+				explicitIVIsSeq = explicitIVLen > 0
 			}
 		}
 		m := len(data)
@@ -992,7 +1007,10 @@ func (c *Conn) readHandshake() (interface{}, error) {
 	return m, nil
 }
 
-var errClosed = errors.New("tls: use of closed connection")
+var (
+	errClosed   = errors.New("tls: use of closed connection")
+	errShutdown = errors.New("tls: protocol is shutdown")
+)
 
 // Write writes data to the connection.
 func (c *Conn) Write(b []byte) (int, error) {
@@ -1021,6 +1039,10 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 	if !c.handshakeComplete {
 		return 0, alertInternalError
+	}
+
+	if c.closeNotifySent {
+		return 0, errShutdown
 	}
 
 	// SSL 3.0 and TLS 1.0 are susceptible to a chosen-plaintext
@@ -1186,13 +1208,39 @@ func (c *Conn) Close() error {
 	c.handshakeMutex.Lock()
 	defer c.handshakeMutex.Unlock()
 	if c.handshakeComplete {
-		alertErr = c.sendAlert(alertCloseNotify)
+		alertErr = c.closeNotify()
 	}
 
 	if err := c.conn.Close(); err != nil {
 		return err
 	}
 	return alertErr
+}
+
+var errEarlyCloseWrite = errors.New("tls: CloseWrite called before handshake complete")
+
+// CloseWrite shuts down the writing side of the connection. It should only be
+// called once the handshake has completed and does not call CloseWrite on the
+// underlying connection. Most callers should just use Close.
+func (c *Conn) CloseWrite() error {
+	c.handshakeMutex.Lock()
+	defer c.handshakeMutex.Unlock()
+	if !c.handshakeComplete {
+		return errEarlyCloseWrite
+	}
+
+	return c.closeNotify()
+}
+
+func (c *Conn) closeNotify() error {
+	c.out.Lock()
+	defer c.out.Unlock()
+
+	if !c.closeNotifySent {
+		c.closeNotifyErr = c.sendAlertLocked(alertCloseNotify)
+		c.closeNotifySent = true
+	}
+	return c.closeNotifyErr
 }
 
 // Handshake runs the client or server handshake

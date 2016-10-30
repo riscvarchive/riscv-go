@@ -271,18 +271,16 @@ func duintptr(s *Sym, off int, v uint64) int {
 	return duintxx(s, off, v, Widthptr)
 }
 
-// stringConstantSyms holds the pair of symbols we create for a
-// constant string.
-type stringConstantSyms struct {
-	hdr  *obj.LSym // string header
-	data *obj.LSym // actual string data
+func dbvec(s *Sym, off int, bv bvec) int {
+	// Runtime reads the bitmaps as byte arrays. Oblige.
+	for j := 0; int32(j) < bv.n; j += 8 {
+		word := bv.b[j/32]
+		off = duint8(s, off, uint8(word>>(uint(j)%32)))
+	}
+	return off
 }
 
-// stringConstants maps from the symbol name we use for the string
-// contents to the pair of linker symbols for that string.
-var stringConstants = make(map[string]stringConstantSyms, 100)
-
-func stringsym(s string) (hdr, data *obj.LSym) {
+func stringsym(s string) (data *obj.LSym) {
 	var symname string
 	if len(s) > 100 {
 		// Huge strings are hashed to avoid long names in object files.
@@ -299,33 +297,15 @@ func stringsym(s string) (hdr, data *obj.LSym) {
 	const prefix = "go.string."
 	symdataname := prefix + symname
 
-	// All the strings have the same prefix, so ignore it for map
-	// purposes, but use a slice of the symbol name string to
-	// reduce long-term memory overhead.
-	key := symdataname[len(prefix):]
-
-	if syms, ok := stringConstants[key]; ok {
-		return syms.hdr, syms.data
-	}
-
-	symhdrname := "go.string.hdr." + symname
-
-	symhdr := obj.Linklookup(Ctxt, symhdrname, 0)
 	symdata := obj.Linklookup(Ctxt, symdataname, 0)
 
-	stringConstants[key] = stringConstantSyms{symhdr, symdata}
+	if !symdata.SeenGlobl() {
+		// string data
+		off := dsnameLSym(symdata, 0, s)
+		ggloblLSym(symdata, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
+	}
 
-	// string header
-	off := 0
-	off = dsymptrLSym(symhdr, off, symdata, 0)
-	off = duintxxLSym(symhdr, off, uint64(len(s)), Widthint)
-	ggloblLSym(symhdr, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
-
-	// string data
-	off = dsnameLSym(symdata, 0, s)
-	ggloblLSym(symdata, int32(off), obj.DUPOK|obj.RODATA|obj.LOCAL)
-
-	return symhdr, symdata
+	return symdata
 }
 
 var slicebytes_gen int
@@ -346,14 +326,6 @@ func slicebytes(nam *Node, s string, len int) {
 	off = dsymptr(nam.Sym, off, sym, 0)
 	off = duintxx(nam.Sym, off, uint64(len), Widthint)
 	duintxx(nam.Sym, off, uint64(len), Widthint)
-}
-
-func datagostring(sval string, a *obj.Addr) {
-	symhdr, _ := stringsym(sval)
-	a.Type = obj.TYPE_MEM
-	a.Name = obj.NAME_EXTERN
-	a.Sym = symhdr
-	a.Offset = 0
 }
 
 func dsname(s *Sym, off int, t string) int {
@@ -389,25 +361,19 @@ func gdata(nam *Node, nr *Node, wid int) {
 	if nam.Sym == nil {
 		Fatalf("gdata nil nam sym")
 	}
+	s := Linksym(nam.Sym)
 
 	switch nr.Op {
 	case OLITERAL:
 		switch u := nr.Val().U.(type) {
-		case *Mpcplx:
-			gdatacomplex(nam, u)
-
-		case string:
-			gdatastring(nam, u)
-
 		case bool:
 			i := int64(obj.Bool2int(u))
-			Linksym(nam.Sym).WriteInt(Ctxt, nam.Xoffset, wid, i)
+			s.WriteInt(Ctxt, nam.Xoffset, wid, i)
 
 		case *Mpint:
-			Linksym(nam.Sym).WriteInt(Ctxt, nam.Xoffset, wid, u.Int64())
+			s.WriteInt(Ctxt, nam.Xoffset, wid, u.Int64())
 
 		case *Mpflt:
-			s := Linksym(nam.Sym)
 			f := u.Float64()
 			switch nam.Type.Etype {
 			case TFLOAT32:
@@ -415,6 +381,23 @@ func gdata(nam *Node, nr *Node, wid int) {
 			case TFLOAT64:
 				s.WriteFloat64(Ctxt, nam.Xoffset, f)
 			}
+
+		case *Mpcplx:
+			r := u.Real.Float64()
+			i := u.Imag.Float64()
+			switch nam.Type.Etype {
+			case TCOMPLEX64:
+				s.WriteFloat32(Ctxt, nam.Xoffset, float32(r))
+				s.WriteFloat32(Ctxt, nam.Xoffset+4, float32(i))
+			case TCOMPLEX128:
+				s.WriteFloat64(Ctxt, nam.Xoffset, r)
+				s.WriteFloat64(Ctxt, nam.Xoffset+8, i)
+			}
+
+		case string:
+			symdata := stringsym(u)
+			s.WriteAddr(Ctxt, nam.Xoffset, Widthptr, symdata, 0)
+			s.WriteInt(Ctxt, nam.Xoffset+int64(Widthptr), Widthint, int64(len(u)))
 
 		default:
 			Fatalf("gdata unhandled OLITERAL %v", nr)
@@ -425,38 +408,15 @@ func gdata(nam *Node, nr *Node, wid int) {
 			Fatalf("gdata ADDR left op %v", nr.Left.Op)
 		}
 		to := nr.Left
-		Linksym(nam.Sym).WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(to.Sym), to.Xoffset)
+		s.WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(to.Sym), to.Xoffset)
 
 	case ONAME:
 		if nr.Class != PFUNC {
 			Fatalf("gdata NAME not PFUNC %d", nr.Class)
 		}
-		Linksym(nam.Sym).WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(funcsym(nr.Sym)), nr.Xoffset)
+		s.WriteAddr(Ctxt, nam.Xoffset, wid, Linksym(funcsym(nr.Sym)), nr.Xoffset)
 
 	default:
 		Fatalf("gdata unhandled op %v %v\n", nr, nr.Op)
 	}
-}
-
-func gdatacomplex(nam *Node, cval *Mpcplx) {
-	t := Types[cplxsubtype(nam.Type.Etype)]
-	r := cval.Real.Float64()
-	i := cval.Imag.Float64()
-	s := Linksym(nam.Sym)
-
-	switch t.Etype {
-	case TFLOAT32:
-		s.WriteFloat32(Ctxt, nam.Xoffset, float32(r))
-		s.WriteFloat32(Ctxt, nam.Xoffset+4, float32(i))
-	case TFLOAT64:
-		s.WriteFloat64(Ctxt, nam.Xoffset, r)
-		s.WriteFloat64(Ctxt, nam.Xoffset+8, i)
-	}
-}
-
-func gdatastring(nam *Node, sval string) {
-	s := Linksym(nam.Sym)
-	_, symdata := stringsym(sval)
-	s.WriteAddr(Ctxt, nam.Xoffset, Widthptr, symdata, 0)
-	s.WriteInt(Ctxt, nam.Xoffset+int64(Widthptr), Widthint, int64(len(sval)))
 }

@@ -40,7 +40,9 @@ var (
 
 	// ErrHijacked is returned by ResponseWriter.Write calls when
 	// the underlying connection has been hijacked using the
-	// Hijacker interfaced.
+	// Hijacker interface. A zero-byte write on a hijacked
+	// connection will return ErrHijacked without any other side
+	// effects.
 	ErrHijacked = errors.New("http: connection has been hijacked")
 
 	// ErrContentLength is returned by ResponseWriter.Write calls
@@ -206,6 +208,9 @@ type conn struct {
 	// Immutable; never nil.
 	server *Server
 
+	// cancelCtx cancels the connection-level context.
+	cancelCtx context.CancelFunc
+
 	// rwc is the underlying network connection.
 	// This is never wrapped by other types and is the value given out
 	// to CloseNotifier callers. It is usually of type *net.TCPConn or
@@ -232,7 +237,6 @@ type conn struct {
 	r *connReader
 
 	// bufr reads from r.
-	// Users of bufr must hold mu.
 	bufr *bufio.Reader
 
 	// bufw writes to checkConnErrorWriter{c}, which populates werr on error.
@@ -242,7 +246,9 @@ type conn struct {
 	// on this connection, if any.
 	lastMethod string
 
-	// mu guards hijackedv, use of bufr, (*response).closeNotifyCh.
+	curReq atomic.Value // of *response (which has a Request in it)
+
+	// mu guards hijackedv
 	mu sync.Mutex
 
 	// hijackedv is whether this connection has been hijacked
@@ -262,8 +268,12 @@ func (c *conn) hijackLocked() (rwc net.Conn, buf *bufio.ReadWriter, err error) {
 	if c.hijackedv {
 		return nil, nil, ErrHijacked
 	}
+	c.r.abortPendingRead()
+
 	c.hijackedv = true
 	rwc = c.rwc
+	rwc.SetDeadline(time.Time{})
+
 	buf = bufio.NewReadWriter(c.bufr, bufio.NewWriter(rwc))
 	c.setState(rwc, StateHijacked)
 	return
@@ -413,9 +423,11 @@ type response struct {
 	dateBuf [len(TimeFormat)]byte
 	clenBuf [10]byte
 
-	// closeNotifyCh is non-nil once CloseNotify is called.
-	// Guarded by conn.mu
-	closeNotifyCh <-chan bool
+	// closeNotifyCh is the channel returned by CloseNotify.
+	// TODO(bradfitz): this is currently (for Go 1.8) always
+	// non-nil. Make this lazily-created again as it used to be?
+	closeNotifyCh  chan bool
+	didCloseNotify int32 // atomic (only 0->1 winner should send)
 }
 
 type atomicBool int32
@@ -548,60 +560,148 @@ type readResult struct {
 // call blocked in a background goroutine to wait for activity and
 // trigger a CloseNotifier channel.
 type connReader struct {
-	r      io.Reader
-	remain int64 // bytes remaining
+	conn *conn
 
-	// ch is non-nil if a background read is in progress.
-	// It is guarded by conn.mu.
-	ch chan readResult
+	mu      sync.Mutex // guards following
+	hasByte bool
+	byteBuf [1]byte
+	bgErr   error // non-nil means error happened on background read
+	cond    *sync.Cond
+	inRead  bool
+	aborted bool  // set true before conn.rwc deadline is set to past
+	remain  int64 // bytes remaining
+}
+
+func (cr *connReader) lock() {
+	cr.mu.Lock()
+	if cr.cond == nil {
+		cr.cond = sync.NewCond(&cr.mu)
+	}
+}
+
+func (cr *connReader) unlock() { cr.mu.Unlock() }
+
+func (cr *connReader) startBackgroundRead() {
+	cr.lock()
+	defer cr.unlock()
+	if cr.inRead {
+		panic("invalid concurrent Body.Read call")
+	}
+	cr.inRead = true
+	go cr.backgroundRead()
+}
+
+func (cr *connReader) backgroundRead() {
+	n, err := cr.conn.rwc.Read(cr.byteBuf[:])
+	cr.lock()
+	if n == 1 {
+		cr.hasByte = true
+		// We were at EOF already (since we wouldn't be in a
+		// background read otherwise), so this is a pipelined
+		// HTTP request.
+		cr.closeNotifyFromPipelinedRequest()
+	}
+	if ne, ok := err.(net.Error); ok && cr.aborted && ne.Timeout() {
+		// Ignore this error. It's the expected error from
+		// another goroutine calling abortPendingRead.
+	} else if err != nil {
+		cr.handleReadError(err)
+	}
+	cr.aborted = false
+	cr.inRead = false
+	cr.unlock()
+	cr.cond.Broadcast()
+}
+
+func (cr *connReader) abortPendingRead() {
+	cr.lock()
+	defer cr.unlock()
+	if !cr.inRead {
+		return
+	}
+	cr.aborted = true
+	cr.conn.rwc.SetReadDeadline(aLongTimeAgo)
+	for cr.inRead {
+		cr.cond.Wait()
+	}
+	cr.conn.rwc.SetReadDeadline(time.Time{})
 }
 
 func (cr *connReader) setReadLimit(remain int64) { cr.remain = remain }
 func (cr *connReader) setInfiniteReadLimit()     { cr.remain = maxInt64 }
 func (cr *connReader) hitReadLimit() bool        { return cr.remain <= 0 }
 
+// may be called from multiple goroutines.
+func (cr *connReader) handleReadError(err error) {
+	cr.conn.cancelCtx()
+	cr.closeNotify()
+}
+
+// closeNotifyFromPipelinedRequest simply calls closeNotify.
+//
+// This method wrapper is here for documentation. The callers are the
+// cases where we send on the closenotify channel because of a
+// pipelined HTTP request, per the previous Go behavior and
+// documentation (that this "MAY" happen).
+//
+// TODO: consider changing this behavior and making context
+// cancelation and closenotify work the same.
+func (cr *connReader) closeNotifyFromPipelinedRequest() {
+	cr.closeNotify()
+}
+
+// may be called from multiple goroutines.
+func (cr *connReader) closeNotify() {
+	res, _ := cr.conn.curReq.Load().(*response)
+	if res != nil {
+		if atomic.CompareAndSwapInt32(&res.didCloseNotify, 0, 1) {
+			res.closeNotifyCh <- true
+		}
+	}
+}
+
 func (cr *connReader) Read(p []byte) (n int, err error) {
+	cr.lock()
+	if cr.inRead {
+		cr.unlock()
+		panic("invalid concurrent Body.Read call")
+	}
 	if cr.hitReadLimit() {
+		cr.unlock()
 		return 0, io.EOF
 	}
+	if cr.bgErr != nil {
+		err = cr.bgErr
+		cr.unlock()
+		return 0, err
+	}
 	if len(p) == 0 {
-		return
+		cr.unlock()
+		return 0, nil
 	}
 	if int64(len(p)) > cr.remain {
 		p = p[:cr.remain]
 	}
-
-	// Is a background read (started by CloseNotifier) already in
-	// flight? If so, wait for it and use its result.
-	ch := cr.ch
-	if ch != nil {
-		cr.ch = nil
-		res := <-ch
-		if res.n == 1 {
-			p[0] = res.b
-			cr.remain -= 1
-		}
-		return res.n, res.err
+	if cr.hasByte {
+		p[0] = cr.byteBuf[0]
+		cr.hasByte = false
+		cr.unlock()
+		return 1, nil
 	}
-	n, err = cr.r.Read(p)
+	cr.inRead = true
+	cr.unlock()
+	n, err = cr.conn.rwc.Read(p)
+
+	cr.lock()
+	cr.inRead = false
+	if err != nil {
+		cr.handleReadError(err)
+	}
 	cr.remain -= int64(n)
-	return
-}
+	cr.unlock()
 
-func (cr *connReader) startBackgroundRead(onReadComplete func()) {
-	if cr.ch != nil {
-		// Background read already started.
-		return
-	}
-	cr.ch = make(chan readResult, 1)
-	go cr.closeNotifyAwaitActivityRead(cr.ch, onReadComplete)
-}
-
-func (cr *connReader) closeNotifyAwaitActivityRead(ch chan<- readResult, onReadComplete func()) {
-	var buf [1]byte
-	n, err := cr.r.Read(buf[:1])
-	onReadComplete()
-	ch <- readResult{n, err, buf[0]}
+	cr.cond.Broadcast()
+	return n, err
 }
 
 var (
@@ -633,7 +733,7 @@ func newBufioReader(r io.Reader) *bufio.Reader {
 		br.Reset(r)
 		return br
 	}
-	// Note: if this reader size is every changed, update
+	// Note: if this reader size is ever changed, update
 	// TestHandlerBodyClose's assumptions.
 	return bufio.NewReader(r)
 }
@@ -746,9 +846,18 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 		return nil, ErrHijacked
 	}
 
-	if d := c.server.ReadTimeout; d != 0 {
-		c.rwc.SetReadDeadline(time.Now().Add(d))
+	var (
+		wholeReqDeadline time.Time // or zero if none
+		hdrDeadline      time.Time // or zero if none
+	)
+	t0 := time.Now()
+	if d := c.server.readHeaderTimeout(); d != 0 {
+		hdrDeadline = t0.Add(d)
 	}
+	if d := c.server.ReadTimeout; d != 0 {
+		wholeReqDeadline = t0.Add(d)
+	}
+	c.rwc.SetReadDeadline(hdrDeadline)
 	if d := c.server.WriteTimeout; d != 0 {
 		defer func() {
 			c.rwc.SetWriteDeadline(time.Now().Add(d))
@@ -756,14 +865,12 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 	}
 
 	c.r.setReadLimit(c.server.initialReadLimitSize())
-	c.mu.Lock() // while using bufr
 	if c.lastMethod == "POST" {
 		// RFC 2616 section 4.1 tolerance for old buggy clients.
 		peek, _ := c.bufr.Peek(4) // ReadRequest will get err below
 		c.bufr.Discard(numLeadingCRorLF(peek))
 	}
 	req, err := readRequest(c.bufr, keepHostHeader)
-	c.mu.Unlock()
 	if err != nil {
 		if c.r.hitReadLimit() {
 			return nil, errTooLarge
@@ -809,6 +916,11 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 		body.doEarlyClose = true
 	}
 
+	// Adjust the read deadline if necessary.
+	if !hdrDeadline.Equal(wholeReqDeadline) {
+		c.rwc.SetReadDeadline(wholeReqDeadline)
+	}
+
 	w = &response{
 		conn:          c,
 		cancelCtx:     cancelCtx,
@@ -816,6 +928,7 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 		reqBody:       req.Body,
 		handlerHeader: make(Header),
 		contentLength: -1,
+		closeNotifyCh: make(chan bool, 1),
 
 		// We populate these ahead of time so we're not
 		// reading from req.Header after their Handler starts
@@ -1318,7 +1431,9 @@ func (w *response) WriteString(data string) (n int, err error) {
 // either dataB or dataS is non-zero.
 func (w *response) write(lenData int, dataB []byte, dataS string) (n int, err error) {
 	if w.conn.hijacked() {
-		w.conn.server.logf("http: response.Write on hijacked connection")
+		if lenData > 0 {
+			w.conn.server.logf("http: response.Write on hijacked connection")
+		}
 		return 0, ErrHijacked
 	}
 	if !w.wroteHeader {
@@ -1353,6 +1468,8 @@ func (w *response) finishRequest() {
 	putBufioWriter(w.w)
 	w.cw.close()
 	w.conn.bufw.Flush()
+
+	w.conn.r.abortPendingRead()
 
 	// Close the body (regardless of w.closeAfterReply) so we can
 	// re-use its bufio.Reader later safely.
@@ -1521,12 +1638,13 @@ func (c *conn) serve(ctx context.Context) {
 
 	// HTTP/1.x from here on.
 
-	c.r = &connReader{r: c.rwc}
+	ctx, cancelCtx := context.WithCancel(ctx)
+	c.cancelCtx = cancelCtx
+	defer cancelCtx()
+
+	c.r = &connReader{conn: c}
 	c.bufr = newBufioReader(c.r)
 	c.bufw = newBufioWriterSize(checkConnErrorWriter{c}, 4<<10)
-
-	ctx, cancelCtx := context.WithCancel(ctx)
-	defer cancelCtx()
 
 	for {
 		w, err := c.readRequest(ctx)
@@ -1571,11 +1689,24 @@ func (c *conn) serve(ctx context.Context) {
 			return
 		}
 
+		c.curReq.Store(w)
+
+		if requestBodyRemains(req.Body) {
+			registerOnHitEOF(req.Body, w.conn.r.startBackgroundRead)
+		} else {
+			if w.conn.bufr.Buffered() > 0 {
+				w.conn.r.closeNotifyFromPipelinedRequest()
+			}
+			w.conn.r.startBackgroundRead()
+		}
+
 		// HTTP cannot have multiple simultaneous active requests.[*]
 		// Until the server replies to this request, it can't read another,
 		// so we might as well run the handler in this goroutine.
 		// [*] Not strictly true: HTTP pipelining. We could let them all process
 		// in parallel even if their responses need to be serialized.
+		// But we're not going to implement HTTP pipelining because it
+		// was never deployed in the wild and the answer is HTTP/2.
 		serverHandler{c.server}.ServeHTTP(w, w.req)
 		w.cancelCtx()
 		if c.hijacked() {
@@ -1589,6 +1720,15 @@ func (c *conn) serve(ctx context.Context) {
 			return
 		}
 		c.setState(c.rwc, StateIdle)
+		c.curReq.Store((*response)(nil))
+
+		if d := c.server.idleTimeout(); d != 0 {
+			c.rwc.SetReadDeadline(time.Now().Add(d))
+			if _, err := c.bufr.Peek(4); err != nil {
+				return
+			}
+		}
+		c.rwc.SetReadDeadline(time.Time{})
 	}
 }
 
@@ -1624,10 +1764,6 @@ func (w *response) Hijack() (rwc net.Conn, buf *bufio.ReadWriter, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if w.closeNotifyCh != nil {
-		return nil, nil, errors.New("http: Hijack is incompatible with use of CloseNotifier in same ServeHTTP call")
-	}
-
 	// Release the bufioWriter that writes to the chunk writer, it is not
 	// used after a connection has been hijacked.
 	rwc, buf, err = c.hijackLocked()
@@ -1642,50 +1778,7 @@ func (w *response) CloseNotify() <-chan bool {
 	if w.handlerDone.isSet() {
 		panic("net/http: CloseNotify called after ServeHTTP finished")
 	}
-	c := w.conn
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if w.closeNotifyCh != nil {
-		return w.closeNotifyCh
-	}
-	ch := make(chan bool, 1)
-	w.closeNotifyCh = ch
-
-	if w.conn.hijackedv {
-		// CloseNotify is undefined after a hijack, but we have
-		// no place to return an error, so just return a channel,
-		// even though it'll never receive a value.
-		return ch
-	}
-
-	var once sync.Once
-	notify := func() { once.Do(func() { ch <- true }) }
-
-	if requestBodyRemains(w.reqBody) {
-		// They're still consuming the request body, so we
-		// shouldn't notify yet.
-		registerOnHitEOF(w.reqBody, func() {
-			c.mu.Lock()
-			defer c.mu.Unlock()
-			startCloseNotifyBackgroundRead(c, notify)
-		})
-	} else {
-		startCloseNotifyBackgroundRead(c, notify)
-	}
-	return ch
-}
-
-// c.mu must be held.
-func startCloseNotifyBackgroundRead(c *conn, notify func()) {
-	if c.bufr.Buffered() > 0 {
-		// They've consumed the request body, so anything
-		// remaining is a pipelined request, which we
-		// document as firing on.
-		notify()
-	} else {
-		c.r.startBackgroundRead(notify)
-	}
+	return w.closeNotifyCh
 }
 
 func registerOnHitEOF(rc io.ReadCloser, fn func()) {
@@ -1702,7 +1795,7 @@ func registerOnHitEOF(rc io.ReadCloser, fn func()) {
 // requestBodyRemains reports whether future calls to Read
 // on rc might yield more data.
 func requestBodyRemains(rc io.ReadCloser) bool {
-	if rc == eofReader {
+	if rc == NoBody {
 		return false
 	}
 	switch v := rc.(type) {
@@ -1816,7 +1909,7 @@ func Redirect(w ResponseWriter, r *Request, urlStr string, code int) {
 		}
 	}
 
-	w.Header().Set("Location", urlStr)
+	w.Header().Set("Location", hexEscapeNonASCII(urlStr))
 	w.WriteHeader(code)
 
 	// RFC 2616 recommends that a short note "SHOULD" be included in the
@@ -2094,11 +2187,36 @@ func Serve(l net.Listener, handler Handler) error {
 // A Server defines parameters for running an HTTP server.
 // The zero value for Server is a valid configuration.
 type Server struct {
-	Addr         string        // TCP address to listen on, ":http" if empty
-	Handler      Handler       // handler to invoke, http.DefaultServeMux if nil
-	ReadTimeout  time.Duration // maximum duration before timing out read of the request
-	WriteTimeout time.Duration // maximum duration before timing out write of the response
-	TLSConfig    *tls.Config   // optional TLS config, used by ListenAndServeTLS
+	Addr      string      // TCP address to listen on, ":http" if empty
+	Handler   Handler     // handler to invoke, http.DefaultServeMux if nil
+	TLSConfig *tls.Config // optional TLS config, used by ListenAndServeTLS
+
+	// ReadTimeout is the maximum duration for reading the entire
+	// request, including the body.
+	//
+	// Because ReadTimeout does not let Handlers make per-request
+	// decisions on each request body's acceptable deadline or
+	// upload rate, most users will prefer to use
+	// ReadHeaderTimeout. It is valid to use them both.
+	ReadTimeout time.Duration
+
+	// ReadHeaderTimeout is the amount of time allowed to read
+	// request headers. The connection's read deadline is reset
+	// after reading the headers and the Handler can decide what
+	// is considered too slow for the body.
+	ReadHeaderTimeout time.Duration
+
+	// WriteTimeout is the maximum duration before timing out
+	// writes of the response. It is reset whenever a new
+	// request's header is read. Like ReadTimeout, it does not
+	// let Handlers make decisions on a per-request basis.
+	WriteTimeout time.Duration
+
+	// IdleTimeout is the maximum amount of time to wait for the
+	// next request when keep-alives are enabled. If IdleTimeout
+	// is zero, the value of ReadTimeout is used. If both are
+	// zero, there is no timeout.
+	IdleTimeout time.Duration
 
 	// MaxHeaderBytes controls the maximum number of bytes the
 	// server will read parsing the request header's keys and
@@ -2290,6 +2408,20 @@ func (srv *Server) Serve(l net.Listener) error {
 		c.setState(c.rwc, StateNew) // before Serve can return
 		go c.serve(ctx)
 	}
+}
+
+func (s *Server) idleTimeout() time.Duration {
+	if s.IdleTimeout != 0 {
+		return s.IdleTimeout
+	}
+	return s.ReadTimeout
+}
+
+func (s *Server) readHeaderTimeout() time.Duration {
+	if s.ReadHeaderTimeout != 0 {
+		return s.ReadHeaderTimeout
+	}
+	return s.ReadTimeout
 }
 
 func (s *Server) doKeepAlives() bool {
@@ -2628,24 +2760,6 @@ func (globalOptionsHandler) ServeHTTP(w ResponseWriter, r *Request) {
 	}
 }
 
-type eofReaderWithWriteTo struct{}
-
-func (eofReaderWithWriteTo) WriteTo(io.Writer) (int64, error) { return 0, nil }
-func (eofReaderWithWriteTo) Read([]byte) (int, error)         { return 0, io.EOF }
-
-// eofReader is a non-nil io.ReadCloser that always returns EOF.
-// It has a WriteTo method so io.Copy won't need a buffer.
-var eofReader = &struct {
-	eofReaderWithWriteTo
-	io.Closer
-}{
-	eofReaderWithWriteTo{},
-	ioutil.NopCloser(nil),
-}
-
-// Verify that an io.Copy from an eofReader won't require a buffer.
-var _ io.WriterTo = eofReader
-
 // initNPNRequest is an HTTP handler that initializes certain
 // uninitialized fields in its *Request. Such partially-initialized
 // Requests come from NPN protocol handlers.
@@ -2660,7 +2774,7 @@ func (h initNPNRequest) ServeHTTP(rw ResponseWriter, req *Request) {
 		*req.TLS = h.c.ConnectionState()
 	}
 	if req.Body == nil {
-		req.Body = eofReader
+		req.Body = NoBody
 	}
 	if req.RemoteAddr == "" {
 		req.RemoteAddr = h.c.RemoteAddr().String()
@@ -2721,6 +2835,7 @@ func (w checkConnErrorWriter) Write(p []byte) (n int, err error) {
 	n, err = w.c.rwc.Write(p)
 	if err != nil && w.c.werr == nil {
 		w.c.werr = err
+		w.c.cancelCtx()
 	}
 	return
 }

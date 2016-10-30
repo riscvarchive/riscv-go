@@ -91,7 +91,7 @@ func init() {
 		r0 = buildReg("R0")
 
 		// R10 and R11 are reserved by the assembler.
-		gp   = buildReg("R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R12")
+		gp   = buildReg("R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R12 R14")
 		gpsp = gp | sp
 
 		// R0 is considered to contain the value 0 in address calculations.
@@ -130,10 +130,12 @@ func init() {
 
 		gpload       = regInfo{inputs: []regMask{ptrspsb, 0}, outputs: gponly}
 		gploadidx    = regInfo{inputs: []regMask{ptrspsb, ptrsp, 0}, outputs: gponly}
+		gpopload     = regInfo{inputs: []regMask{gp, ptrsp, 0}, outputs: gponly}
 		gpstore      = regInfo{inputs: []regMask{ptrspsb, gpsp, 0}}
 		gpstoreconst = regInfo{inputs: []regMask{ptrspsb, 0}}
 		gpstoreidx   = regInfo{inputs: []regMask{ptrsp, ptrsp, gpsp, 0}}
 		gpstorebr    = regInfo{inputs: []regMask{ptrsp, gpsp, 0}}
+		gpstorelaa   = regInfo{inputs: []regMask{ptrspsb, gpsp, 0}, outputs: gponly}
 
 		gpmvc = regInfo{inputs: []regMask{ptrsp, ptrsp, 0}}
 
@@ -151,6 +153,15 @@ func init() {
 
 		fpstore    = regInfo{inputs: []regMask{ptrspsb, fp, 0}}
 		fpstoreidx = regInfo{inputs: []regMask{ptrsp, ptrsp, fp, 0}}
+
+		// LoweredAtomicCas may overwrite arg1, so force it to R0 for now.
+		cas = regInfo{inputs: []regMask{ptrsp, r0, gpsp, 0}, outputs: []regMask{gp, 0}, clobbers: r0}
+
+		// LoweredAtomicExchange overwrites the output before executing
+		// CS{,G}, so the output register must not be the same as the
+		// input register. For now we just force the output register to
+		// R0.
+		exchange = regInfo{inputs: []regMask{ptrsp, gpsp &^ r0, 0}, outputs: []regMask{r0, 0}}
 	)
 
 	var S390Xops = []opData{
@@ -179,20 +190,26 @@ func init() {
 		{name: "FMOVDstoreidx", argLength: 4, reg: fpstoreidx, asm: "FMOVD", aux: "SymOff"},                 // fp64 indexed by i store
 
 		// binary ops
-		{name: "ADD", argLength: 2, reg: gp21sp, asm: "ADD", commutative: true, clobberFlags: true},                // arg0 + arg1
-		{name: "ADDW", argLength: 2, reg: gp21sp, asm: "ADDW", commutative: true, clobberFlags: true},              // arg0 + arg1
-		{name: "ADDconst", argLength: 1, reg: gp11sp, asm: "ADD", aux: "Int64", typ: "UInt64", clobberFlags: true}, // arg0 + auxint
-		{name: "ADDWconst", argLength: 1, reg: gp11sp, asm: "ADDW", aux: "Int32", clobberFlags: true},              // arg0 + auxint
+		{name: "ADD", argLength: 2, reg: gp21sp, asm: "ADD", commutative: true, clobberFlags: true},                                               // arg0 + arg1
+		{name: "ADDW", argLength: 2, reg: gp21sp, asm: "ADDW", commutative: true, clobberFlags: true},                                             // arg0 + arg1
+		{name: "ADDconst", argLength: 1, reg: gp11sp, asm: "ADD", aux: "Int64", typ: "UInt64", clobberFlags: true},                                // arg0 + auxint
+		{name: "ADDWconst", argLength: 1, reg: gp11sp, asm: "ADDW", aux: "Int32", clobberFlags: true},                                             // arg0 + auxint
+		{name: "ADDload", argLength: 3, reg: gpopload, asm: "ADD", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true},   // arg0 + *arg1. arg2=mem
+		{name: "ADDWload", argLength: 3, reg: gpopload, asm: "ADDW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 + *arg1. arg2=mem
 
-		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB", clobberFlags: true},                                          // arg0 - arg1
-		{name: "SUBW", argLength: 2, reg: gp21, asm: "SUBW", clobberFlags: true},                                        // arg0 - arg1
-		{name: "SUBconst", argLength: 1, reg: gp11, asm: "SUB", aux: "Int64", resultInArg0: true, clobberFlags: true},   // arg0 - auxint
-		{name: "SUBWconst", argLength: 1, reg: gp11, asm: "SUBW", aux: "Int32", resultInArg0: true, clobberFlags: true}, // arg0 - auxint
+		{name: "SUB", argLength: 2, reg: gp21, asm: "SUB", clobberFlags: true},                                                                    // arg0 - arg1
+		{name: "SUBW", argLength: 2, reg: gp21, asm: "SUBW", clobberFlags: true},                                                                  // arg0 - arg1
+		{name: "SUBconst", argLength: 1, reg: gp11, asm: "SUB", aux: "Int64", resultInArg0: true, clobberFlags: true},                             // arg0 - auxint
+		{name: "SUBWconst", argLength: 1, reg: gp11, asm: "SUBW", aux: "Int32", resultInArg0: true, clobberFlags: true},                           // arg0 - auxint
+		{name: "SUBload", argLength: 3, reg: gpopload, asm: "SUB", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true},   // arg0 - *arg1. arg2=mem
+		{name: "SUBWload", argLength: 3, reg: gpopload, asm: "SUBW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 - *arg1. arg2=mem
 
-		{name: "MULLD", argLength: 2, reg: gp21, asm: "MULLD", typ: "Int64", commutative: true, resultInArg0: true, clobberFlags: true}, // arg0 * arg1
-		{name: "MULLW", argLength: 2, reg: gp21, asm: "MULLW", typ: "Int32", commutative: true, resultInArg0: true, clobberFlags: true}, // arg0 * arg1
-		{name: "MULLDconst", argLength: 1, reg: gp11, asm: "MULLD", aux: "Int64", typ: "Int64", resultInArg0: true, clobberFlags: true}, // arg0 * auxint
-		{name: "MULLWconst", argLength: 1, reg: gp11, asm: "MULLW", aux: "Int32", typ: "Int32", resultInArg0: true, clobberFlags: true}, // arg0 * auxint
+		{name: "MULLD", argLength: 2, reg: gp21, asm: "MULLD", typ: "Int64", commutative: true, resultInArg0: true, clobberFlags: true},             // arg0 * arg1
+		{name: "MULLW", argLength: 2, reg: gp21, asm: "MULLW", typ: "Int32", commutative: true, resultInArg0: true, clobberFlags: true},             // arg0 * arg1
+		{name: "MULLDconst", argLength: 1, reg: gp11, asm: "MULLD", aux: "Int64", typ: "Int64", resultInArg0: true, clobberFlags: true},             // arg0 * auxint
+		{name: "MULLWconst", argLength: 1, reg: gp11, asm: "MULLW", aux: "Int32", typ: "Int32", resultInArg0: true, clobberFlags: true},             // arg0 * auxint
+		{name: "MULLDload", argLength: 3, reg: gpopload, asm: "MULLD", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 * *arg1. arg2=mem
+		{name: "MULLWload", argLength: 3, reg: gpopload, asm: "MULLW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 * *arg1. arg2=mem
 
 		{name: "MULHD", argLength: 2, reg: gp21, asm: "MULHD", typ: "Int64", resultInArg0: true, clobberFlags: true},   // (arg0 * arg1) >> width
 		{name: "MULHDU", argLength: 2, reg: gp21, asm: "MULHDU", typ: "Int64", resultInArg0: true, clobberFlags: true}, // (arg0 * arg1) >> width
@@ -208,20 +225,26 @@ func init() {
 		{name: "MODDU", argLength: 2, reg: gp21, asm: "MODDU", resultInArg0: true, clobberFlags: true}, // arg0 % arg1
 		{name: "MODWU", argLength: 2, reg: gp21, asm: "MODWU", resultInArg0: true, clobberFlags: true}, // arg0 % arg1
 
-		{name: "AND", argLength: 2, reg: gp21, asm: "AND", commutative: true, clobberFlags: true},                      // arg0 & arg1
-		{name: "ANDW", argLength: 2, reg: gp21, asm: "AND", commutative: true, clobberFlags: true},                     // arg0 & arg1
-		{name: "ANDconst", argLength: 1, reg: gp11, asm: "AND", aux: "Int64", resultInArg0: true, clobberFlags: true},  // arg0 & auxint
-		{name: "ANDWconst", argLength: 1, reg: gp11, asm: "AND", aux: "Int32", resultInArg0: true, clobberFlags: true}, // arg0 & auxint
+		{name: "AND", argLength: 2, reg: gp21, asm: "AND", commutative: true, clobberFlags: true},                                                 // arg0 & arg1
+		{name: "ANDW", argLength: 2, reg: gp21, asm: "ANDW", commutative: true, clobberFlags: true},                                               // arg0 & arg1
+		{name: "ANDconst", argLength: 1, reg: gp11, asm: "AND", aux: "Int64", resultInArg0: true, clobberFlags: true},                             // arg0 & auxint
+		{name: "ANDWconst", argLength: 1, reg: gp11, asm: "ANDW", aux: "Int32", resultInArg0: true, clobberFlags: true},                           // arg0 & auxint
+		{name: "ANDload", argLength: 3, reg: gpopload, asm: "AND", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true},   // arg0 & *arg1. arg2=mem
+		{name: "ANDWload", argLength: 3, reg: gpopload, asm: "ANDW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 & *arg1. arg2=mem
 
-		{name: "OR", argLength: 2, reg: gp21, asm: "OR", commutative: true, clobberFlags: true},                      // arg0 | arg1
-		{name: "ORW", argLength: 2, reg: gp21, asm: "OR", commutative: true, clobberFlags: true},                     // arg0 | arg1
-		{name: "ORconst", argLength: 1, reg: gp11, asm: "OR", aux: "Int64", resultInArg0: true, clobberFlags: true},  // arg0 | auxint
-		{name: "ORWconst", argLength: 1, reg: gp11, asm: "OR", aux: "Int32", resultInArg0: true, clobberFlags: true}, // arg0 | auxint
+		{name: "OR", argLength: 2, reg: gp21, asm: "OR", commutative: true, clobberFlags: true},                                                 // arg0 | arg1
+		{name: "ORW", argLength: 2, reg: gp21, asm: "ORW", commutative: true, clobberFlags: true},                                               // arg0 | arg1
+		{name: "ORconst", argLength: 1, reg: gp11, asm: "OR", aux: "Int64", resultInArg0: true, clobberFlags: true},                             // arg0 | auxint
+		{name: "ORWconst", argLength: 1, reg: gp11, asm: "ORW", aux: "Int32", resultInArg0: true, clobberFlags: true},                           // arg0 | auxint
+		{name: "ORload", argLength: 3, reg: gpopload, asm: "OR", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true},   // arg0 | *arg1. arg2=mem
+		{name: "ORWload", argLength: 3, reg: gpopload, asm: "ORW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 | *arg1. arg2=mem
 
-		{name: "XOR", argLength: 2, reg: gp21, asm: "XOR", commutative: true, clobberFlags: true},                      // arg0 ^ arg1
-		{name: "XORW", argLength: 2, reg: gp21, asm: "XOR", commutative: true, clobberFlags: true},                     // arg0 ^ arg1
-		{name: "XORconst", argLength: 1, reg: gp11, asm: "XOR", aux: "Int64", resultInArg0: true, clobberFlags: true},  // arg0 ^ auxint
-		{name: "XORWconst", argLength: 1, reg: gp11, asm: "XOR", aux: "Int32", resultInArg0: true, clobberFlags: true}, // arg0 ^ auxint
+		{name: "XOR", argLength: 2, reg: gp21, asm: "XOR", commutative: true, clobberFlags: true},                                                 // arg0 ^ arg1
+		{name: "XORW", argLength: 2, reg: gp21, asm: "XORW", commutative: true, clobberFlags: true},                                               // arg0 ^ arg1
+		{name: "XORconst", argLength: 1, reg: gp11, asm: "XOR", aux: "Int64", resultInArg0: true, clobberFlags: true},                             // arg0 ^ auxint
+		{name: "XORWconst", argLength: 1, reg: gp11, asm: "XORW", aux: "Int32", resultInArg0: true, clobberFlags: true},                           // arg0 ^ auxint
+		{name: "XORload", argLength: 3, reg: gpopload, asm: "XOR", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true},   // arg0 ^ *arg1. arg2=mem
+		{name: "XORWload", argLength: 3, reg: gpopload, asm: "XORW", aux: "SymOff", resultInArg0: true, clobberFlags: true, faultOnNilArg1: true}, // arg0 ^ *arg1. arg2=mem
 
 		{name: "CMP", argLength: 2, reg: gp2flags, asm: "CMP", typ: "Flags"},   // arg0 compare to arg1
 		{name: "CMPW", argLength: 2, reg: gp2flags, asm: "CMPW", typ: "Flags"}, // arg0 compare to arg1
@@ -236,8 +259,6 @@ func init() {
 
 		{name: "FCMPS", argLength: 2, reg: fp2flags, asm: "CEBR", typ: "Flags"}, // arg0 compare to arg1, f32
 		{name: "FCMP", argLength: 2, reg: fp2flags, asm: "FCMPU", typ: "Flags"}, // arg0 compare to arg1, f64
-
-		{name: "TESTB", argLength: 1, reg: gp1flags, asm: "AND", typ: "Flags"}, // (arg0 & 0xFF) compare to 0
 
 		{name: "SLD", argLength: 2, reg: sh21, asm: "SLD"},                    // arg0 << arg1, shift amount is mod 64
 		{name: "SLW", argLength: 2, reg: sh21, asm: "SLW"},                    // arg0 << arg1, shift amount is mod 32
@@ -397,6 +418,54 @@ func init() {
 		{name: "FlagLT"}, // <
 		{name: "FlagGT"}, // >
 
+		// Atomic loads. These are just normal loads but return <value,memory> tuples
+		// so they can be properly ordered with other loads.
+		// load from arg0+auxint+aux.  arg1=mem.
+		{name: "MOVWZatomicload", argLength: 2, reg: gpload, asm: "MOVWZ", aux: "SymOff", faultOnNilArg0: true},
+		{name: "MOVDatomicload", argLength: 2, reg: gpload, asm: "MOVD", aux: "SymOff", faultOnNilArg0: true},
+
+		// Atomic stores. These are just normal stores.
+		// store arg1 to arg0+auxint+aux. arg2=mem.
+		{name: "MOVWatomicstore", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem", clobberFlags: true, faultOnNilArg0: true},
+		{name: "MOVDatomicstore", argLength: 3, reg: gpstore, asm: "MOVD", aux: "SymOff", typ: "Mem", clobberFlags: true, faultOnNilArg0: true},
+
+		// Atomic adds.
+		// *(arg0+auxint+aux) += arg1.  arg2=mem.
+		// Returns a tuple of <old contents of *(arg0+auxint+aux), memory>.
+		{name: "LAA", argLength: 3, reg: gpstorelaa, asm: "LAA", typ: "(UInt32,Mem)", aux: "SymOff", faultOnNilArg0: true},
+		{name: "LAAG", argLength: 3, reg: gpstorelaa, asm: "LAAG", typ: "(UInt64,Mem)", aux: "SymOff", faultOnNilArg0: true},
+		{name: "AddTupleFirst32", argLength: 2}, // arg0=tuple <x,y>.  Returns <x+arg1,y>.
+		{name: "AddTupleFirst64", argLength: 2}, // arg0=tuple <x,y>.  Returns <x+arg1,y>.
+
+		// Compare and swap.
+		// arg0 = pointer, arg1 = old value, arg2 = new value, arg3 = memory.
+		// if *(arg0+auxint+aux) == arg1 {
+		//   *(arg0+auxint+aux) = arg2
+		//   return (true, memory)
+		// } else {
+		//   return (false, memory)
+		// }
+		// Note that these instructions also return the old value in arg1, but we ignore it.
+		// TODO: have these return flags instead of bool.  The current system generates:
+		//    CS ...
+		//    MOVD  $0, ret
+		//    BNE   2(PC)
+		//    MOVD  $1, ret
+		//    CMPW  ret, $0
+		//    BNE ...
+		// instead of just
+		//    CS ...
+		//    BEQ ...
+		// but we can't do that because memory-using ops can't generate flags yet
+		// (flagalloc wants to move flag-generating instructions around).
+		{name: "LoweredAtomicCas32", argLength: 4, reg: cas, asm: "CS", aux: "SymOff", clobberFlags: true, faultOnNilArg0: true},
+		{name: "LoweredAtomicCas64", argLength: 4, reg: cas, asm: "CSG", aux: "SymOff", clobberFlags: true, faultOnNilArg0: true},
+
+		// Lowered atomic swaps, emulated using compare-and-swap.
+		// store arg1 to arg0+auxint+aux, arg2=mem.
+		{name: "LoweredAtomicExchange32", argLength: 3, reg: exchange, asm: "CS", aux: "SymOff", clobberFlags: true, faultOnNilArg0: true},
+		{name: "LoweredAtomicExchange64", argLength: 3, reg: exchange, asm: "CSG", aux: "SymOff", clobberFlags: true, faultOnNilArg0: true},
+
 		// find leftmost one
 		{
 			name:         "FLOGR",
@@ -549,5 +618,6 @@ func init() {
 		gpregmask:       gp,
 		fpregmask:       fp,
 		framepointerreg: -1, // not used
+		linkreg:         int8(num["R14"]),
 	})
 }

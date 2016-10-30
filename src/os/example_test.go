@@ -52,3 +52,55 @@ func ExampleFileMode() {
 		fmt.Println("named pipe")
 	}
 }
+
+func ExampleIsNotExist() {
+	filename := "a-nonexistent-file"
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		fmt.Printf("file does not exist")
+	}
+	// Output:
+	// file does not exist
+}
+
+func init() {
+	os.Setenv("USER", "gopher")
+	os.Setenv("HOME", "/usr/gopher")
+	os.Unsetenv("GOPATH")
+}
+
+func ExampleExpandEnv() {
+	fmt.Println(os.ExpandEnv("$USER lives in ${HOME}."))
+
+	// Output:
+	// gopher lives in /usr/gopher.
+}
+
+func ExampleLookupEnv() {
+	show := func(key string) {
+		val, ok := os.LookupEnv(key)
+		if !ok {
+			fmt.Printf("%s not set\n", key)
+		} else {
+			fmt.Printf("%s=%s\n", key, val)
+		}
+	}
+
+	show("USER")
+	show("GOPATH")
+
+	// Output:
+	// USER=gopher
+	// GOPATH not set
+}
+
+func ExampleGetenv() {
+	fmt.Printf("%s lives in %s.\n", os.Getenv("USER"), os.Getenv("HOME"))
+
+	// Output:
+	// gopher lives in /usr/gopher.
+}
+
+func ExampleUnsetenv() {
+	os.Setenv("TMPDIR", "/my/tmp")
+	defer os.Unsetenv("TMPDIR")
+}

@@ -5,6 +5,10 @@
 package url
 
 import (
+	"bytes"
+	encodingPkg "encoding"
+	"encoding/gob"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -800,6 +804,16 @@ var unescapeTests = []EscapeTest{
 		"",
 		EscapeError("%zz"),
 	},
+	{
+		"a+b",
+		"a b",
+		nil,
+	},
+	{
+		"a%20b",
+		"a b",
+		nil,
+	},
 }
 
 func TestUnescape(t *testing.T) {
@@ -808,10 +822,33 @@ func TestUnescape(t *testing.T) {
 		if actual != tt.out || (err != nil) != (tt.err != nil) {
 			t.Errorf("QueryUnescape(%q) = %q, %s; want %q, %s", tt.in, actual, err, tt.out, tt.err)
 		}
+
+		in := tt.in
+		out := tt.out
+		if strings.Contains(tt.in, "+") {
+			in = strings.Replace(tt.in, "+", "%20", -1)
+			actual, err := PathUnescape(in)
+			if actual != tt.out || (err != nil) != (tt.err != nil) {
+				t.Errorf("PathUnescape(%q) = %q, %s; want %q, %s", in, actual, err, tt.out, tt.err)
+			}
+			if tt.err == nil {
+				s, err := QueryUnescape(strings.Replace(tt.in, "+", "XXX", -1))
+				if err != nil {
+					continue
+				}
+				in = tt.in
+				out = strings.Replace(s, "XXX", "+", -1)
+			}
+		}
+
+		actual, err = PathUnescape(in)
+		if actual != out || (err != nil) != (tt.err != nil) {
+			t.Errorf("PathUnescape(%q) = %q, %s; want %q, %s", in, actual, err, out, tt.err)
+		}
 	}
 }
 
-var escapeTests = []EscapeTest{
+var queryEscapeTests = []EscapeTest{
 	{
 		"",
 		"",
@@ -839,8 +876,8 @@ var escapeTests = []EscapeTest{
 	},
 }
 
-func TestEscape(t *testing.T) {
-	for _, tt := range escapeTests {
+func TestQueryEscape(t *testing.T) {
+	for _, tt := range queryEscapeTests {
 		actual := QueryEscape(tt.in)
 		if tt.out != actual {
 			t.Errorf("QueryEscape(%q) = %q, want %q", tt.in, actual, tt.out)
@@ -850,6 +887,54 @@ func TestEscape(t *testing.T) {
 		roundtrip, err := QueryUnescape(actual)
 		if roundtrip != tt.in || err != nil {
 			t.Errorf("QueryUnescape(%q) = %q, %s; want %q, %s", actual, roundtrip, err, tt.in, "[no error]")
+		}
+	}
+}
+
+var pathEscapeTests = []EscapeTest{
+	{
+		"",
+		"",
+		nil,
+	},
+	{
+		"abc",
+		"abc",
+		nil,
+	},
+	{
+		"abc+def",
+		"abc+def",
+		nil,
+	},
+	{
+		"one two",
+		"one%20two",
+		nil,
+	},
+	{
+		"10%",
+		"10%25",
+		nil,
+	},
+	{
+		" ?&=#+%!<>#\"{}|\\^[]`☺\t:/@$'()*,;",
+		"%20%3F&=%23+%25%21%3C%3E%23%22%7B%7D%7C%5C%5E%5B%5D%60%E2%98%BA%09:%2F@$%27%28%29%2A%2C%3B",
+		nil,
+	},
+}
+
+func TestPathEscape(t *testing.T) {
+	for _, tt := range pathEscapeTests {
+		actual := PathEscape(tt.in)
+		if tt.out != actual {
+			t.Errorf("PathEscape(%q) = %q, want %q", tt.in, actual, tt.out)
+		}
+
+		// for bonus points, verify that escape:unescape is an identity.
+		roundtrip, err := PathUnescape(actual)
+		if roundtrip != tt.in || err != nil {
+			t.Errorf("PathUnescape(%q) = %q, %s; want %q, %s", actual, roundtrip, err, tt.in, "[no error]")
 		}
 	}
 }
@@ -1300,7 +1385,7 @@ func TestParseFailure(t *testing.T) {
 	}
 }
 
-func TestParseAuthority(t *testing.T) {
+func TestParseErrors(t *testing.T) {
 	tests := []struct {
 		in      string
 		wantErr bool
@@ -1320,9 +1405,13 @@ func TestParseAuthority(t *testing.T) {
 		{"http://%41:8080/", true},        // not allowed: % encoding only for non-ASCII
 		{"mysql://x@y(z:123)/foo", false}, // golang.org/issue/12023
 		{"mysql://x@y(1.2.3.4:123)/foo", false},
-		{"mysql://x@y([2001:db8::1]:123)/foo", false},
+
 		{"http://[]%20%48%54%54%50%2f%31%2e%31%0a%4d%79%48%65%61%64%65%72%3a%20%31%32%33%0a%0a/", true}, // golang.org/issue/11208
 		{"http://a b.com/", true},                                                                       // no space in host name please
+		{"cache_object://foo", true},                                                                    // scheme cannot have _, relative path cannot have : in first segment
+		{"cache_object:foo", true},
+		{"cache_object:foo/bar", true},
+		{"cache_object/:foo/bar", false},
 	}
 	for _, tt := range tests {
 		u, err := Parse(tt.in)
@@ -1541,5 +1630,56 @@ func TestURLPort(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("Port for Host %q = %q; want %q", tt.host, got, tt.want)
 		}
+	}
+}
+
+var _ encodingPkg.BinaryMarshaler = (*URL)(nil)
+var _ encodingPkg.BinaryUnmarshaler = (*URL)(nil)
+
+func TestJSON(t *testing.T) {
+	u, err := Parse("https://www.google.com/x?y=z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	js, err := json.Marshal(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// If only we could implement TextMarshaler/TextUnmarshaler,
+	// this would work:
+	//
+	// if string(js) != strconv.Quote(u.String()) {
+	// 	t.Errorf("json encoding: %s\nwant: %s\n", js, strconv.Quote(u.String()))
+	// }
+
+	u1 := new(URL)
+	err = json.Unmarshal(js, u1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.String() != u.String() {
+		t.Errorf("json decoded to: %s\nwant: %s\n", u1, u)
+	}
+}
+
+func TestGob(t *testing.T) {
+	u, err := Parse("https://www.google.com/x?y=z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var w bytes.Buffer
+	err = gob.NewEncoder(&w).Encode(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	u1 := new(URL)
+	err = gob.NewDecoder(&w).Decode(u1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u1.String() != u.String() {
+		t.Errorf("json decoded to: %s\nwant: %s\n", u1, u)
 	}
 }

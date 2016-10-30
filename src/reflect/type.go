@@ -156,9 +156,18 @@ type Type interface {
 	// and a boolean indicating if the field was found.
 	FieldByName(name string) (StructField, bool)
 
-	// FieldByNameFunc returns the first struct field with a name
+	// FieldByNameFunc returns the struct field with a name
 	// that satisfies the match function and a boolean indicating if
 	// the field was found.
+	//
+	// FieldByNameFunc considers the fields in the struct itself
+	// and then the fields in any anonymous structs, in breadth first order,
+	// stopping at the shallowest nesting depth containing one or more
+	// fields satisfying the match function. If multiple fields at that depth
+	// satisfy the match function, they cancel each other
+	// and FieldByNameFunc returns no match.
+	// This behavior mirrors Go's handling of name lookup in
+	// structs containing anonymous fields.
 	FieldByNameFunc(match func(string) bool) (StructField, bool)
 
 	// In returns the type of a function type's i'th input parameter.
@@ -1584,10 +1593,22 @@ func directlyAssignable(T, V *rtype) bool {
 	}
 
 	// x's type T and V must  have identical underlying types.
-	return haveIdenticalUnderlyingType(T, V)
+	return haveIdenticalUnderlyingType(T, V, true)
 }
 
-func haveIdenticalUnderlyingType(T, V *rtype) bool {
+func haveIdenticalType(T, V Type, cmpTags bool) bool {
+	if cmpTags {
+		return T == V
+	}
+
+	if T.Name() != V.Name() || T.Kind() != V.Kind() {
+		return false
+	}
+
+	return haveIdenticalUnderlyingType(T.common(), V.common(), false)
+}
+
+func haveIdenticalUnderlyingType(T, V *rtype, cmpTags bool) bool {
 	if T == V {
 		return true
 	}
@@ -1606,18 +1627,18 @@ func haveIdenticalUnderlyingType(T, V *rtype) bool {
 	// Composite types.
 	switch kind {
 	case Array:
-		return T.Elem() == V.Elem() && T.Len() == V.Len()
+		return T.Len() == V.Len() && haveIdenticalType(T.Elem(), V.Elem(), cmpTags)
 
 	case Chan:
 		// Special case:
 		// x is a bidirectional channel value, T is a channel type,
 		// and x's type V and T have identical element types.
-		if V.ChanDir() == BothDir && T.Elem() == V.Elem() {
+		if V.ChanDir() == BothDir && haveIdenticalType(T.Elem(), V.Elem(), cmpTags) {
 			return true
 		}
 
 		// Otherwise continue test for identical underlying type.
-		return V.ChanDir() == T.ChanDir() && T.Elem() == V.Elem()
+		return V.ChanDir() == T.ChanDir() && haveIdenticalType(T.Elem(), V.Elem(), cmpTags)
 
 	case Func:
 		t := (*funcType)(unsafe.Pointer(T))
@@ -1626,12 +1647,12 @@ func haveIdenticalUnderlyingType(T, V *rtype) bool {
 			return false
 		}
 		for i := 0; i < t.NumIn(); i++ {
-			if t.In(i) != v.In(i) {
+			if !haveIdenticalType(t.In(i), v.In(i), cmpTags) {
 				return false
 			}
 		}
 		for i := 0; i < t.NumOut(); i++ {
-			if t.Out(i) != v.Out(i) {
+			if !haveIdenticalType(t.Out(i), v.Out(i), cmpTags) {
 				return false
 			}
 		}
@@ -1648,10 +1669,10 @@ func haveIdenticalUnderlyingType(T, V *rtype) bool {
 		return false
 
 	case Map:
-		return T.Key() == V.Key() && T.Elem() == V.Elem()
+		return haveIdenticalType(T.Key(), V.Key(), cmpTags) && haveIdenticalType(T.Elem(), V.Elem(), cmpTags)
 
 	case Ptr, Slice:
-		return T.Elem() == V.Elem()
+		return haveIdenticalType(T.Elem(), V.Elem(), cmpTags)
 
 	case Struct:
 		t := (*structType)(unsafe.Pointer(T))
@@ -1665,10 +1686,10 @@ func haveIdenticalUnderlyingType(T, V *rtype) bool {
 			if tf.name.name() != vf.name.name() {
 				return false
 			}
-			if tf.typ != vf.typ {
+			if !haveIdenticalType(tf.typ, vf.typ, cmpTags) {
 				return false
 			}
-			if tf.name.tag() != vf.name.tag() {
+			if cmpTags && tf.name.tag() != vf.name.tag() {
 				return false
 			}
 			if tf.offset != vf.offset {
@@ -2024,7 +2045,7 @@ func FuncOf(in, out []Type, variadic bool) Type {
 	// Look in cache.
 	funcLookupCache.RLock()
 	for _, t := range funcLookupCache.m[hash] {
-		if haveIdenticalUnderlyingType(&ft.rtype, t) {
+		if haveIdenticalUnderlyingType(&ft.rtype, t, true) {
 			funcLookupCache.RUnlock()
 			return t
 		}
@@ -2038,7 +2059,7 @@ func FuncOf(in, out []Type, variadic bool) Type {
 		funcLookupCache.m = make(map[uint32][]*rtype)
 	}
 	for _, t := range funcLookupCache.m[hash] {
-		if haveIdenticalUnderlyingType(&ft.rtype, t) {
+		if haveIdenticalUnderlyingType(&ft.rtype, t, true) {
 			return t
 		}
 	}
@@ -2046,7 +2067,7 @@ func FuncOf(in, out []Type, variadic bool) Type {
 	// Look in known types for the same string representation.
 	str := funcStr(ft)
 	for _, tt := range typesByString(str) {
-		if haveIdenticalUnderlyingType(&ft.rtype, tt) {
+		if haveIdenticalUnderlyingType(&ft.rtype, tt, true) {
 			funcLookupCache.m[hash] = append(funcLookupCache.m[hash], tt)
 			return tt
 		}
@@ -2599,7 +2620,7 @@ func StructOf(fields []StructField) Type {
 	structLookupCache.RLock()
 	for _, st := range structLookupCache.m[hash] {
 		t := st.common()
-		if haveIdenticalUnderlyingType(&typ.rtype, t) {
+		if haveIdenticalUnderlyingType(&typ.rtype, t, true) {
 			structLookupCache.RUnlock()
 			return t
 		}
@@ -2616,14 +2637,14 @@ func StructOf(fields []StructField) Type {
 	}
 	for _, st := range structLookupCache.m[hash] {
 		t := st.common()
-		if haveIdenticalUnderlyingType(&typ.rtype, t) {
+		if haveIdenticalUnderlyingType(&typ.rtype, t, true) {
 			return t
 		}
 	}
 
 	// Look in known types.
 	for _, t := range typesByString(str) {
-		if haveIdenticalUnderlyingType(&typ.rtype, t) {
+		if haveIdenticalUnderlyingType(&typ.rtype, t, true) {
 			// even if 't' wasn't a structType with methods, we should be ok
 			// as the 'u uncommonType' field won't be accessed except when
 			// tflag&tflagUncommon is set.

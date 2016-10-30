@@ -295,7 +295,7 @@ func walkrange(n *Node) {
 		//   if hv2 < utf8.RuneSelf {
 		//      hv1++
 		//   } else {
-		//      hv2, hv1 = charntorune(ha, hv1)
+		//      hv2, hv1 = decoderune(ha, hv1)
 		//   }
 		//   v2 = hv2
 		//   // original body
@@ -334,9 +334,9 @@ func walkrange(n *Node) {
 		eif := nod(OAS2, nil, nil)
 		nif.Rlist.Set1(eif)
 
-		// hv2, hv1 = charntorune(ha, hv1)
+		// hv2, hv1 = decoderune(ha, hv1)
 		eif.List.Set2(hv2, hv1)
-		fn := syslook("charntorune")
+		fn := syslook("decoderune")
 		eif.Rlist.Set1(mkcall1(fn, fn.Type.Results(), nil, ha, hv1))
 
 		body = append(body, nif)
@@ -397,7 +397,7 @@ func memclrrange(n, v1, v2, a *Node) bool {
 	// if len(a) != 0 {
 	// 	hp = &a[0]
 	// 	hn = len(a)*sizeof(elem(a))
-	// 	memclr(hp, hn)
+	// 	memclr{NoHeap,Has}Pointers(hp, hn)
 	// 	i = len(a) - 1
 	// }
 	n.Op = OIF
@@ -423,8 +423,14 @@ func memclrrange(n, v1, v2, a *Node) bool {
 	tmp = conv(tmp, Types[TUINTPTR])
 	n.Nbody.Append(nod(OAS, hn, tmp))
 
-	// memclr(hp, hn)
-	fn := mkcall("memclr", nil, nil, hp, hn)
+	var fn *Node
+	if haspointers(a.Type.Elem()) {
+		// memclrHasPointers(hp, hn)
+		fn = mkcall("memclrHasPointers", nil, nil, hp, hn)
+	} else {
+		// memclrNoHeapPointers(hp, hn)
+		fn = mkcall("memclrNoHeapPointers", nil, nil, hp, hn)
+	}
 
 	n.Nbody.Append(fn)
 

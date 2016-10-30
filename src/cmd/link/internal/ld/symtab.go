@@ -366,8 +366,6 @@ func (ctxt *Link) symtab() {
 	ctxt.xdefine("runtime.text", obj.STEXT, 0)
 
 	ctxt.xdefine("runtime.etext", obj.STEXT, 0)
-	ctxt.xdefine("runtime.typelink", obj.SRODATA, 0)
-	ctxt.xdefine("runtime.etypelink", obj.SRODATA, 0)
 	ctxt.xdefine("runtime.itablink", obj.SRODATA, 0)
 	ctxt.xdefine("runtime.eitablink", obj.SRODATA, 0)
 	ctxt.xdefine("runtime.rodata", obj.SRODATA, 0)
@@ -435,10 +433,9 @@ func (ctxt *Link) symtab() {
 		return s
 	}
 	var (
-		symgostring    = groupSym("go.string.*", obj.SGOSTRING)
-		symgostringhdr = groupSym("go.string.hdr.*", obj.SGOSTRINGHDR)
-		symgofunc      = groupSym("go.func.*", obj.SGOFUNC)
-		symgcbits      = groupSym("runtime.gcbits.*", obj.SGCBITS)
+		symgostring = groupSym("go.string.*", obj.SGOSTRING)
+		symgofunc   = groupSym("go.func.*", obj.SGOFUNC)
+		symgcbits   = groupSym("runtime.gcbits.*", obj.SGCBITS)
 	)
 
 	var symgofuncrel *Symbol
@@ -450,9 +447,6 @@ func (ctxt *Link) symtab() {
 		}
 	}
 
-	symtypelink := ctxt.Syms.Lookup("runtime.typelink", 0)
-	symtypelink.Type = obj.STYPELINK
-
 	symitablink := ctxt.Syms.Lookup("runtime.itablink", 0)
 	symitablink.Type = obj.SITABLINK
 
@@ -462,7 +456,6 @@ func (ctxt *Link) symtab() {
 	symt.Size = 0
 	symt.Attr |= AttrReachable
 
-	ntypelinks := 0
 	nitablinks := 0
 
 	// assign specific types so that they sort together.
@@ -492,12 +485,6 @@ func (ctxt *Link) symtab() {
 			// names, as they can be referred to by a section offset.
 			s.Type = obj.STYPERELRO
 
-		case strings.HasPrefix(s.Name, "go.typelink."):
-			ntypelinks++
-			s.Type = obj.STYPELINK
-			s.Attr |= AttrHidden
-			s.Outer = symtypelink
-
 		case strings.HasPrefix(s.Name, "go.itablink."):
 			nitablinks++
 			s.Type = obj.SITABLINK
@@ -508,10 +495,6 @@ func (ctxt *Link) symtab() {
 			s.Type = obj.SGOSTRING
 			s.Attr |= AttrHidden
 			s.Outer = symgostring
-			if strings.HasPrefix(s.Name, "go.string.hdr.") {
-				s.Type = obj.SGOSTRINGHDR
-				s.Outer = symgostringhdr
-			}
 
 		case strings.HasPrefix(s.Name, "runtime.gcbits."):
 			s.Type = obj.SGCBITS
@@ -595,9 +578,11 @@ func (ctxt *Link) symtab() {
 	adduint(ctxt, moduledata, uint64(nsections))
 
 	// The typelinks slice
-	Addaddr(ctxt, moduledata, ctxt.Syms.Lookup("runtime.typelink", 0))
-	adduint(ctxt, moduledata, uint64(ntypelinks))
-	adduint(ctxt, moduledata, uint64(ntypelinks))
+	typelinkSym := ctxt.Syms.Lookup("runtime.typelink", 0)
+	ntypelinks := uint64(typelinkSym.Size) / 4
+	Addaddr(ctxt, moduledata, typelinkSym)
+	adduint(ctxt, moduledata, ntypelinks)
+	adduint(ctxt, moduledata, ntypelinks)
 	// The itablinks slice
 	Addaddr(ctxt, moduledata, ctxt.Syms.Lookup("runtime.itablink", 0))
 	adduint(ctxt, moduledata, uint64(nitablinks))

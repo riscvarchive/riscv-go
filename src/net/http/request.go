@@ -151,6 +151,14 @@ type Request struct {
 	// Handler does not need to.
 	Body io.ReadCloser
 
+	// GetBody defines an optional func to return a new copy of
+	// Body. It used for client requests when a redirect requires
+	// reading the body more than once. Use of GetBody still
+	// requires setting Body.
+	//
+	// For server requests it is unused.
+	GetBody func() (io.ReadCloser, error)
+
 	// ContentLength records the length of the associated content.
 	// The value -1 indicates that the length is unknown.
 	// Values >= 0 indicate that the given number of bytes may
@@ -738,10 +746,39 @@ func NewRequest(method, urlStr string, body io.Reader) (*Request, error) {
 		switch v := body.(type) {
 		case *bytes.Buffer:
 			req.ContentLength = int64(v.Len())
+			buf := v.Bytes()
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := bytes.NewReader(buf)
+				return ioutil.NopCloser(r), nil
+			}
 		case *bytes.Reader:
 			req.ContentLength = int64(v.Len())
+			snapshot := *v
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := snapshot
+				return ioutil.NopCloser(&r), nil
+			}
 		case *strings.Reader:
 			req.ContentLength = int64(v.Len())
+			snapshot := *v
+			req.GetBody = func() (io.ReadCloser, error) {
+				r := snapshot
+				return ioutil.NopCloser(&r), nil
+			}
+		default:
+			req.ContentLength = -1 // unknown
+		}
+		// For client requests, Request.ContentLength of 0
+		// means either actually 0, or unknown. The only way
+		// to explicitly say that the ContentLength is zero is
+		// to set the Body to nil. But turns out too much code
+		// depends on NewRequest returning a non-nil Body,
+		// so we use a well-known ReadCloser variable instead
+		// and have the http package also treat that sentinel
+		// variable to mean explicitly zero.
+		if req.ContentLength == 0 {
+			req.Body = NoBody
+			req.GetBody = func() (io.ReadCloser, error) { return NoBody, nil }
 		}
 	}
 
@@ -1041,18 +1078,24 @@ func parsePostForm(r *Request) (vs url.Values, err error) {
 	return
 }
 
-// ParseForm parses the raw query from the URL and updates r.Form.
+// ParseForm populates r.Form and r.PostForm.
 //
-// For POST or PUT requests, it also parses the request body as a form and
-// put the results into both r.PostForm and r.Form.
-// POST and PUT body parameters take precedence over URL query string values
-// in r.Form.
+// For all requests, ParseForm parses the raw query from the URL and updates
+// r.Form.
+//
+// For POST, PUT, and PATCH requests, it also parses the request body as a form
+// and puts the results into both r.PostForm and r.Form. Request body parameters
+// take precedence over URL query string values in r.Form.
+//
+// For other HTTP methods, or when the Content-Type is not
+// application/x-www-form-urlencoded, the request Body is not read, and
+// r.PostForm is initialized to a non-nil, empty value.
 //
 // If the request Body's size has not already been limited by MaxBytesReader,
 // the size is capped at 10MB.
 //
 // ParseMultipartForm calls ParseForm automatically.
-// It is idempotent.
+// ParseForm is idempotent.
 func (r *Request) ParseForm() error {
 	var err error
 	if r.PostForm == nil {
@@ -1216,49 +1259,14 @@ func (r *Request) isReplayable() bool {
 	return false
 }
 
-// bodyAndLength reports the request's body and content length, with
-// the difference from r.ContentLength being that 0 means actually
-// zero, and -1 means unknown.
-func (r *Request) bodyAndLength() (body io.Reader, contentLen int64) {
-	body = r.Body
-	if body == nil {
-		return nil, 0
+// outgoingLength reports the Content-Length of this outgoing (Client) request.
+// It maps 0 into -1 (unknown) when the Body is non-nil.
+func (r *Request) outgoingLength() int64 {
+	if r.Body == nil || r.Body == NoBody {
+		return 0
 	}
 	if r.ContentLength != 0 {
-		return body, r.ContentLength
+		return r.ContentLength
 	}
-
-	// Don't try to sniff the request body if,
-	// * they're using a custom transfer encoding (or specified
-	//   chunked themselves)
-	// * they're not using HTTP/1.1 and can't chunk anyway (even
-	//   though this is basically irrelevant, since this package
-	//   only sends minimum 1.1 requests)
-	// * they're sending an "Expect: 100-continue" request, because
-	//   they might get denied or redirected and try to use the same
-	//   body elsewhere, so we shoudn't consume it.
-	if len(r.TransferEncoding) != 0 ||
-		!r.ProtoAtLeast(1, 1) ||
-		r.Header.Get("Expect") == "100-continue" {
-		return body, -1
-	}
-
-	// Test to see if it's actually zero or just unset.
-	var buf [1]byte
-	n, err := io.ReadFull(body, buf[:])
-	if err != nil && err != io.EOF {
-		return errorReader{err}, -1
-	}
-
-	if n == 1 {
-		// Oh, guess there is data in this Body Reader after all.
-		// The ContentLength field just wasn't set.
-		// Stich the Body back together again, re-attaching our
-		// consumed byte.
-		// TODO(bradfitz): switch to stitchByteAndReader
-		return io.MultiReader(bytes.NewReader(buf[:]), body), -1
-	}
-
-	// Body is actually empty.
-	return nil, 0
+	return -1
 }

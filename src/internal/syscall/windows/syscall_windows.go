@@ -6,6 +6,11 @@ package windows
 
 import "syscall"
 
+const (
+	ERROR_SHARING_VIOLATION      syscall.Errno = 32
+	ERROR_NO_UNICODE_TRANSLATION syscall.Errno = 1113
+)
+
 const GAA_FLAG_INCLUDE_PREFIX = 0x00000010
 
 const (
@@ -137,6 +142,25 @@ func Rename(oldpath, newpath string) error {
 	return MoveFileEx(from, to, MOVEFILE_REPLACE_EXISTING)
 }
 
+const MB_ERR_INVALID_CHARS = 8
+
 //sys	GetACP() (acp uint32) = kernel32.GetACP
 //sys	GetConsoleCP() (ccp uint32) = kernel32.GetConsoleCP
 //sys	MultiByteToWideChar(codePage uint32, dwFlags uint32, str *byte, nstr int32, wchar *uint16, nwchar int32) (nwrite int32, err error) = kernel32.MultiByteToWideChar
+//sys	GetCurrentThread() (pseudoHandle syscall.Handle, err error) = kernel32.GetCurrentThread
+
+const STYPE_DISKTREE = 0x00
+
+type SHARE_INFO_2 struct {
+	Netname     *uint16
+	Type        uint32
+	Remark      *uint16
+	Permissions uint32
+	MaxUses     uint32
+	CurrentUses uint32
+	Path        *uint16
+	Passwd      *uint16
+}
+
+//sys  NetShareAdd(serverName *uint16, level uint32, buf *byte, parmErr *uint16) (neterr error) = netapi32.NetShareAdd
+//sys  NetShareDel(serverName *uint16, netName *uint16, reserved uint32) (neterr error) = netapi32.NetShareDel

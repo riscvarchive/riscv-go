@@ -58,6 +58,12 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		if p.From.Type == obj.TYPE_FCONST {
 			f32 := float32(p.From.Val.(float64))
 			i32 := math.Float32bits(f32)
+			if i32 == 0 {
+				p.As = AMOVV
+				p.From.Type = obj.TYPE_REG
+				p.From.Reg = REGZERO
+				break
+			}
 			literal := fmt.Sprintf("$f32.%08x", i32)
 			s := obj.Linklookup(ctxt, literal, 0)
 			s.Size = 4
@@ -70,6 +76,12 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	case AMOVD:
 		if p.From.Type == obj.TYPE_FCONST {
 			i64 := math.Float64bits(p.From.Val.(float64))
+			if i64 == 0 {
+				p.As = AMOVV
+				p.From.Type = obj.TYPE_REG
+				p.From.Reg = REGZERO
+				break
+			}
 			literal := fmt.Sprintf("$f64.%016x", i64)
 			s := obj.Linklookup(ctxt, literal, 0)
 			s.Size = 8
@@ -281,7 +293,21 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			q = p
 
 			if autosize != 0 {
-				q = obj.Appendp(ctxt, p)
+				// Make sure to save link register for non-empty frame, even if
+				// it is a leaf function, so that traceback works.
+				// Store link register before decrement SP, so if a signal comes
+				// during the execution of the function prologue, the traceback
+				// code will not see a half-updated stack frame.
+				q = obj.Appendp(ctxt, q)
+				q.As = AMOVV
+				q.Lineno = p.Lineno
+				q.From.Type = obj.TYPE_REG
+				q.From.Reg = REGLINK
+				q.To.Type = obj.TYPE_MEM
+				q.To.Offset = int64(-autosize)
+				q.To.Reg = REGSP
+
+				q = obj.Appendp(ctxt, q)
 				q.As = AADDV
 				q.Lineno = p.Lineno
 				q.From.Type = obj.TYPE_CONST
@@ -300,18 +326,9 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			}
 
 			if cursym.Text.Mark&LEAF != 0 {
-				cursym.Leaf = true
+				cursym.Set(obj.AttrLeaf, true)
 				break
 			}
-
-			q = obj.Appendp(ctxt, q)
-			q.As = AMOVV
-			q.Lineno = p.Lineno
-			q.From.Type = obj.TYPE_REG
-			q.From.Reg = REGLINK
-			q.To.Type = obj.TYPE_MEM
-			q.To.Offset = int64(0)
-			q.To.Reg = REGSP
 
 			if cursym.Text.From3.Offset&obj.WRAPPER != 0 {
 				// if(g->panic != nil && g->panic->argp == FP) g->panic->argp = bottom-of-frame
@@ -554,7 +571,7 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32) *obj.Prog {
 	p.From.Type = obj.TYPE_MEM
 	p.From.Reg = REGG
 	p.From.Offset = 2 * int64(ctxt.Arch.PtrSize) // G.stackguard0
-	if ctxt.Cursym.Cfunc {
+	if ctxt.Cursym.CFunc() {
 		p.From.Offset = 3 * int64(ctxt.Arch.PtrSize) // G.stackguard1
 	}
 	p.To.Type = obj.TYPE_REG
@@ -684,7 +701,7 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32) *obj.Prog {
 
 	p.As = AJAL
 	p.To.Type = obj.TYPE_BRANCH
-	if ctxt.Cursym.Cfunc {
+	if ctxt.Cursym.CFunc() {
 		p.To.Sym = obj.Linklookup(ctxt, "runtime.morestackc", 0)
 	} else if ctxt.Cursym.Text.From3.Offset&obj.NEEDCTXT == 0 {
 		p.To.Sym = obj.Linklookup(ctxt, "runtime.morestack_noctxt", 0)

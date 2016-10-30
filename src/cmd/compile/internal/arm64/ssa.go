@@ -136,17 +136,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			return
 		}
 		p := gc.Prog(loadByType(v.Type))
-		n, off := gc.AutoVar(v.Args[0])
-		p.From.Type = obj.TYPE_MEM
-		p.From.Node = n
-		p.From.Sym = gc.Linksym(n.Sym)
-		p.From.Offset = off
-		if n.Class == gc.PPARAM || n.Class == gc.PPARAMOUT {
-			p.From.Name = obj.NAME_PARAM
-			p.From.Offset += n.Xoffset
-		} else {
-			p.From.Name = obj.NAME_AUTO
-		}
+		gc.AddrAuto(&p.From, v.Args[0])
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = v.Reg()
 	case ssa.OpPhi:
@@ -159,17 +149,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p := gc.Prog(storeByType(v.Type))
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = v.Args[0].Reg()
-		n, off := gc.AutoVar(v)
-		p.To.Type = obj.TYPE_MEM
-		p.To.Node = n
-		p.To.Sym = gc.Linksym(n.Sym)
-		p.To.Offset = off
-		if n.Class == gc.PPARAM || n.Class == gc.PPARAMOUT {
-			p.To.Name = obj.NAME_PARAM
-			p.To.Offset += n.Xoffset
-		} else {
-			p.To.Name = obj.NAME_AUTO
-		}
+		gc.AddrAuto(&p.To, v)
 	case ssa.OpARM64ADD,
 		ssa.OpARM64SUB,
 		ssa.OpARM64AND,
@@ -781,6 +761,10 @@ var blockJump = map[ssa.BlockKind]struct {
 	ssa.BlockARM64UGE: {arm64.ABHS, arm64.ABLO},
 	ssa.BlockARM64UGT: {arm64.ABHI, arm64.ABLS},
 	ssa.BlockARM64ULE: {arm64.ABLS, arm64.ABHI},
+	ssa.BlockARM64Z:   {arm64.ACBZ, arm64.ACBNZ},
+	ssa.BlockARM64NZ:  {arm64.ACBNZ, arm64.ACBZ},
+	ssa.BlockARM64ZW:  {arm64.ACBZW, arm64.ACBNZW},
+	ssa.BlockARM64NZW: {arm64.ACBNZW, arm64.ACBZW},
 }
 
 func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
@@ -827,7 +811,9 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 		ssa.BlockARM64LT, ssa.BlockARM64GE,
 		ssa.BlockARM64LE, ssa.BlockARM64GT,
 		ssa.BlockARM64ULT, ssa.BlockARM64UGT,
-		ssa.BlockARM64ULE, ssa.BlockARM64UGE:
+		ssa.BlockARM64ULE, ssa.BlockARM64UGE,
+		ssa.BlockARM64Z, ssa.BlockARM64NZ,
+		ssa.BlockARM64ZW, ssa.BlockARM64NZW:
 		jmp := blockJump[b.Kind]
 		var p *obj.Prog
 		switch next {
@@ -846,6 +832,10 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 			q := gc.Prog(obj.AJMP)
 			q.To.Type = obj.TYPE_BRANCH
 			s.Branches = append(s.Branches, gc.Branch{P: q, B: b.Succs[1].Block()})
+		}
+		if !b.Control.Type.IsFlags() {
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = b.Control.Reg()
 		}
 
 	default:

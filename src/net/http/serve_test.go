@@ -2050,23 +2050,6 @@ func TestTimeoutHandlerEmptyResponse(t *testing.T) {
 	}
 }
 
-// Verifies we don't path.Clean() on the wrong parts in redirects.
-func TestRedirectMunging(t *testing.T) {
-	req, _ := NewRequest("GET", "http://example.com/", nil)
-
-	resp := httptest.NewRecorder()
-	Redirect(resp, req, "/foo?next=http://bar.com/", 302)
-	if g, e := resp.Header().Get("Location"), "/foo?next=http://bar.com/"; g != e {
-		t.Errorf("Location header was %q; want %q", g, e)
-	}
-
-	resp = httptest.NewRecorder()
-	Redirect(resp, req, "http://localhost:8080/_ah/login?continue=http://localhost:8080/", 302)
-	if g, e := resp.Header().Get("Location"), "http://localhost:8080/_ah/login?continue=http://localhost:8080/"; g != e {
-		t.Errorf("Location header was %q; want %q", g, e)
-	}
-}
-
 func TestRedirectBadPath(t *testing.T) {
 	// This used to crash. It's not valid input (bad path), but it
 	// shouldn't crash.
@@ -2085,7 +2068,7 @@ func TestRedirectBadPath(t *testing.T) {
 }
 
 // Test different URL formats and schemes
-func TestRedirectURLFormat(t *testing.T) {
+func TestRedirect(t *testing.T) {
 	req, _ := NewRequest("GET", "http://example.com/qux/", nil)
 
 	var tests = []struct {
@@ -2108,6 +2091,14 @@ func TestRedirectURLFormat(t *testing.T) {
 		{"../quux/foobar.com/baz", "/quux/foobar.com/baz"},
 		// incorrect number of slashes
 		{"///foobar.com/baz", "/foobar.com/baz"},
+
+		// Verifies we don't path.Clean() on the wrong parts in redirects:
+		{"/foo?next=http://bar.com/", "/foo?next=http://bar.com/"},
+		{"http://localhost:8080/_ah/login?continue=http://localhost:8080/",
+			"http://localhost:8080/_ah/login?continue=http://localhost:8080/"},
+
+		{"/фубар", "/%d1%84%d1%83%d0%b1%d0%b0%d1%80"},
+		{"http://foo.com/фубар", "http://foo.com/%d1%84%d1%83%d0%b1%d0%b0%d1%80"},
 	}
 
 	for _, tt := range tests {
@@ -2249,6 +2240,51 @@ func testHandlerPanic(t *testing.T, withHijack, h2 bool, panicValue interface{})
 		return
 	case <-time.After(5 * time.Second):
 		t.Fatal("expected server handler to log an error")
+	}
+}
+
+type terrorWriter struct{ t *testing.T }
+
+func (w terrorWriter) Write(p []byte) (int, error) {
+	w.t.Errorf("%s", p)
+	return len(p), nil
+}
+
+// Issue 16456: allow writing 0 bytes on hijacked conn to test hijack
+// without any log spam.
+func TestServerWriteHijackZeroBytes(t *testing.T) {
+	defer afterTest(t)
+	done := make(chan struct{})
+	ts := httptest.NewUnstartedServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		defer close(done)
+		w.(Flusher).Flush()
+		conn, _, err := w.(Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("Hijack: %v", err)
+			return
+		}
+		defer conn.Close()
+		_, err = w.Write(nil)
+		if err != ErrHijacked {
+			t.Errorf("Write error = %v; want ErrHijacked", err)
+		}
+	}))
+	ts.Config.ErrorLog = log.New(terrorWriter{t}, "Unexpected write: ", 0)
+	ts.Start()
+	defer ts.Close()
+
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+	res, err := c.Get(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout")
 	}
 }
 
@@ -4157,13 +4193,11 @@ func testServerRequestContextCancel_ServeHTTPDone(t *testing.T, h2 bool) {
 	}
 }
 
+// Tests that the Request.Context available to the Handler is canceled
+// if the peer closes their TCP connection. This requires that the server
+// is always blocked in a Read call so it notices the EOF from the client.
+// See issues 15927 and 15224.
 func TestServerRequestContextCancel_ConnClose(t *testing.T) {
-	// Currently the context is not canceled when the connection
-	// is closed because we're not reading from the connection
-	// until after ServeHTTP for the previous handler is done.
-	// Until the server code is modified to always be in a read
-	// (Issue 15224), this test doesn't work yet.
-	t.Skip("TODO(bradfitz): this test doesn't yet work; golang.org/issue/15224")
 	defer afterTest(t)
 	inHandler := make(chan struct{})
 	handlerDone := make(chan struct{})
@@ -4192,7 +4226,7 @@ func TestServerRequestContextCancel_ConnClose(t *testing.T) {
 
 	select {
 	case <-handlerDone:
-	case <-time.After(3 * time.Second):
+	case <-time.After(4 * time.Second):
 		t.Fatalf("timeout waiting to see ServeHTTP exit")
 	}
 }
@@ -4742,5 +4776,59 @@ func TestConcurrentServerServe(t *testing.T) {
 		srv := Server{}
 		go func() { srv.Serve(ln1) }()
 		go func() { srv.Serve(ln2) }()
+	}
+}
+
+func TestServerIdleTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+	defer afterTest(t)
+	ts := httptest.NewUnstartedServer(HandlerFunc(func(w ResponseWriter, r *Request) {
+		io.Copy(ioutil.Discard, r.Body)
+		io.WriteString(w, r.RemoteAddr)
+	}))
+	ts.Config.ReadHeaderTimeout = 1 * time.Second
+	ts.Config.IdleTimeout = 2 * time.Second
+	ts.Start()
+	defer ts.Close()
+
+	tr := &Transport{}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+
+	get := func() string {
+		res, err := c.Get(ts.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		slurp, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(slurp)
+	}
+
+	a1, a2 := get(), get()
+	if a1 != a2 {
+		t.Fatalf("did requests on different connections")
+	}
+	time.Sleep(3 * time.Second)
+	a3 := get()
+	if a2 == a3 {
+		t.Fatal("request three unexpectedly on same connection")
+	}
+
+	// And test that ReadHeaderTimeout still works:
+	conn, err := net.Dial("tcp", ts.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.Write([]byte("GET / HTTP/1.1\r\nHost: foo.com\r\n"))
+	time.Sleep(2 * time.Second)
+	if _, err := io.CopyN(ioutil.Discard, conn, 1); err == nil {
+		t.Fatal("copy byte succeeded; want err")
 	}
 }

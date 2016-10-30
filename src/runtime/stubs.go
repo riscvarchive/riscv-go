@@ -60,14 +60,24 @@ func badsystemstack() {
 	throw("systemstack called from unexpected goroutine")
 }
 
-// memclr clears n bytes starting at ptr.
+// memclrNoHeapPointers clears n bytes starting at ptr.
+//
+// Usually you should use typedmemclr. memclrNoHeapPointers should be
+// used only when the caller knows that *ptr contains no heap pointers
+// because either:
+//
+// 1. *ptr is initialized memory and its type is pointer-free.
+//
+// 2. *ptr is uninitialized memory (e.g., memory that's being reused
+//    for a new allocation) and hence contains only "junk".
+//
 // in memclr_*.s
 //go:noescape
-func memclr(ptr unsafe.Pointer, n uintptr)
+func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 
-//go:linkname reflect_memclr reflect.memclr
-func reflect_memclr(ptr unsafe.Pointer, n uintptr) {
-	memclr(ptr, n)
+//go:linkname reflect_memclrNoHeapPointers reflect.memclrNoHeapPointers
+func reflect_memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr) {
+	memclrNoHeapPointers(ptr, n)
 }
 
 // memmove copies n bytes from "from" to "to".
@@ -233,32 +243,32 @@ func time_now() (sec int64, nsec int32)
 
 // in asm_*.s
 // not called directly; definitions here supply type information for traceback.
-func call32(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call64(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call128(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call256(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call512(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call1024(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call2048(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call4096(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call8192(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call16384(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call32768(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call65536(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call131072(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call262144(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call524288(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call1048576(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call2097152(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call4194304(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call8388608(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call16777216(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call33554432(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call67108864(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call134217728(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call268435456(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call536870912(fn, arg unsafe.Pointer, n, retoffset uint32)
-func call1073741824(fn, arg unsafe.Pointer, n, retoffset uint32)
+func call32(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call64(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call128(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call256(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call512(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call1024(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call2048(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call4096(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call8192(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call16384(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call32768(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call65536(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call131072(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call262144(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call524288(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call1048576(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call2097152(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call4194304(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call8388608(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call16777216(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call33554432(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call67108864(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call134217728(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call268435456(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call536870912(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
+func call1073741824(typ, fn, arg unsafe.Pointer, n, retoffset uint32)
 
 func systemstack_switch()
 

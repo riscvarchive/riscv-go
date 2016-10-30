@@ -621,8 +621,13 @@ func getdyn(n *Node, top bool) initGenType {
 
 	var mode initGenType
 	for _, n1 := range n.List.Slice() {
-		value := n1.Right
-		mode |= getdyn(value, false)
+		switch n1.Op {
+		case OKEY:
+			n1 = n1.Right
+		case OSTRUCTKEY:
+			n1 = n1.Left
+		}
+		mode |= getdyn(n1, false)
 		if mode == initDynamic|initConst {
 			break
 		}
@@ -635,17 +640,22 @@ func isStaticCompositeLiteral(n *Node) bool {
 	switch n.Op {
 	case OSLICELIT:
 		return false
-	case OARRAYLIT, OSTRUCTLIT:
+	case OARRAYLIT:
 		for _, r := range n.List.Slice() {
-			if r.Op != OKEY {
-				Fatalf("isStaticCompositeLiteral: rhs not OKEY: %v", r)
+			if r.Op == OKEY {
+				r = r.Right
 			}
-			index := r.Left
-			if n.Op == OARRAYLIT && index.Op != OLITERAL {
+			if !isStaticCompositeLiteral(r) {
 				return false
 			}
-			value := r.Right
-			if !isStaticCompositeLiteral(value) {
+		}
+		return true
+	case OSTRUCTLIT:
+		for _, r := range n.List.Slice() {
+			if r.Op != OSTRUCTKEY {
+				Fatalf("isStaticCompositeLiteral: rhs not OSTRUCTKEY: %v", r)
+			}
+			if !isStaticCompositeLiteral(r.Left) {
 				return false
 			}
 		}
@@ -689,54 +699,64 @@ const (
 // fixedlit handles struct, array, and slice literals.
 // TODO: expand documentation.
 func fixedlit(ctxt initContext, kind initKind, n *Node, var_ *Node, init *Nodes) {
-	var indexnode func(*Node) *Node
+	var splitnode func(*Node) (a *Node, value *Node)
 	switch n.Op {
 	case OARRAYLIT, OSLICELIT:
-		indexnode = func(index *Node) *Node { return nod(OINDEX, var_, index) }
+		var k int64
+		splitnode = func(r *Node) (*Node, *Node) {
+			if r.Op == OKEY {
+				k = nonnegintconst(r.Left)
+				r = r.Right
+			}
+			a := nod(OINDEX, var_, nodintconst(k))
+			k++
+			return a, r
+		}
 	case OSTRUCTLIT:
-		indexnode = func(index *Node) *Node { return nodSym(ODOT, var_, index.Sym) }
+		splitnode = func(r *Node) (*Node, *Node) {
+			if r.Op != OSTRUCTKEY {
+				Fatalf("fixedlit: rhs not OSTRUCTKEY: %v", r)
+			}
+			return nodSym(ODOT, var_, r.Sym), r.Left
+		}
 	default:
 		Fatalf("fixedlit bad op: %v", n.Op)
 	}
 
 	for _, r := range n.List.Slice() {
-		if r.Op != OKEY {
-			Fatalf("fixedlit: rhs not OKEY: %v", r)
-		}
-		index := r.Left
-		value := r.Right
+		a, value := splitnode(r)
 
 		switch value.Op {
 		case OSLICELIT:
 			if (kind == initKindStatic && ctxt == inNonInitFunction) || (kind == initKindDynamic && ctxt == inInitFunction) {
-				a := indexnode(index)
 				slicelit(ctxt, value, a, init)
 				continue
 			}
 
 		case OARRAYLIT, OSTRUCTLIT:
-			a := indexnode(index)
 			fixedlit(ctxt, kind, value, a, init)
 			continue
 		}
 
 		islit := isliteral(value)
-		if n.Op == OARRAYLIT {
-			islit = islit && isliteral(index)
-		}
 		if (kind == initKindStatic && !islit) || (kind == initKindDynamic && islit) {
 			continue
 		}
 
 		// build list of assignments: var[index] = expr
 		setlineno(value)
-		a := nod(OAS, indexnode(index), value)
+		a = nod(OAS, a, value)
 		a = typecheck(a, Etop)
 		switch kind {
 		case initKindStatic:
 			a = walkexpr(a, init) // add any assignments in r to top
+			if a.Op == OASWB {
+				// Static initialization never needs
+				// write barriers.
+				a.Op = OAS
+			}
 			if a.Op != OAS {
-				Fatalf("fixedlit: not as")
+				Fatalf("fixedlit: not as, is %v", a)
 			}
 			a.IsStatic = true
 		case initKindDynamic, initKindLocalCode:
@@ -851,14 +871,16 @@ func slicelit(ctxt initContext, n *Node, var_ *Node, init *Nodes) {
 	}
 
 	// put dynamics into array (5)
+	var index int64
 	for _, r := range n.List.Slice() {
-		if r.Op != OKEY {
-			Fatalf("slicelit: rhs not OKEY: %v", r)
+		value := r
+		if r.Op == OKEY {
+			index = nonnegintconst(r.Left)
+			value = r.Right
 		}
-		index := r.Left
-		value := r.Right
-		a := nod(OINDEX, vauto, index)
+		a := nod(OINDEX, vauto, nodintconst(index))
 		a.Bounded = true
+		index++
 
 		// TODO need to check bounds?
 
@@ -871,7 +893,7 @@ func slicelit(ctxt initContext, n *Node, var_ *Node, init *Nodes) {
 			continue
 		}
 
-		if isliteral(index) && isliteral(value) {
+		if isliteral(value) {
 			continue
 		}
 
@@ -1225,20 +1247,22 @@ func initplan(n *Node) {
 		Fatalf("initplan")
 
 	case OARRAYLIT, OSLICELIT:
+		var k int64
 		for _, a := range n.List.Slice() {
-			index := nonnegintconst(a.Left)
-			if a.Op != OKEY || index < 0 {
-				Fatalf("initplan fixedlit")
+			if a.Op == OKEY {
+				k = nonnegintconst(a.Left)
+				a = a.Right
 			}
-			addvalue(p, index*n.Type.Elem().Width, a.Right)
+			addvalue(p, k*n.Type.Elem().Width, a)
+			k++
 		}
 
 	case OSTRUCTLIT:
 		for _, a := range n.List.Slice() {
-			if a.Op != OKEY || a.Left.Type != structkey {
+			if a.Op != OSTRUCTKEY {
 				Fatalf("initplan fixedlit")
 			}
-			addvalue(p, a.Left.Xoffset, a.Right)
+			addvalue(p, a.Xoffset, a.Left)
 		}
 
 	case OMAPLIT:
@@ -1294,9 +1318,20 @@ func iszero(n *Node) bool {
 			return u.Real.CmpFloat64(0) == 0 && u.Imag.CmpFloat64(0) == 0
 		}
 
-	case OARRAYLIT, OSTRUCTLIT:
+	case OARRAYLIT:
 		for _, n1 := range n.List.Slice() {
-			if !iszero(n1.Right) {
+			if n1.Op == OKEY {
+				n1 = n1.Right
+			}
+			if !iszero(n1) {
+				return false
+			}
+		}
+		return true
+
+	case OSTRUCTLIT:
+		for _, n1 := range n.List.Slice() {
+			if !iszero(n1.Left) {
 				return false
 			}
 		}
@@ -1389,32 +1424,11 @@ func genAsInitNoCheck(n *Node, reportOnly bool) bool {
 		return true
 
 	case OLITERAL:
-		break
-	}
-
-	switch nr.Type.Etype {
-	default:
-		return false
-
-	case TBOOL, TINT8, TUINT8, TINT16, TUINT16,
-		TINT32, TUINT32, TINT64, TUINT64,
-		TINT, TUINT, TUINTPTR, TUNSAFEPTR,
-		TPTR32, TPTR64,
-		TFLOAT32, TFLOAT64:
 		if !reportOnly {
 			gdata(&nam, nr, int(nr.Type.Width))
 		}
-
-	case TCOMPLEX64, TCOMPLEX128:
-		if !reportOnly {
-			gdatacomplex(&nam, nr.Val().U.(*Mpcplx))
-		}
-
-	case TSTRING:
-		if !reportOnly {
-			gdatastring(&nam, nr.Val().U.(string))
-		}
+		return true
 	}
 
-	return true
+	return false
 }

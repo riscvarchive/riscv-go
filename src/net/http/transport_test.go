@@ -441,9 +441,6 @@ func TestTransportMaxPerHostIdleConns(t *testing.T) {
 }
 
 func TestTransportRemovesDeadIdleConnections(t *testing.T) {
-	if runtime.GOOS == "plan9" {
-		t.Skip("skipping test; see https://golang.org/issue/15464")
-	}
 	defer afterTest(t)
 	ts := httptest.NewServer(HandlerFunc(func(w ResponseWriter, r *Request) {
 		io.WriteString(w, r.RemoteAddr)
@@ -1696,12 +1693,6 @@ func testCancelRequestWithChannelBeforeDo(t *testing.T, withCtx bool) {
 	defer ts.Close()
 	defer close(unblockc)
 
-	// Don't interfere with the next test on plan9.
-	// Cf. https://golang.org/issues/11476
-	if runtime.GOOS == "plan9" {
-		defer time.Sleep(500 * time.Millisecond)
-	}
-
 	tr := &Transport{}
 	defer tr.CloseIdleConnections()
 	c := &Client{Transport: tr}
@@ -2494,22 +2485,6 @@ type errorReader struct {
 
 func (e errorReader) Read(p []byte) (int, error) { return 0, e.err }
 
-type plan9SleepReader struct{}
-
-func (plan9SleepReader) Read(p []byte) (int, error) {
-	if runtime.GOOS == "plan9" {
-		// After the fix to unblock TCP Reads in
-		// https://golang.org/cl/15941, this sleep is required
-		// on plan9 to make sure TCP Writes before an
-		// immediate TCP close go out on the wire. On Plan 9,
-		// it seems that a hangup of a TCP connection with
-		// queued data doesn't send the queued data first.
-		// https://golang.org/issue/9554
-		time.Sleep(50 * time.Millisecond)
-	}
-	return 0, io.EOF
-}
-
 type closerFunc func() error
 
 func (f closerFunc) Close() error { return f() }
@@ -2604,7 +2579,7 @@ func TestTransportClosesBodyOnError(t *testing.T) {
 		io.Reader
 		io.Closer
 	}{
-		io.MultiReader(io.LimitReader(neverEnding('x'), 1<<20), plan9SleepReader{}, errorReader{fakeErr}),
+		io.MultiReader(io.LimitReader(neverEnding('x'), 1<<20), errorReader{fakeErr}),
 		closerFunc(func() error {
 			select {
 			case didClose <- true:
@@ -2913,14 +2888,8 @@ func TestTransportFlushesBodyChunks(t *testing.T) {
 	defer res.Body.Close()
 
 	want := []string{
-		// Because Request.ContentLength = 0, the body is sniffed for 1 byte to determine whether there's content.
-		// That explains the initial "num0" being split into "n" and "um0".
-		// The first byte is included with the request headers Write. Perhaps in the future
-		// we will want to flush the headers out early if the first byte of the request body is
-		// taking a long time to arrive. But not yet.
 		"POST / HTTP/1.1\r\nHost: localhost:8080\r\nUser-Agent: x\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n" +
-			"1\r\nn\r\n",
-		"4\r\num0\n\r\n",
+			"5\r\nnum0\n\r\n",
 		"5\r\nnum1\n\r\n",
 		"5\r\nnum2\n\r\n",
 		"0\r\n\r\n",
@@ -3303,6 +3272,12 @@ func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
 			close(gotWroteReqEvent)
 		},
 	}
+	if h2 {
+		trace.TLSHandshakeStart = func() { logf("tls handshake start") }
+		trace.TLSHandshakeDone = func(s tls.ConnectionState, err error) {
+			logf("tls handshake done. ConnectionState = %v \n err = %v", s, err)
+		}
+	}
 	if noHooks {
 		// zero out all func pointers, trying to get some path to crash
 		*trace = httptrace.ClientTrace{}
@@ -3354,7 +3329,10 @@ func testTransportEventTrace(t *testing.T, h2 bool, noHooks bool) {
 	wantOnceOrMore("connected to tcp " + addrStr + " = <nil>")
 	wantOnce("Reused:false WasIdle:false IdleTime:0s")
 	wantOnce("first response byte")
-	if !h2 {
+	if h2 {
+		wantOnce("tls handshake start")
+		wantOnce("tls handshake done")
+	} else {
 		wantOnce("PutIdleConn = <nil>")
 	}
 	wantOnce("Wait100Continue")
@@ -3423,6 +3401,55 @@ func TestTransportEventTraceRealDNS(t *testing.T) {
 	}
 	if t.Failed() {
 		t.Errorf("Output:\n%s", got)
+	}
+}
+
+// Test the httptrace.TLSHandshake{Start,Done} hooks with a https http1
+// connections. The http2 test is done in TestTransportEventTrace_h2
+func TestTLSHandshakeTrace(t *testing.T) {
+	defer afterTest(t)
+	s := httptest.NewTLSServer(HandlerFunc(func(w ResponseWriter, r *Request) {}))
+	defer s.Close()
+
+	var mu sync.Mutex
+	var start, done bool
+	trace := &httptrace.ClientTrace{
+		TLSHandshakeStart: func() {
+			mu.Lock()
+			defer mu.Unlock()
+			start = true
+		},
+		TLSHandshakeDone: func(s tls.ConnectionState, err error) {
+			mu.Lock()
+			defer mu.Unlock()
+			done = true
+			if err != nil {
+				t.Fatal("Expected error to be nil but was:", err)
+			}
+		},
+	}
+
+	tr := &Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	defer tr.CloseIdleConnections()
+	c := &Client{Transport: tr}
+	req, err := NewRequest("GET", s.URL, nil)
+	if err != nil {
+		t.Fatal("Unable to construct test request:", err)
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
+	r, err := c.Do(req)
+	if err != nil {
+		t.Fatal("Unexpected error making request:", err)
+	}
+	r.Body.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if !start {
+		t.Fatal("Expected TLSHandshakeStart to be called, but wasn't")
+	}
+	if !done {
+		t.Fatal("Expected TLSHandshakeDone to be called, but wasnt't")
 	}
 }
 

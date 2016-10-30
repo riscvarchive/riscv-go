@@ -267,6 +267,7 @@ func TestQueryContext(t *testing.T) {
 	prepares0 := numPrepares(t, db)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	rows, err := db.QueryContext(ctx, "SELECT|people|age,name|")
 	if err != nil {
@@ -303,6 +304,129 @@ func TestQueryContext(t *testing.T) {
 	}
 	want := []row{
 		{age: 1, name: "Alice"},
+		{age: 2, name: "Bob"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("mismatch.\n got: %#v\nwant: %#v", got, want)
+	}
+
+	// And verify that the final rows.Next() call, which hit EOF,
+	// also closed the rows connection.
+	if n := db.numFreeConns(); n != 1 {
+		t.Fatalf("free conns after query hitting EOF = %d; want 1", n)
+	}
+	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
+		t.Errorf("executed %d Prepare statements; want 1", prepares)
+	}
+}
+
+func TestMultiResultSetQuery(t *testing.T) {
+	db := newTestDB(t, "people")
+	defer closeDB(t, db)
+	prepares0 := numPrepares(t, db)
+	rows, err := db.Query("SELECT|people|age,name|;SELECT|people|name|")
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	type row1 struct {
+		age  int
+		name string
+	}
+	type row2 struct {
+		name string
+	}
+	got1 := []row1{}
+	for rows.Next() {
+		var r row1
+		err = rows.Scan(&r.age, &r.name)
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		got1 = append(got1, r)
+	}
+	err = rows.Err()
+	if err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	want1 := []row1{
+		{age: 1, name: "Alice"},
+		{age: 2, name: "Bob"},
+		{age: 3, name: "Chris"},
+	}
+	if !reflect.DeepEqual(got1, want1) {
+		t.Errorf("mismatch.\n got1: %#v\nwant: %#v", got1, want1)
+	}
+
+	if !rows.NextResultSet() {
+		t.Errorf("expected another result set")
+	}
+
+	got2 := []row2{}
+	for rows.Next() {
+		var r row2
+		err = rows.Scan(&r.name)
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		got2 = append(got2, r)
+	}
+	err = rows.Err()
+	if err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	want2 := []row2{
+		{name: "Alice"},
+		{name: "Bob"},
+		{name: "Chris"},
+	}
+	if !reflect.DeepEqual(got2, want2) {
+		t.Errorf("mismatch.\n got: %#v\nwant: %#v", got2, want2)
+	}
+	if rows.NextResultSet() {
+		t.Errorf("expected no more result sets")
+	}
+
+	// And verify that the final rows.Next() call, which hit EOF,
+	// also closed the rows connection.
+	if n := db.numFreeConns(); n != 1 {
+		t.Fatalf("free conns after query hitting EOF = %d; want 1", n)
+	}
+	if prepares := numPrepares(t, db) - prepares0; prepares != 1 {
+		t.Errorf("executed %d Prepare statements; want 1", prepares)
+	}
+}
+
+func TestQueryNamedParam(t *testing.T) {
+	db := newTestDB(t, "people")
+	defer closeDB(t, db)
+	prepares0 := numPrepares(t, db)
+	rows, err := db.Query(
+		// Ensure the name and age parameters only match on placeholder name, not position.
+		"SELECT|people|age,name|name=?name,age=?age",
+		Param("?age", 2),
+		Param("?name", "Bob"),
+	)
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	type row struct {
+		age  int
+		name string
+	}
+	got := []row{}
+	for rows.Next() {
+		var r row
+		err = rows.Scan(&r.age, &r.name)
+		if err != nil {
+			t.Fatalf("Scan: %v", err)
+		}
+		got = append(got, r)
+	}
+	err = rows.Err()
+	if err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	want := []row{
 		{age: 2, name: "Bob"},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -371,6 +495,56 @@ func TestRowsColumns(t *testing.T) {
 	if !reflect.DeepEqual(cols, want) {
 		t.Errorf("got %#v; want %#v", cols, want)
 	}
+	if err := rows.Close(); err != nil {
+		t.Errorf("error closing rows: %s", err)
+	}
+}
+
+func TestRowsColumnTypes(t *testing.T) {
+	db := newTestDB(t, "people")
+	defer closeDB(t, db)
+	rows, err := db.Query("SELECT|people|age,name|")
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	tt, err := rows.ColumnTypes()
+	if err != nil {
+		t.Fatalf("ColumnTypes: %v", err)
+	}
+
+	types := make([]reflect.Type, len(tt))
+	for i, tp := range tt {
+		st := tp.ScanType()
+		if st == nil {
+			t.Errorf("scantype is null for column %q", tp.Name())
+			continue
+		}
+		types[i] = st
+	}
+	values := make([]interface{}, len(tt))
+	for i := range values {
+		values[i] = reflect.New(types[i]).Interface()
+	}
+	ct := 0
+	for rows.Next() {
+		err = rows.Scan(values...)
+		if err != nil {
+			t.Fatalf("failed to scan values in %v", err)
+		}
+		ct++
+		if ct == 0 {
+			if values[0].(string) != "Bob" {
+				t.Errorf("Expected Bob, got %v", values[0])
+			}
+			if values[1].(int) != 2 {
+				t.Errorf("Expected 2, got %v", values[1])
+			}
+		}
+	}
+	if ct != 3 {
+		t.Errorf("expected 3 rows, got %d", ct)
+	}
+
 	if err := rows.Close(); err != nil {
 		t.Errorf("error closing rows: %s", err)
 	}
@@ -572,8 +746,8 @@ func TestExec(t *testing.T) {
 		{[]interface{}{7, 9}, ""},
 
 		// Invalid conversions:
-		{[]interface{}{"Brad", int64(0xFFFFFFFF)}, "sql: converting argument #1's type: sql/driver: value 4294967295 overflows int32"},
-		{[]interface{}{"Brad", "strconv fail"}, "sql: converting argument #1's type: sql/driver: value \"strconv fail\" can't be converted to int32"},
+		{[]interface{}{"Brad", int64(0xFFFFFFFF)}, "sql: converting argument $2 type: sql/driver: value 4294967295 overflows int32"},
+		{[]interface{}{"Brad", "strconv fail"}, `sql: converting argument $2 type: sql/driver: value "strconv fail" can't be converted to int32`},
 
 		// Wrong number of args:
 		{[]interface{}{}, "sql: expected 2 arguments, got 0"},

@@ -147,18 +147,6 @@ func stringtoslicebyte(buf *tmpBuf, s string) []byte {
 	return b
 }
 
-func stringtoslicebytetmp(s string) []byte {
-	// Return a slice referring to the actual string bytes.
-	// This is only for use by internal compiler optimizations
-	// that know that the slice won't be mutated.
-	// The only such case today is:
-	// for i, c := range []byte(str)
-
-	str := stringStructOf(&s)
-	ret := slice{array: str.str, len: str.len, cap: str.len}
-	return *(*[]byte)(unsafe.Pointer(&ret))
-}
-
 func stringtoslicerune(buf *[tmpStringBufSize]rune, s string) []rune {
 	// two passes.
 	// unlike slicerunetostring, no race because strings are immutable.
@@ -196,7 +184,7 @@ func slicerunetostring(buf *tmpBuf, a []rune) string {
 	var dum [4]byte
 	size1 := 0
 	for _, r := range a {
-		size1 += runetochar(dum[:], r)
+		size1 += encoderune(dum[:], r)
 	}
 	s, b := rawstringtmp(buf, size1+3)
 	size2 := 0
@@ -205,7 +193,7 @@ func slicerunetostring(buf *tmpBuf, a []rune) string {
 		if size2 >= size1 {
 			break
 		}
-		size2 += runetochar(b[size2:], r)
+		size2 += encoderune(b[size2:], r)
 	}
 	return s[:size2]
 }
@@ -235,9 +223,9 @@ func intstring(buf *[4]byte, v int64) string {
 		s, b = rawstring(4)
 	}
 	if int64(rune(v)) != v {
-		v = runeerror
+		v = runeError
 	}
-	n := runetochar(b, rune(v))
+	n := encoderune(b, rune(v))
 	return s[:n]
 }
 
@@ -261,7 +249,7 @@ func rawbyteslice(size int) (b []byte) {
 	cap := roundupsize(uintptr(size))
 	p := mallocgc(cap, nil, false)
 	if cap != uintptr(size) {
-		memclr(add(p, uintptr(size)), cap-uintptr(size))
+		memclrNoHeapPointers(add(p, uintptr(size)), cap-uintptr(size))
 	}
 
 	*(*slice)(unsafe.Pointer(&b)) = slice{p, size, int(cap)}
@@ -276,7 +264,7 @@ func rawruneslice(size int) (b []rune) {
 	mem := roundupsize(uintptr(size) * 4)
 	p := mallocgc(mem, nil, false)
 	if mem != uintptr(size)*4 {
-		memclr(add(p, uintptr(size)*4), mem-uintptr(size)*4)
+		memclrNoHeapPointers(add(p, uintptr(size)*4), mem-uintptr(size)*4)
 	}
 
 	*(*slice)(unsafe.Pointer(&b)) = slice{p, size, int(mem / 4)}
@@ -378,7 +366,7 @@ func gostringw(strw *uint16) string {
 	str := (*[_MaxMem/2/2 - 1]uint16)(unsafe.Pointer(strw))
 	n1 := 0
 	for i := 0; str[i] != 0; i++ {
-		n1 += runetochar(buf[:], rune(str[i]))
+		n1 += encoderune(buf[:], rune(str[i]))
 	}
 	s, b := rawstring(n1 + 4)
 	n2 := 0
@@ -387,7 +375,7 @@ func gostringw(strw *uint16) string {
 		if n2 >= n1 {
 			break
 		}
-		n2 += runetochar(b[n2:], rune(str[i]))
+		n2 += encoderune(b[n2:], rune(str[i]))
 	}
 	b[n2] = 0 // for luck
 	return s[:n2]

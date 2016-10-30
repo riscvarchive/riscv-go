@@ -98,10 +98,6 @@ func fninit(n []*Node) {
 		log.Println("TODO: init function needs runtime.throwinit")
 		return
 	}
-	if Debug['A'] != 0 {
-		// sys.go or unsafe.go during compiler build
-		return
-	}
 
 	nf := initfix(n)
 	if !anyinit(nf) {

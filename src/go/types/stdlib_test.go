@@ -100,9 +100,7 @@ func testTestDir(t *testing.T, path string, ignore ...string) {
 			switch cmd {
 			case "skip", "compiledir":
 				continue // ignore this file
-			// TODO(mdempsky): Remove -newparser=0 case once
-			// test/fixedbugs/issue11610.go is updated.
-			case "errorcheck", "errorcheck -newparser=0":
+			case "errorcheck":
 				expectErrors = true
 			}
 		}
@@ -140,6 +138,7 @@ func TestStdTest(t *testing.T) {
 	}
 
 	testTestDir(t, filepath.Join(runtime.GOROOT(), "test"),
+		"alias2.go",      // excluded until we can handle alias declarations
 		"cmplxdivide.go", // also needs file cmplxdivide1.go - ignore
 		"sigchld.go",     // don't work on Windows; testTestDir should consult build tags
 	)

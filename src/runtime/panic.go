@@ -168,6 +168,10 @@ func testdefersizes() {
 // immediately after the _defer header in memory.
 //go:nosplit
 func deferArgs(d *_defer) unsafe.Pointer {
+	if d.siz == 0 {
+		// Avoid pointer past the defer allocation.
+		return nil
+	}
 	return add(unsafe.Pointer(d), unsafe.Sizeof(*d))
 }
 
@@ -376,6 +380,11 @@ func Goexit() {
 // Used when crashing with panicking.
 // This must match types handled by printany.
 func preprintpanics(p *_panic) {
+	defer func() {
+		if recover() != nil {
+			throw("panic while printing panic value")
+		}
+	}()
 	for p != nil {
 		switch v := p.arg.(type) {
 		case error:
@@ -569,6 +578,11 @@ func dopanic(unused int) {
 		dopanic_m(gp, pc, sp) // should never return
 	})
 	*(*int)(nil) = 0
+}
+
+//go:linkname sync_throw sync.throw
+func sync_throw(s string) {
+	throw(s)
 }
 
 //go:nosplit

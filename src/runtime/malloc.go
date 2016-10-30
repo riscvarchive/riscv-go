@@ -102,27 +102,12 @@ const (
 	mSpanInUse = _MSpanInUse
 
 	concurrentSweep = _ConcurrentSweep
-)
 
-const (
-	_PageShift = 13
-	_PageSize  = 1 << _PageShift
-	_PageMask  = _PageSize - 1
-)
+	_PageSize = 1 << _PageShift
+	_PageMask = _PageSize - 1
 
-const (
 	// _64bit = 1 on 64-bit systems, 0 on 32-bit systems
 	_64bit = 1 << (^uintptr(0) >> 63) / 2
-
-	// Computed constant. The definition of MaxSmallSize and the
-	// algorithm in msize.go produces some number of different allocation
-	// size classes. NumSizeClasses is that number. It's needed here
-	// because there are static arrays of this length; when msize runs its
-	// size choosing algorithm it double-checks that NumSizeClasses agrees.
-	_NumSizeClasses = 67
-
-	// Tunable constants.
-	_MaxSmallSize = 32 << 10
 
 	// Tiny allocator parameters, see "Tiny allocator" comment in malloc.go.
 	_TinySize      = 16
@@ -169,9 +154,9 @@ const (
 	// on the hardware details of the machine. The garbage
 	// collector scales well to 32 cpus.
 	_MaxGcproc = 32
-)
 
-const _MaxArena32 = 1<<32 - 1
+	_MaxArena32 = 1<<32 - 1
+)
 
 // physPageSize is the size in bytes of the OS's physical pages.
 // Mapping and unmapping operations must be done at multiples of
@@ -220,10 +205,15 @@ var physPageSize uintptr
 // if accessed. Used only for debugging the runtime.
 
 func mallocinit() {
-	initSizes()
-
 	if class_to_size[_TinySizeClass] != _TinySize {
 		throw("bad TinySizeClass")
+	}
+
+	testdefersizes()
+
+	// Copy class sizes out for statistics table.
+	for i := range class_to_size {
+		memstats.by_size[i].size = uint32(class_to_size[i])
 	}
 
 	// Check physPageSize.
@@ -360,7 +350,7 @@ func mallocinit() {
 	// To overcome this we ask for PageSize more and round up the pointer.
 	p1 := round(p, _PageSize)
 
-	mheap_.spans = (**mspan)(unsafe.Pointer(p1))
+	spansStart := p1
 	mheap_.bitmap = p1 + spansSize + bitmapSize
 	if sys.PtrSize == 4 {
 		// Set arena_start such that we can accept memory
@@ -379,7 +369,7 @@ func mallocinit() {
 	}
 
 	// Initialize the rest of the allocator.
-	mheap_.init(spansSize)
+	mheap_.init(spansStart, spansSize)
 	_g_ := getg()
 	_g_.m.mcache = allocmcache()
 }
@@ -682,7 +672,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 			}
 			x = unsafe.Pointer(v)
 			if needzero && span.needzero != 0 {
-				memclr(unsafe.Pointer(v), size)
+				memclrNoHeapPointers(unsafe.Pointer(v), size)
 			}
 		}
 	} else {
@@ -903,6 +893,9 @@ var globalAlloc struct {
 // There is no associated free operation.
 // Intended for things like function/type/debug-related persistent data.
 // If align is 0, uses default align (currently 8).
+// The returned memory will be zeroed.
+//
+// Consider marking persistentalloc'd types go:notinheap.
 func persistentalloc(size, align uintptr, sysStat *uint64) unsafe.Pointer {
 	var p unsafe.Pointer
 	systemstack(func() {

@@ -170,12 +170,15 @@ var pkgDeps = map[string][]string{
 	"log": {"L1", "os", "fmt", "time"},
 
 	// Packages used by testing must be low-level (L2+fmt).
-	"regexp":         {"L2", "regexp/syntax"},
-	"regexp/syntax":  {"L2"},
-	"runtime/debug":  {"L2", "fmt", "io/ioutil", "os", "time"},
-	"runtime/pprof":  {"L2", "fmt", "os", "text/tabwriter"},
-	"runtime/trace":  {"L0"},
-	"text/tabwriter": {"L2"},
+	"regexp":                            {"L2", "regexp/syntax"},
+	"regexp/syntax":                     {"L2"},
+	"runtime/debug":                     {"L2", "fmt", "io/ioutil", "os", "time"},
+	"runtime/pprof/internal/gzip0":      {"L2"},
+	"runtime/pprof/internal/profile":    {"L2"},
+	"runtime/pprof/internal/protopprof": {"L2", "fmt", "runtime/pprof/internal/profile", "os", "time"},
+	"runtime/pprof":                     {"L2", "fmt", "runtime/pprof/internal/profile", "runtime/pprof/internal/protopprof", "time", "text/tabwriter"},
+	"runtime/trace":                     {"L0"},
+	"text/tabwriter":                    {"L2"},
 
 	"testing":          {"L2", "flag", "fmt", "os", "runtime/debug", "runtime/pprof", "runtime/trace", "time"},
 	"testing/iotest":   {"L2", "log"},
@@ -333,6 +336,9 @@ var pkgDeps = map[string][]string{
 		"crypto/sha1",
 		"crypto/sha256",
 		"crypto/sha512",
+		"golang_org/x/crypto/chacha20poly1305",
+		"golang_org/x/crypto/curve25519",
+		"golang_org/x/crypto/poly1305",
 	},
 
 	// Random byte, number generation.
@@ -393,7 +399,7 @@ var pkgDeps = map[string][]string{
 		"runtime/debug",
 	},
 	"net/http/internal":  {"L4"},
-	"net/http/httptrace": {"context", "internal/nettrace", "net", "reflect", "time"},
+	"net/http/httptrace": {"context", "crypto/tls", "internal/nettrace", "net", "reflect", "time"},
 
 	// HTTP-using packages.
 	"expvar":             {"L4", "OS", "encoding/json", "net/http"},

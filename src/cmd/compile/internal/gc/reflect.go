@@ -939,11 +939,6 @@ func tracksym(t *Type, f *Field) *Sym {
 	return Pkglookup(t.tconv(FmtLeft)+"."+f.Sym.Name, trackpkg)
 }
 
-func typelinkLSym(t *Type) *obj.LSym {
-	name := "go.typelink." + t.tconv(FmtLeft) // complete, unambiguous type name
-	return obj.Linklookup(Ctxt, name, 0)
-}
-
 func typesymprefix(prefix string, t *Type) *Sym {
 	p := prefix + "." + t.tconv(FmtLeft)
 	s := Pkglookup(p, typepkg)
@@ -1342,8 +1337,6 @@ ok:
 	ot = dextratypeData(s, ot, t)
 	ggloblsym(s, int32(ot), int16(dupok|obj.RODATA))
 
-	// generate typelink.foo pointing at s = type.foo.
-	//
 	// The linker will leave a table of all the typelinks for
 	// types in the binary, so the runtime can find them.
 	//
@@ -1361,11 +1354,7 @@ ok:
 			keep = true
 		}
 	}
-	if keep {
-		slink := typelinkLSym(t)
-		dsymptrOffLSym(slink, 0, Linksym(s), 0)
-		ggloblLSym(slink, 4, int16(dupok|obj.RODATA))
-	}
+	s.Lsym.Set(obj.AttrMakeTypelink, keep)
 
 	return s
 }
@@ -1410,11 +1399,11 @@ func dumptypestructs() {
 		o += len(imethods(i.itype)) * Widthptr // skip fun method pointers
 		// at runtime the itab will contain pointers to types, other itabs and
 		// method functions. None are allocated on heap, so we can use obj.NOPTR.
-		ggloblsym(i.sym, int32(o), int16(obj.DUPOK|obj.NOPTR))
+		ggloblsym(i.sym, int32(o), int16(obj.DUPOK|obj.NOPTR|obj.LOCAL))
 
 		ilink := Pkglookup(i.t.tconv(FmtLeft)+","+i.itype.tconv(FmtLeft), itablinkpkg)
 		dsymptr(ilink, 0, i.sym, 0)
-		ggloblsym(ilink, int32(Widthptr), int16(obj.DUPOK|obj.RODATA))
+		ggloblsym(ilink, int32(Widthptr), int16(obj.DUPOK|obj.RODATA|obj.LOCAL))
 	}
 
 	// process ptabs
@@ -1643,7 +1632,7 @@ func fillptrmask(t *Type, ptrmask []byte) {
 
 	nptr := typeptrdata(t) / int64(Widthptr)
 	for i := int64(0); i < nptr; i++ {
-		if bvget(vec, int32(i)) == 1 {
+		if vec.Get(int32(i)) {
 			ptrmask[i/8] |= 1 << (uint(i) % 8)
 		}
 	}

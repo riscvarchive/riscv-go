@@ -4,7 +4,8 @@
 
 // Package time provides functionality for measuring and displaying time.
 //
-// The calendrical calculations always assume a Gregorian calendar.
+// The calendrical calculations always assume a Gregorian calendar, with
+// no leap seconds.
 package time
 
 import "errors"
@@ -49,9 +50,16 @@ type Time struct {
 	// loc specifies the Location that should be used to
 	// determine the minute, hour, month, day, and year
 	// that correspond to this Time.
-	// Only the zero Time has a nil Location.
-	// In that case it is interpreted to mean UTC.
+	// The nil location means UTC.
+	// All UTC times are represented with loc==nil, never loc==&utcLoc.
 	loc *Location
+}
+
+func (t *Time) setLoc(loc *Location) {
+	if loc == &utcLoc {
+		loc = nil
+	}
+	t.loc = loc
 }
 
 // After reports whether the time instant t is after u.
@@ -67,8 +75,7 @@ func (t Time) Before(u Time) bool {
 // Equal reports whether t and u represent the same time instant.
 // Two times can be equal even if they are in different locations.
 // For example, 6:00 +0200 CEST and 4:00 UTC are Equal.
-// This comparison is different from using t == u, which also compares
-// the locations.
+// Note that using == with Time values produces unpredictable results.
 func (t Time) Equal(u Time) bool {
 	return t.sec == u.sec && t.nsec == u.nsec
 }
@@ -657,7 +664,7 @@ func Until(t Time) Duration {
 func (t Time) AddDate(years int, months int, days int) Time {
 	year, month, day := t.Date()
 	hour, min, sec := t.Clock()
-	return Date(year+years, month+Month(months), day+days, hour, min, sec, int(t.nsec), t.loc)
+	return Date(year+years, month+Month(months), day+days, hour, min, sec, int(t.nsec), t.Location())
 }
 
 const (
@@ -787,13 +794,13 @@ func Now() Time {
 
 // UTC returns t with the location set to UTC.
 func (t Time) UTC() Time {
-	t.loc = UTC
+	t.setLoc(&utcLoc)
 	return t
 }
 
 // Local returns t with the location set to local time.
 func (t Time) Local() Time {
-	t.loc = Local
+	t.setLoc(Local)
 	return t
 }
 
@@ -804,7 +811,7 @@ func (t Time) In(loc *Location) Time {
 	if loc == nil {
 		panic("time: missing Location in call to Time.In")
 	}
-	t.loc = loc
+	t.setLoc(loc)
 	return t
 }
 
@@ -845,7 +852,7 @@ const timeBinaryVersion byte = 1
 func (t Time) MarshalBinary() ([]byte, error) {
 	var offsetMin int16 // minutes east of UTC. -1 is UTC.
 
-	if t.Location() == &utcLoc {
+	if t.Location() == UTC {
 		offsetMin = -1
 	} else {
 		_, offset := t.Zone()
@@ -906,11 +913,11 @@ func (t *Time) UnmarshalBinary(data []byte) error {
 	offset := int(int16(buf[1])|int16(buf[0])<<8) * 60
 
 	if offset == -1*60 {
-		t.loc = &utcLoc
+		t.setLoc(&utcLoc)
 	} else if _, localoff, _, _, _ := Local.lookup(t.sec + internalToUnix); offset == localoff {
-		t.loc = Local
+		t.setLoc(Local)
 	} else {
-		t.loc = FixedZone("", offset)
+		t.setLoc(FixedZone("", offset))
 	}
 
 	return nil
@@ -949,6 +956,10 @@ func (t Time) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements the json.Unmarshaler interface.
 // The time is expected to be a quoted string in RFC 3339 format.
 func (t *Time) UnmarshalJSON(data []byte) error {
+	// Ignore null, like in the main JSON package.
+	if string(data) == "null" {
+		return nil
+	}
 	// Fractional seconds are handled implicitly by Parse.
 	var err error
 	*t, err = Parse(`"`+RFC3339+`"`, string(data))
@@ -1099,7 +1110,9 @@ func Date(year int, month Month, day, hour, min, sec, nsec int, loc *Location) T
 		unix -= int64(offset)
 	}
 
-	return Time{unix + unixToInternal, int32(nsec), loc}
+	t := Time{unix + unixToInternal, int32(nsec), nil}
+	t.setLoc(loc)
+	return t
 }
 
 // Truncate returns the result of rounding t down to a multiple of d (since the zero time).

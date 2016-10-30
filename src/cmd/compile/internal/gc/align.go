@@ -169,9 +169,13 @@ func dowidth(t *Type) {
 	case TINT32, TUINT32, TFLOAT32:
 		w = 4
 
-	case TINT64, TUINT64, TFLOAT64, TCOMPLEX64:
+	case TINT64, TUINT64, TFLOAT64:
 		w = 8
 		t.Align = uint8(Widthreg)
+
+	case TCOMPLEX64:
+		w = 8
+		t.Align = 4
 
 	case TCOMPLEX128:
 		w = 16
@@ -223,12 +227,9 @@ func dowidth(t *Type) {
 		}
 		w = 1 // anything will do
 
-	// dummy type; should be replaced before use.
 	case TANY:
-		if Debug['A'] == 0 {
-			Fatalf("dowidth any")
-		}
-		w = 1 // anything will do
+		// dummy type; should be replaced before use.
+		Fatalf("dowidth any")
 
 	case TSTRING:
 		if sizeof_String == 0 {

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"runtime"
 	"sort"
 	"sync"
@@ -65,6 +66,27 @@ func Drivers() []string {
 	}
 	sort.Strings(list)
 	return list
+}
+
+// NamedParam may be passed into query parameter arguments to associate
+// a named placeholder with a value.
+type NamedParam struct {
+	// Name of the parameter placeholder. If empty the ordinal position in the
+	// argument list will be used.
+	Name string
+
+	// Value of the parameter. It may be assigned the same value types as
+	// the query arguments.
+	Value interface{}
+}
+
+// Param provides a more concise way to create NamedParam values.
+func Param(name string, value interface{}) NamedParam {
+	// This method exists because the go1compat promise
+	// doesn't guarantee that structs don't grow more fields,
+	// so unkeyed struct literals are a vet error. Thus, we don't
+	// want to encourage sql.NamedParam{name, value}.
+	return NamedParam{Name: name, Value: value}
 }
 
 // RawBytes is a byte slice that holds a reference to memory owned by
@@ -792,6 +814,7 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 	}
 	// Check if the context is expired.
 	if err := ctx.Err(); err != nil {
+		db.mu.Unlock()
 		return nil, err
 	}
 	lifetime := db.maxLifetime
@@ -975,8 +998,8 @@ const maxBadConnRetries = 2
 // The caller must call the statement's Close method
 // when the statement is no longer needed.
 //
-// The provided context is for the preparation of the statment, not for the execution of
-// the statement.
+// The provided context is used for the preparation of the statement, not for the
+// execution of the statement.
 func (db *DB) PrepareContext(ctx context.Context, query string) (*Stmt, error) {
 	var stmt *Stmt
 	var err error
@@ -1064,7 +1087,7 @@ func (db *DB) exec(ctx context.Context, query string, args []interface{}, strate
 	}()
 
 	if execer, ok := dc.ci.(driver.Execer); ok {
-		var dargs []driver.Value
+		var dargs []driver.NamedValue
 		dargs, err = driverArgs(nil, args)
 		if err != nil {
 			return nil, err
@@ -1499,7 +1522,7 @@ func (tx *Tx) ExecContext(ctx context.Context, query string, args ...interface{}
 		}
 		var resi driver.Result
 		withLock(dc, func() {
-			resi, err = execer.Exec(query, dargs)
+			resi, err = ctxDriverExec(ctx, execer, query, dargs)
 		})
 		if err == nil {
 			return driverResult{dc, resi}, nil
@@ -1511,7 +1534,7 @@ func (tx *Tx) ExecContext(ctx context.Context, query string, args ...interface{}
 
 	var si driver.Stmt
 	withLock(dc, func() {
-		si, err = dc.ci.Prepare(query)
+		si, err = ctxDriverPrepare(ctx, dc.ci, query)
 	})
 	if err != nil {
 		return nil, err
@@ -1943,6 +1966,47 @@ func (rs *Rows) Next() bool {
 	}
 	rs.lasterr = rs.rowsi.Next(rs.lastcols)
 	if rs.lasterr != nil {
+		// Close the connection if there is a driver error.
+		if rs.lasterr != io.EOF {
+			rs.Close()
+			return false
+		}
+		nextResultSet, ok := rs.rowsi.(driver.RowsNextResultSet)
+		if !ok {
+			rs.Close()
+			return false
+		}
+		// The driver is at the end of the current result set.
+		// Test to see if there is another result set after the current one.
+		// Only close Rows if there is no futher result sets to read.
+		if !nextResultSet.HasNextResultSet() {
+			rs.Close()
+		}
+		return false
+	}
+	return true
+}
+
+// NextResultSet prepares the next result set for reading. It returns true if
+// there is further result sets, or false if there is no further result set
+// or if there is an error advancing to it. The Err method should be consulted
+// to distinguish between the two cases.
+//
+// After calling NextResultSet, the Next method should always be called before
+// scanning. If there are further result sets they may not have rows in the result
+// set.
+func (rs *Rows) NextResultSet() bool {
+	if rs.isClosed() {
+		return false
+	}
+	rs.lastcols = nil
+	nextResultSet, ok := rs.rowsi.(driver.RowsNextResultSet)
+	if !ok {
+		rs.Close()
+		return false
+	}
+	rs.lasterr = nextResultSet.NextResultSet()
+	if rs.lasterr != nil {
 		rs.Close()
 		return false
 	}
@@ -1969,6 +2033,107 @@ func (rs *Rows) Columns() ([]string, error) {
 		return nil, errors.New("sql: no Rows available")
 	}
 	return rs.rowsi.Columns(), nil
+}
+
+// ColumnTypes returns column information such as column type, length,
+// and nullable. Some information may not be available from some drivers.
+func (rs *Rows) ColumnTypes() ([]*ColumnType, error) {
+	if rs.isClosed() {
+		return nil, errors.New("sql: Rows are closed")
+	}
+	if rs.rowsi == nil {
+		return nil, errors.New("sql: no Rows available")
+	}
+	return rowsColumnInfoSetup(rs.rowsi), nil
+}
+
+// ColumnType contains the name and type of a column.
+type ColumnType struct {
+	name string
+
+	hasNullable       bool
+	hasLength         bool
+	hasPrecisionScale bool
+
+	nullable     bool
+	length       int64
+	databaseType string
+	precision    int64
+	scale        int64
+	scanType     reflect.Type
+}
+
+// Name returns the name or alias of the column.
+func (ci *ColumnType) Name() string {
+	return ci.name
+}
+
+// Length returns the column type length for variable length column types such
+// as text and binary field types. If the type length is unbounded the value will
+// be math.MaxInt64 (any database limits will still apply).
+// If the column type is not variable length, such as an int, or if not supported
+// by the driver ok is false.
+func (ci *ColumnType) Length() (length int64, ok bool) {
+	return ci.length, ci.hasLength
+}
+
+// DecimalSize returns the scale and precision of a decimal type.
+// If not applicable or if not supported ok is false.
+func (ci *ColumnType) DecimalSize() (precision, scale int64, ok bool) {
+	return ci.precision, ci.scale, ci.hasPrecisionScale
+}
+
+// ScanType returns a Go type suitable for scanning into using Rows.Scan.
+// If a driver does not support this property ScanType will return
+// the type of an empty interface.
+func (ci *ColumnType) ScanType() reflect.Type {
+	return ci.scanType
+}
+
+// Nullable returns whether the column may be null.
+// If a driver does not support this property ok will be false.
+func (ci *ColumnType) Nullable() (nullable, ok bool) {
+	return ci.nullable, ci.hasNullable
+}
+
+// DatabaseTypeName returns the database system name of the column type. If an empty
+// string is returned the driver type name is not supported.
+// Consult your driver documentation for a list of driver data types. Length specifiers
+// are not included.
+// Common type include "VARCHAR", "TEXT", "NVARCHAR", "DECIMAL", "BOOL", "INT", "BIGINT".
+func (ci *ColumnType) DatabaseTypeName() string {
+	return ci.databaseType
+}
+
+func rowsColumnInfoSetup(rowsi driver.Rows) []*ColumnType {
+	names := rowsi.Columns()
+
+	list := make([]*ColumnType, len(names))
+	for i := range list {
+		ci := &ColumnType{
+			name: names[i],
+		}
+		list[i] = ci
+
+		if prop, ok := rowsi.(driver.RowsColumnTypeScanType); ok {
+			ci.scanType = prop.ColumnTypeScanType(i)
+		} else {
+			ci.scanType = reflect.TypeOf(new(interface{})).Elem()
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeDatabaseTypeName); ok {
+			ci.databaseType = prop.ColumnTypeDatabaseTypeName(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeLength); ok {
+			ci.length, ci.hasLength = prop.ColumnTypeLength(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypeNullable); ok {
+			ci.nullable, ci.hasNullable = prop.ColumnTypeNullable(i)
+		}
+		if prop, ok := rowsi.(driver.RowsColumnTypePrecisionScale); ok {
+			ci.precision, ci.scale, ci.hasPrecisionScale = prop.ColumnTypePrecisionScale(i)
+		}
+	}
+	return list
 }
 
 // Scan copies the columns in the current row into the values pointed
@@ -2047,7 +2212,8 @@ func (rs *Rows) isClosed() bool {
 	return atomic.LoadInt32(&rs.closed) != 0
 }
 
-// Close closes the Rows, preventing further enumeration. If Next returns
+// Close closes the Rows, preventing further enumeration. If Next and
+// NextResultSet both return
 // false, the Rows are closed automatically and it will suffice to check the
 // result of Err. Close is idempotent and does not affect the result of Err.
 func (rs *Rows) Close() error {

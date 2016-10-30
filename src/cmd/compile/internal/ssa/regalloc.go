@@ -106,6 +106,7 @@
 package ssa
 
 import (
+	"cmd/internal/obj"
 	"fmt"
 	"unsafe"
 )
@@ -389,7 +390,7 @@ func (s *regAllocState) allocReg(mask regMask, v *Value) register {
 	// We generate a Copy and record it. It will be deleted if never used.
 	v2 := s.regs[r].v
 	m := s.compatRegs(v2.Type) &^ s.used &^ s.tmpused &^ (regMask(1) << r)
-	if countRegs(s.values[v2.ID].regs) == 1 && m != 0 {
+	if m != 0 && !s.values[v2.ID].rematerializeable && countRegs(s.values[v2.ID].regs) == 1 {
 		r2 := pickReg(m)
 		c := s.curBlock.NewValue1(v2.Line, OpCopy, v2.Type, s.regs[r].c)
 		s.copies[c] = false
@@ -460,6 +461,18 @@ func (s *regAllocState) allocValToReg(v *Value, mask regMask, nospill bool, line
 	return c
 }
 
+// isLeaf reports whether f performs any calls.
+func isLeaf(f *Func) bool {
+	for _, b := range f.Blocks {
+		for _, v := range b.Values {
+			if opcodeTable[v.Op].call {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (s *regAllocState) init(f *Func) {
 	s.f = f
 	s.registers = f.Config.registers
@@ -508,6 +521,18 @@ func (s *regAllocState) init(f *Func) {
 		switch s.f.Config.arch {
 		case "ppc64le": // R2 already reserved.
 			s.allocatable &^= 1 << 12 // R12
+		}
+	}
+	if s.f.Config.LinkReg != -1 {
+		if isLeaf(f) {
+			// Leaf functions don't save/restore the link register.
+			s.allocatable &^= 1 << uint(s.f.Config.LinkReg)
+		}
+		if s.f.Config.arch == "arm" && obj.GOARM == 5 {
+			// On ARMv5 we insert softfloat calls at each FP instruction.
+			// This clobbers LR almost everywhere. Disable allocating LR
+			// on ARMv5.
+			s.allocatable &^= 1 << uint(s.f.Config.LinkReg)
 		}
 	}
 	if s.f.Config.ctxt.Flag_dynlink {
@@ -1146,12 +1171,20 @@ func (s *regAllocState) regalloc(f *Func) {
 					// arg0 is dead.  We can clobber its register.
 					goto ok
 				}
+				if s.values[v.Args[0].ID].rematerializeable {
+					// We can rematerialize the input, don't worry about clobbering it.
+					goto ok
+				}
 				if countRegs(s.values[v.Args[0].ID].regs) >= 2 {
 					// we have at least 2 copies of arg0.  We can afford to clobber one.
 					goto ok
 				}
 				if opcodeTable[v.Op].commutative {
 					if !s.liveAfterCurrentInstruction(v.Args[1]) {
+						args[0], args[1] = args[1], args[0]
+						goto ok
+					}
+					if s.values[v.Args[1].ID].rematerializeable {
 						args[0], args[1] = args[1], args[0]
 						goto ok
 					}
@@ -1389,6 +1422,9 @@ func (s *regAllocState) regalloc(f *Func) {
 				if vi.regs != 0 {
 					continue
 				}
+				if vi.rematerializeable {
+					continue
+				}
 				v := s.orig[vid]
 				if s.f.Config.use387 && v.Type.IsFloat() {
 					continue // 387 can't handle floats in registers between blocks
@@ -1425,8 +1461,7 @@ func (s *regAllocState) regalloc(f *Func) {
 		}
 		s.endRegs[b.ID] = regList
 
-		// Check. TODO: remove
-		{
+		if checkEnabled {
 			liveSet.clear()
 			for _, x := range s.live[b.ID] {
 				liveSet.add(x.ID)

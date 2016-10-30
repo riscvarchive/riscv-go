@@ -173,9 +173,12 @@ func (ln *UnixListener) close() error {
 	// is at least compatible with the auto-remove
 	// sequence in ListenUnix. It's only non-Go
 	// programs that can mess us up.
-	if ln.path[0] != '@' && ln.unlink {
-		syscall.Unlink(ln.path)
-	}
+	// Even if there are racy calls to Close, we want to unlink only for the first one.
+	ln.unlinkOnce.Do(func() {
+		if ln.path[0] != '@' && ln.unlink {
+			syscall.Unlink(ln.path)
+		}
+	})
 	return ln.fd.Close()
 }
 
@@ -185,6 +188,18 @@ func (ln *UnixListener) file() (*os.File, error) {
 		return nil, err
 	}
 	return f, nil
+}
+
+// SetUnlinkOnClose sets whether the underlying socket file should be removed
+// from the file system when the listener is closed.
+//
+// The default behavior is to unlink the socket file only when package net created it.
+// That is, when the listener and the underlying socket file were created by a call to
+// Listen or ListenUnix, then by default closing the listener will remove the socket file.
+// but if the listener was created by a call to FileListener to use an already existing
+// socket file, then by default closing the listener will not remove the socket file.
+func (l *UnixListener) SetUnlinkOnClose(unlink bool) {
+	l.unlink = unlink
 }
 
 func listenUnix(ctx context.Context, network string, laddr *UnixAddr) (*UnixListener, error) {

@@ -138,6 +138,10 @@ func additab(m *itab, locked, canfail bool) {
 		throw("invalid itab locking")
 	}
 	h := itabhash(inter, typ)
+	if m == hash[h] {
+		println("duplicate itab for", typ.string(), "and", inter.typ.string())
+		throw("duplicate itabs")
+	}
 	m.link = hash[h]
 	atomicstorep(unsafe.Pointer(&hash[h]), unsafe.Pointer(m))
 }
@@ -218,7 +222,7 @@ func assertI2T(t *_type, i iface, r unsafe.Pointer) {
 func assertI2T2(t *_type, i iface, r unsafe.Pointer) bool {
 	tab := i.tab
 	if tab == nil || tab._type != t {
-		memclr(r, t.size)
+		typedmemclr(t, r)
 		return false
 	}
 	if isDirectIface(t) {
@@ -253,7 +257,7 @@ func assertE2T2(t *_type, e eface, r unsafe.Pointer) bool {
 		GC()
 	}
 	if e._type != t {
-		memclr(r, t.size)
+		typedmemclr(t, r)
 		return false
 	}
 	if isDirectIface(t) {
@@ -262,16 +266,6 @@ func assertE2T2(t *_type, e eface, r unsafe.Pointer) bool {
 		typedmemmove(t, r, e.data)
 	}
 	return true
-}
-
-func convI2E(i iface) (r eface) {
-	tab := i.tab
-	if tab == nil {
-		return
-	}
-	r._type = tab._type
-	r.data = i.data
-	return
 }
 
 func assertI2E(inter *interfacetype, i iface, r *eface) {

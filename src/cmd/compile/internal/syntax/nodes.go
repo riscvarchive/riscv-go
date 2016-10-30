@@ -87,10 +87,10 @@ type (
 
 	// Name Type
 	TypeDecl struct {
-		Name  *Name
-		Type  Expr
-		Alias bool
-		Group *Group // nil means not part of a group
+		Name   *Name
+		Type   Expr
+		Group  *Group // nil means not part of a group
+		Pragma Pragma
 		decl
 	}
 

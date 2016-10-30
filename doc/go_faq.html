@@ -1151,6 +1151,12 @@ struct.  If the interface value holds a pointer, copying the interface value
 makes a copy of the pointer, but again not the data it points to.
 </p>
 
+<p>
+Note that this discussion is about the semantics of the operations.
+Actual implementations may apply optimizations to avoid copying
+as long as the optimizations do not change the semantics.
+</p>
+
 <h3 id="pointer_to_interface">
 When should I use a pointer to an interface?</h3>
 
@@ -1770,7 +1776,7 @@ A simple C "hello, world" program compiled and linked statically using gcc
 on Linux is around 750 kB,
 including an implementation of <code>printf</code>.
 An equivalent Go program using <code>fmt.Printf</code>
-is around 2.3 MB, but
+is around 1.5 MB, but
 that includes more powerful run-time support and type information.
 </p>
 

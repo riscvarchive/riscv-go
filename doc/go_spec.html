@@ -1,6 +1,6 @@
 <!--{
 	"Title": "The Go Programming Language Specification",
-	"Subtitle": "Version of September 1, 2016",
+	"Subtitle": "Version of October 28, 2016",
 	"Path": "/ref/spec"
 }-->
 
@@ -265,7 +265,7 @@ The following character sequences represent <a href="#Operators">operators</a>, 
 *    ^     *=    ^=     &lt;-    &gt;     &gt;=    {    }
 /    &lt;&lt;    /=    &lt;&lt;=    ++    =     :=    ,    ;
 %    &gt;&gt;    %=    &gt;&gt;=    --    !     ...   .    :
-     &amp;^          &amp;^=
+     &amp;^          &amp;^=    =&gt;
 </pre>
 
 <h3 id="Integer_literals">Integer literals</h3>
@@ -605,7 +605,7 @@ implementation must:
 
 	<li>Represent floating-point constants, including the parts of
 	    a complex constant, with a mantissa of at least 256 bits
-	    and a signed exponent of at least 32 bits.</li>
+	    and a signed binary exponent of at least 16 bits.</li>
 
 	<li>Give an error if unable to represent an integer constant
 	    precisely.</li>
@@ -1726,8 +1726,12 @@ the left is bound to the value of the <i>n</i>th expression on the
 right.
 </p>
 
+<p>
+For constant <i>aliases</i>, see the section on <a href="#Alias_declarations">alias declarations</a>.
+</p>
+
 <pre class="ebnf">
-ConstDecl      = "const" ( ConstSpec | "(" { ConstSpec ";" } ")" ) .
+ConstDecl      = "const" ( ConstSpec | AliasSpec | "(" { ( ConstSpec | AliasSpec ) ";" } ")" ) .
 ConstSpec      = IdentifierList [ [ Type ] "=" ExpressionList ] .
 
 IdentifierList = identifier { "," identifier } .
@@ -1846,8 +1850,12 @@ and operations defined for the existing type are also defined for the new type.
 The new type is <a href="#Type_identity">different</a> from the existing type.
 </p>
 
+<p>
+For type <i>aliases</i>, see the section on <a href="#Alias_declarations">alias declarations</a>.
+</p>
+
 <pre class="ebnf">
-TypeDecl     = "type" ( TypeSpec | "(" { TypeSpec ";" } ")" ) .
+TypeDecl     = "type" ( TypeSpec | AliasSpec | "(" { ( TypeSpec | AliasSpec ) ";" } ")" ) .
 TypeSpec     = identifier Type .
 </pre>
 
@@ -1928,8 +1936,12 @@ A variable declaration creates one or more variables, binds corresponding
 identifiers to them, and gives each a type and an initial value.
 </p>
 
+<p>
+For variable <i>aliases</i>, see the section on <a href="#Alias_declarations">alias declarations</a>.
+</p>
+
 <pre class="ebnf">
-VarDecl     = "var" ( VarSpec | "(" { VarSpec ";" } ")" ) .
+VarDecl     = "var" ( VarSpec | AliasSpec | "(" { ( VarSpec | AliasSpec ) ";" } ")" ) .
 VarSpec     = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
 </pre>
 
@@ -1976,6 +1988,7 @@ inside a <a href="#Function_declarations">function body</a> if the variable is
 never used.
 </p>
 
+
 <h3 id="Short_variable_declarations">Short variable declarations</h3>
 
 <p>
@@ -2006,7 +2019,7 @@ _, y, _ := coord(p)  // coord() returns three values; only interested in y coord
 <p>
 Unlike regular variable declarations, a short variable declaration may <i>redeclare</i>
 variables provided they were originally declared earlier in the same block
-(or the parameter lists if the block is the function body) with the same type, 
+(or the parameter lists if the block is the function body) with the same type,
 and at least one of the non-<a href="#Blank_identifier">blank</a> variables is new.
 As a consequence, redeclaration can only appear in a multi-variable short declaration.
 Redeclaration does not introduce a new variable; it just assigns a new value to the original.
@@ -2034,8 +2047,12 @@ A function declaration binds an identifier, the <i>function name</i>,
 to a function.
 </p>
 
+<p>
+For function <i>aliases</i>, see the section on <a href="#Alias_declarations">alias declarations</a>.
+</p>
+
 <pre class="ebnf">
-FunctionDecl = "func" FunctionName ( Function | Signature ) .
+FunctionDecl = "func" ( FunctionName ( Function | Signature ) ) | AliasSpec .
 FunctionName = identifier .
 Function     = Signature FunctionBody .
 FunctionBody = Block .
@@ -2145,6 +2162,52 @@ func(p *Point, factor float64)
 
 <p>
 However, a function declared this way is not a method.
+</p>
+
+
+<h3 id="Alias_declarations">Alias declarations</h3>
+
+<p>
+An alias declaration binds an identifier, the <i>alias</i>, to a
+<a href="#Constant_declarations">constant</a>,
+<a href="#Type_declarations">type</a>,
+<a href="#Variable_declarations">variable</a>, or
+<a href="#Function_declarations">function</a>
+denoted by a <a href="#Qualified_identifiers">qualified identifier</a> and
+declared in a different package.
+</p>
+
+<pre class="ebnf">
+AliasSpec = identifier "=&gt;" QualifiedIdent .
+</pre>
+
+<p>
+The effect of referring to a constant, type, variable, or function by an alias
+is indistinguishable from referring to it by its original name.
+For example, the type denoted by a type alias and the aliased type are
+<a href="#Type_identity">identical</a>.
+</p>
+
+<p>
+An alias declaration may appear only as a form of constant, type, variable,
+or function declaration at the package level, and the aliased entity must be
+a constant, type, variable, or function respectively. Alias declarations inside
+functions are not permitted.
+</p>
+
+<pre>
+const (
+	G  =  6.67408e-11      // regular and alias declarations may be grouped
+	Pi =&gt; math.Pi          // same effect as: Pi = math.Pi
+)
+
+type Struct =&gt; types.Struct    // re-export of types.Struct
+
+func sin =&gt; math.Sin           // non-exported shortcut for frequently used function
+</pre>
+
+<p>
+An alias declaration may not refer to package <a href="#Package_unsafe">unsafe</a>.
 </p>
 
 
@@ -2286,8 +2349,10 @@ For array and slice literals the following rules apply:
 	<li>Each element has an associated integer index marking
 	    its position in the array.
 	</li>
-	<li>An element with a key uses the key as its index; the
-	    key must be a constant integer expression.
+	<li>An element with a key uses the key as its index. The
+	    key must be a non-negative constant representable by
+	    a value of type <code>int</code>; and if it is typed
+	    it must be of integer type.
 	</li>
 	<li>An element without a key uses the previous element's index plus one.
 	    If the first element has no key, its index is zero.
@@ -3114,13 +3179,16 @@ known to be <code>T</code> in a correct program.
 </p>
 
 <pre>
-var x interface{} = 7  // x has dynamic type int and value 7
-i := x.(int)           // i has type int and value 7
+var x interface{} = 7          // x has dynamic type int and value 7
+i := x.(int)                   // i has type int and value 7
 
 type I interface { m() }
-var y I
-s := y.(string)        // illegal: string does not implement I (missing method m)
-r := y.(io.Reader)     // r has type io.Reader and y must implement both I and io.Reader
+
+func f(y I) {
+	s := y.(string)        // illegal: string does not implement I (missing method m)
+	r := y.(io.Reader)     // r has type io.Reader and the dynamic type of y must implement both I and io.Reader
+	…
+}
 </pre>
 
 <p>
@@ -3837,10 +3905,12 @@ in any of these cases:
 	to <code>T</code>.
 	</li>
 	<li>
-	<code>x</code>'s type and <code>T</code> have identical
+	ignoring struct tags (see below),
+	<code>x</code>'s type and <code>T</code> have <a href="#Type_identity">identical</a>
 	<a href="#Types">underlying types</a>.
 	</li>
 	<li>
+	ignoring struct tags (see below),
 	<code>x</code>'s type and <code>T</code> are unnamed pointer types
 	and their pointer base types have identical underlying types.
 	</li>
@@ -3859,6 +3929,31 @@ in any of these cases:
 	<code>x</code> is a string and <code>T</code> is a slice of bytes or runes.
 	</li>
 </ul>
+
+<p>
+<a href="#Struct_types">Struct tags</a> are ignored when comparing struct types
+for identity for the purpose of conversion:
+</p>
+
+<pre>
+type Person struct {
+	Name    string
+	Address *struct {
+		Street string
+		City   string
+	}
+}
+
+var data *struct {
+	Name    string `json:"name"`
+	Address *struct {
+		Street string `json:"street"`
+		City   string `json:"city"`
+	} `json:"address"`
+}
+
+var person = (*Person)(data)  // ignoring tags, the underlying types are identical
+</pre>
 
 <p>
 Specific rules apply to (non-constant) conversions between numeric types or
@@ -5726,12 +5821,12 @@ var a = complex(2, -2)             // complex128
 const b = complex(1.0, -1.4)       // untyped complex constant 1 - 1.4i
 x := float32(math.Cos(math.Pi/2))  // float32
 var c64 = complex(5, -x)           // complex64
-const s uint = complex(1, 0)       // untyped complex constant 1 + 0i can be converted to uint
-_ = complex(1, 2&lt;&lt;s)               // illegal: 2 has floating-point type, cannot shift
+var s uint = complex(1, 0)         // untyped complex constant 1 + 0i can be converted to uint
+_ = complex(1, 2&lt;&lt;s)               // illegal: 2 assumes floating-point type, cannot shift
 var rl = real(c64)                 // float32
 var im = imag(a)                   // float64
 const c = imag(b)                  // untyped constant -1.4
-_ = imag(3 &lt;&lt; s)                   // illegal: 3 has complex type, cannot shift
+_ = imag(3 &lt;&lt; s)                   // illegal: 3 assumes complex type, cannot shift
 </pre>
 
 <h3 id="Handling_panics">Handling panics</h3>

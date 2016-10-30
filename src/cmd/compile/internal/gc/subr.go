@@ -202,10 +202,10 @@ func setlineno(n *Node) int32 {
 	lno := lineno
 	if n != nil {
 		switch n.Op {
-		case ONAME, OTYPE, OPACK:
+		case ONAME, OPACK:
 			break
 
-		case OLITERAL:
+		case OLITERAL, OTYPE:
 			if n.Sym != nil {
 				break
 			}
@@ -361,19 +361,12 @@ func nod(op Op, nleft *Node, nright *Node) *Node {
 	switch op {
 	case OCLOSURE, ODCLFUNC:
 		n.Func = new(Func)
-		n.Func.FCurfn = Curfn
+		n.Func.IsHiddenClosure = Curfn != nil
 	case ONAME:
 		n.Name = new(Name)
 		n.Name.Param = new(Param)
 	case OLABEL, OPACK:
 		n.Name = new(Name)
-	case ODCLFIELD:
-		if nleft != nil {
-			n.Name = nleft.Name
-		} else {
-			n.Name = new(Name)
-			n.Name.Param = new(Param)
-		}
 	}
 	if n.Name != nil {
 		n.Name.Curfn = Curfn
@@ -475,30 +468,6 @@ func nodbool(b bool) *Node {
 	return c
 }
 
-func aindex(b *Node, t *Type) *Type {
-	hasbound := false
-	var bound int64
-	b = typecheck(b, Erv)
-	if b != nil {
-		switch consttype(b) {
-		default:
-			yyerror("array bound must be an integer expression")
-
-		case CTINT, CTRUNE:
-			hasbound = true
-			bound = b.Int64()
-			if bound < 0 {
-				yyerror("array bound must be non negative")
-			}
-		}
-	}
-
-	if !hasbound {
-		return typSlice(t)
-	}
-	return typArray(t, bound)
-}
-
 // treecopy recursively copies n, with the exception of
 // ONAME, OLITERAL, OTYPE, and non-iota ONONAME leaves.
 // Copies of iota ONONAME nodes are assigned the current
@@ -535,9 +504,7 @@ func treecopy(n *Node, lineno int32) *Node {
 			if lineno != 0 {
 				m.Lineno = lineno
 			}
-			m.Name = new(Name)
-			*m.Name = *n.Name
-			m.Name.Iota = iota_
+			m.SetIota(iota_)
 			return &m
 		}
 		return n
@@ -644,7 +611,12 @@ func cplxsubtype(et EType) EType {
 // pointer (t1 == t2), so there's no chance of chasing cycles
 // ad infinitum, so no need for a depth counter.
 func eqtype(t1, t2 *Type) bool {
-	return eqtype1(t1, t2, nil)
+	return eqtype1(t1, t2, true, nil)
+}
+
+// eqtypeIgnoreTags is like eqtype but it ignores struct tags for struct identity.
+func eqtypeIgnoreTags(t1, t2 *Type) bool {
+	return eqtype1(t1, t2, false, nil)
 }
 
 type typePair struct {
@@ -652,7 +624,7 @@ type typePair struct {
 	t2 *Type
 }
 
-func eqtype1(t1, t2 *Type, assumedEqual map[typePair]struct{}) bool {
+func eqtype1(t1, t2 *Type, cmpTags bool, assumedEqual map[typePair]struct{}) bool {
 	if t1 == t2 {
 		return true
 	}
@@ -684,7 +656,7 @@ func eqtype1(t1, t2 *Type, assumedEqual map[typePair]struct{}) bool {
 		t1, i1 := iterFields(t1)
 		t2, i2 := iterFields(t2)
 		for ; t1 != nil && t2 != nil; t1, t2 = i1.Next(), i2.Next() {
-			if t1.Sym != t2.Sym || t1.Embedded != t2.Embedded || !eqtype1(t1.Type, t2.Type, assumedEqual) || t1.Note != t2.Note {
+			if t1.Sym != t2.Sym || t1.Embedded != t2.Embedded || !eqtype1(t1.Type, t2.Type, cmpTags, assumedEqual) || cmpTags && t1.Note != t2.Note {
 				return false
 			}
 		}
@@ -703,7 +675,7 @@ func eqtype1(t1, t2 *Type, assumedEqual map[typePair]struct{}) bool {
 			ta, ia := iterFields(f(t1))
 			tb, ib := iterFields(f(t2))
 			for ; ta != nil && tb != nil; ta, tb = ia.Next(), ib.Next() {
-				if ta.Isddd != tb.Isddd || !eqtype1(ta.Type, tb.Type, assumedEqual) {
+				if ta.Isddd != tb.Isddd || !eqtype1(ta.Type, tb.Type, cmpTags, assumedEqual) {
 					return false
 				}
 			}
@@ -724,13 +696,13 @@ func eqtype1(t1, t2 *Type, assumedEqual map[typePair]struct{}) bool {
 		}
 
 	case TMAP:
-		if !eqtype1(t1.Key(), t2.Key(), assumedEqual) {
+		if !eqtype1(t1.Key(), t2.Key(), cmpTags, assumedEqual) {
 			return false
 		}
-		return eqtype1(t1.Val(), t2.Val(), assumedEqual)
+		return eqtype1(t1.Val(), t2.Val(), cmpTags, assumedEqual)
 	}
 
-	return eqtype1(t1.Elem(), t2.Elem(), assumedEqual)
+	return eqtype1(t1.Elem(), t2.Elem(), cmpTags, assumedEqual)
 }
 
 // Are t1 and t2 equal struct types when field names are ignored?
@@ -889,6 +861,16 @@ func convertop(src *Type, dst *Type, why *string) Op {
 		return 0
 	}
 
+	// Conversions from regular to go:notinheap are not allowed
+	// (unless it's unsafe.Pointer). This is a runtime-specific
+	// rule.
+	if src.IsPtr() && dst.IsPtr() && dst.Elem().NotInHeap && !src.Elem().NotInHeap {
+		if why != nil {
+			*why = fmt.Sprintf(":\n\t%v is go:notinheap, but %v is not", dst.Elem(), src.Elem())
+		}
+		return 0
+	}
+
 	// 1. src can be assigned to dst.
 	op := assignop(src, dst, why)
 	if op != 0 {
@@ -906,15 +888,15 @@ func convertop(src *Type, dst *Type, why *string) Op {
 		*why = ""
 	}
 
-	// 2. src and dst have identical underlying types.
-	if eqtype(src.Orig, dst.Orig) {
+	// 2. Ignoring struct tags, src and dst have identical underlying types.
+	if eqtypeIgnoreTags(src.Orig, dst.Orig) {
 		return OCONVNOP
 	}
 
-	// 3. src and dst are unnamed pointer types
-	// and their base types have identical underlying types.
+	// 3. src and dst are unnamed pointer types and, ignoring struct tags,
+	// their base types have identical underlying types.
 	if src.IsPtr() && dst.IsPtr() && src.Sym == nil && dst.Sym == nil {
-		if eqtype(src.Elem().Orig, dst.Elem().Orig) {
+		if eqtypeIgnoreTags(src.Elem().Orig, dst.Elem().Orig) {
 			return OCONVNOP
 		}
 	}
@@ -989,9 +971,10 @@ func assignconvfn(n *Node, t *Type, context func() string) *Node {
 	}
 
 	old := n
-	old.Diag++ // silence errors about n; we'll issue one below
+	od := old.Diag
+	old.Diag = true // silence errors about n; we'll issue one below
 	n = defaultlit(n, t)
-	old.Diag--
+	old.Diag = od
 	if t.Etype == TBLANK {
 		return n
 	}
@@ -1036,20 +1019,17 @@ func (n *Node) IsMethod() bool {
 // SliceBounds returns n's slice bounds: low, high, and max in expr[low:high:max].
 // n must be a slice expression. max is nil if n is a simple slice expression.
 func (n *Node) SliceBounds() (low, high, max *Node) {
+	if n.List.Len() == 0 {
+		return nil, nil, nil
+	}
+
 	switch n.Op {
 	case OSLICE, OSLICEARR, OSLICESTR:
-		if n.Right == nil {
-			return nil, nil, nil
-		}
-		if n.Right.Op != OKEY {
-			Fatalf("SliceBounds right %s", opnames[n.Right.Op])
-		}
-		return n.Right.Left, n.Right.Right, nil
+		s := n.List.Slice()
+		return s[0], s[1], nil
 	case OSLICE3, OSLICE3ARR:
-		if n.Right.Op != OKEY || n.Right.Right.Op != OKEY {
-			Fatalf("SliceBounds right %s %s", opnames[n.Right.Op], opnames[n.Right.Right.Op])
-		}
-		return n.Right.Left, n.Right.Right.Left, n.Right.Right.Right
+		s := n.List.Slice()
+		return s[0], s[1], s[2]
 	}
 	Fatalf("SliceBounds op %v: %v", n.Op, n)
 	return nil, nil, nil
@@ -1063,20 +1043,29 @@ func (n *Node) SetSliceBounds(low, high, max *Node) {
 		if max != nil {
 			Fatalf("SetSliceBounds %v given three bounds", n.Op)
 		}
-		if n.Right == nil {
-			n.Right = nod(OKEY, low, high)
+		s := n.List.Slice()
+		if s == nil {
+			if low == nil && high == nil {
+				return
+			}
+			n.List.Set([]*Node{low, high})
 			return
 		}
-		n.Right.Left = low
-		n.Right.Right = high
+		s[0] = low
+		s[1] = high
 		return
 	case OSLICE3, OSLICE3ARR:
-		if n.Right == nil {
-			n.Right = nod(OKEY, low, nod(OKEY, high, max))
+		s := n.List.Slice()
+		if s == nil {
+			if low == nil && high == nil && max == nil {
+				return
+			}
+			n.List.Set([]*Node{low, high, max})
+			return
 		}
-		n.Right.Left = low
-		n.Right.Right.Left = high
-		n.Right.Right.Right = max
+		s[0] = low
+		s[1] = high
+		s[2] = max
 		return
 	}
 	Fatalf("SetSliceBounds op %v: %v", n.Op, n)
@@ -1117,24 +1106,6 @@ func typehash(t *Type) uint32 {
 	return binary.LittleEndian.Uint32(h[:4])
 }
 
-var initPtrtoDone bool
-
-var (
-	ptrToUint8  *Type
-	ptrToAny    *Type
-	ptrToString *Type
-	ptrToBool   *Type
-	ptrToInt32  *Type
-)
-
-func initPtrto() {
-	ptrToUint8 = typPtr(Types[TUINT8])
-	ptrToAny = typPtr(Types[TANY])
-	ptrToString = typPtr(Types[TSTRING])
-	ptrToBool = typPtr(Types[TBOOL])
-	ptrToInt32 = typPtr(Types[TINT32])
-}
-
 // ptrto returns the Type *t.
 // The returned struct must not be modified.
 func ptrto(t *Type) *Type {
@@ -1143,23 +1114,6 @@ func ptrto(t *Type) *Type {
 	}
 	if t == nil {
 		Fatalf("ptrto: nil ptr")
-	}
-	// Reduce allocations by pre-creating common cases.
-	if !initPtrtoDone {
-		initPtrto()
-		initPtrtoDone = true
-	}
-	switch t {
-	case Types[TUINT8]:
-		return ptrToUint8
-	case Types[TINT32]:
-		return ptrToInt32
-	case Types[TANY]:
-		return ptrToAny
-	case Types[TSTRING]:
-		return ptrToString
-	case Types[TBOOL]:
-		return ptrToBool
 	}
 	return typPtr(t)
 }
@@ -1211,7 +1165,7 @@ func ullmancalc(n *Node) {
 	}
 
 	switch n.Op {
-	case OREGISTER, OLITERAL, ONAME:
+	case OLITERAL, ONAME:
 		ul = 1
 		if n.Class == PAUTOHEAP {
 			ul++
@@ -1537,7 +1491,9 @@ func dotpath(s *Sym, t *Type, save **Field, ignorecase bool) (path []Dlist, ambi
 // modify the tree with missing type names.
 func adddot(n *Node) *Node {
 	n.Left = typecheck(n.Left, Etype|Erv)
-	n.Diag |= n.Left.Diag
+	if n.Left.Diag {
+		n.Diag = true
+	}
 	t := n.Left.Type
 	if t == nil {
 		return n

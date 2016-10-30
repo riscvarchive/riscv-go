@@ -272,7 +272,11 @@ func defaultContext() Context {
 	// (perhaps it is the stub to use in that case) should say "+build !go1.x".
 	c.ReleaseTags = []string{"go1.1", "go1.2", "go1.3", "go1.4", "go1.5", "go1.6", "go1.7", "go1.8"}
 
-	switch os.Getenv("CGO_ENABLED") {
+	env := os.Getenv("CGO_ENABLED")
+	if env == "" {
+		env = defaultCGO_ENABLED
+	}
+	switch env {
 	case "1":
 		c.CgoEnabled = true
 	case "0":
@@ -336,6 +340,11 @@ const (
 	// See golang.org/s/go15vendor for more information.
 	//
 	// Setting IgnoreVendor ignores vendor directories.
+	//
+	// In contrast to the package's ImportPath,
+	// the returned package's Imports, TestImports, and XTestImports
+	// are always the exact import paths from the source files:
+	// Import makes no attempt to resolve or check those paths.
 	IgnoreVendor
 )
 
@@ -381,15 +390,15 @@ type Package struct {
 	CgoPkgConfig []string // Cgo pkg-config directives
 
 	// Dependency information
-	Imports   []string                    // imports from GoFiles, CgoFiles
+	Imports   []string                    // import paths from GoFiles, CgoFiles
 	ImportPos map[string][]token.Position // line information for Imports
 
 	// Test information
 	TestGoFiles    []string                    // _test.go files in package
-	TestImports    []string                    // imports from TestGoFiles
+	TestImports    []string                    // import paths from TestGoFiles
 	TestImportPos  map[string][]token.Position // line information for TestImports
 	XTestGoFiles   []string                    // _test.go files outside package
-	XTestImports   []string                    // imports from XTestGoFiles
+	XTestImports   []string                    // import paths from XTestGoFiles
 	XTestImportPos map[string][]token.Position // line information for XTestImports
 }
 
@@ -410,11 +419,16 @@ func (ctxt *Context) ImportDir(dir string, mode ImportMode) (*Package, error) {
 // containing no buildable Go source files. (It may still contain
 // test files, files hidden by build tags, and so on.)
 type NoGoError struct {
-	Dir string
+	Dir     string
+	Ignored bool // whether any Go files were ignored due to build tags
 }
 
 func (e *NoGoError) Error() string {
-	return "no buildable Go source files in " + e.Dir
+	msg := "no buildable Go source files in " + e.Dir
+	if e.Ignored {
+		msg += " (.go files ignored due to build tags)"
+	}
+	return msg
 }
 
 // MultiplePackageError describes a directory containing
@@ -846,7 +860,7 @@ Found:
 		return p, badGoError
 	}
 	if len(p.GoFiles)+len(p.CgoFiles)+len(p.TestGoFiles)+len(p.XTestGoFiles) == 0 {
-		return p, &NoGoError{p.Dir}
+		return p, &NoGoError{Dir: p.Dir, Ignored: len(p.IgnoredGoFiles) > 0}
 	}
 
 	for tag := range allTags {
@@ -1063,10 +1077,14 @@ func (ctxt *Context) matchFile(dir, name string, returnImports bool, allTags map
 	}
 
 	// Look for +build comments to accept or reject the file.
-	if !ctxt.shouldBuild(data, allTags, binaryOnly) && !ctxt.UseAllFiles {
+	var sawBinaryOnly bool
+	if !ctxt.shouldBuild(data, allTags, &sawBinaryOnly) && !ctxt.UseAllFiles {
 		return
 	}
 
+	if binaryOnly != nil && sawBinaryOnly {
+		*binaryOnly = true
+	}
 	match = true
 	return
 }
@@ -1110,9 +1128,8 @@ var binaryOnlyComment = []byte("//go:binary-only-package")
 //
 // marks the file as applicable only on Windows and Linux.
 //
-// If shouldBuild finds a //go:binary-only-package comment in a file that
-// should be built, it sets *binaryOnly to true. Otherwise it does
-// not change *binaryOnly.
+// If shouldBuild finds a //go:binary-only-package comment in the file,
+// it sets *binaryOnly to true. Otherwise it does not change *binaryOnly.
 //
 func (ctxt *Context) shouldBuild(content []byte, allTags map[string]bool, binaryOnly *bool) bool {
 	sawBinaryOnly := false
@@ -1282,7 +1299,8 @@ func expandSrcDir(str string, srcdir string) (string, bool) {
 // We never pass these arguments to a shell (just to programs we construct argv for), so this should be okay.
 // See golang.org/issue/6038.
 // The @ is for OS X. See golang.org/issue/13720.
-const safeString = "+-.,/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz:$@"
+// The % is for Jenkins. See golang.org/issue/16959.
+const safeString = "+-.,/0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz:$@%"
 const safeSpaces = " "
 
 var safeBytes = []byte(safeSpaces + safeString)

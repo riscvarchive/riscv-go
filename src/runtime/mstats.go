@@ -71,7 +71,7 @@ type mstats struct {
 
 	// Statistics about garbage collector.
 	// Protected by mheap or stopping the world during GC.
-	next_gc         uint64 // goal heap_live for when next GC ends
+	next_gc         uint64 // goal heap_live for when next GC ends; ^0 if disabled
 	last_gc         uint64 // last gc (in absolute time)
 	pause_total_ns  uint64
 	pause_ns        [256]uint64 // circular buffer of recent gc pause lengths
@@ -528,8 +528,7 @@ func updatememstats(stats *gcstats) {
 
 	// Scan all spans and count number of alive objects.
 	lock(&mheap_.lock)
-	for i := uint32(0); i < mheap_.nspan; i++ {
-		s := h_allspans[i]
+	for _, s := range mheap_.allspans {
 		if s.state != mSpanInUse {
 			continue
 		}
@@ -577,19 +576,32 @@ func cachestats() {
 	}
 }
 
+// flushmcache flushes the mcache of allp[i].
+//
+// The world must be stopped.
+//
+//go:nowritebarrier
+func flushmcache(i int) {
+	p := allp[i]
+	if p == nil {
+		return
+	}
+	c := p.mcache
+	if c == nil {
+		return
+	}
+	c.releaseAll()
+	stackcache_clear(c)
+}
+
+// flushallmcaches flushes the mcaches of all Ps.
+//
+// The world must be stopped.
+//
 //go:nowritebarrier
 func flushallmcaches() {
-	for i := 0; ; i++ {
-		p := allp[i]
-		if p == nil {
-			break
-		}
-		c := p.mcache
-		if c == nil {
-			continue
-		}
-		c.releaseAll()
-		stackcache_clear(c)
+	for i := 0; i < int(gomaxprocs); i++ {
+		flushmcache(i)
 	}
 }
 
