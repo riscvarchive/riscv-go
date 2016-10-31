@@ -188,6 +188,55 @@ func init() {
 		{name: "CALLgo", argLength: 1, reg: call, aux: "Int64"},             // call newproc. arg0=mem, auxint=argsize, returns mem
 		{name: "CALLinter", argLength: 2, reg: callInter, aux: "Int64"},     // call fn by pointer. arg0=codeptr, arg1=mem, auxint=argsize, returns mem
 
+		// Generic moves and zeros
+
+		// general unaligned zeroing
+		// arg0 = address of memory to zero (in T0, changed as side effect)
+		// arg1 = address of the last element to zero
+		// arg2 = mem
+		// auxint = alignment
+		// returns mem
+		//	mov	ZERO, (T0)
+		//	ADD	$sz, T0
+		//	BNE	Rarg1, T0, -2(PC)
+		{
+			name:      "LoweredZero",
+			aux:       "Int64",
+			argLength: 3,
+			reg: regInfo{
+				inputs:   []regMask{regNamed["T0"], gpMask},
+				clobbers: regNamed["T0"],
+			},
+			typ:            "Mem",
+			faultOnNilArg0: true,
+		},
+
+		// general unaligned move
+		// arg0 = address of dst memory (in T0, changed as side effect)
+		// arg1 = address of src memory (in T1, changed as side effect)
+		// arg2 = address of the last element of src
+		// arg3 = mem
+		// auxint = alignment
+		// clobbers T2 as a tmp register.
+		// returns mem
+		//	mov	(T1), T2
+		//	mov	T2, (T0)
+		//	ADD	$sz, T0
+		//	ADD	$sz, T1
+		//	BNE	Rarg2, T0, -4(PC)
+		{
+			name:      "LoweredMove",
+			aux:       "Int64",
+			argLength: 4,
+			reg: regInfo{
+				inputs:   []regMask{regNamed["T0"], regNamed["T1"], gpMask},
+				clobbers: regNamed["T0"] | regNamed["T1"] | regNamed["T2"],
+			},
+			typ:            "Mem",
+			faultOnNilArg0: true,
+			faultOnNilArg1: true,
+		},
+
 		// Lowering pass-throughs
 		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},                                                         // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
 		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},                                                                  // scheduler ensures only at beginning of entry block

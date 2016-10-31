@@ -3195,7 +3195,27 @@ func rewriteValueRISCV_OpMove(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
-	return false
+	// match: (Move [s] dst src mem)
+	// cond:
+	// result: (LoweredMove [SizeAndAlign(s).Align()] 		dst 		src 		(ADD <src.Type> src (MOVDconst [SizeAndAlign(s).Size()-moveSize(SizeAndAlign(s).Align(), config)])) 		mem)
+	for {
+		s := v.AuxInt
+		dst := v.Args[0]
+		src := v.Args[1]
+		mem := v.Args[2]
+		v.reset(OpRISCVLoweredMove)
+		v.AuxInt = SizeAndAlign(s).Align()
+		v.AddArg(dst)
+		v.AddArg(src)
+		v0 := b.NewValue0(v.Line, OpRISCVADD, src.Type)
+		v0.AddArg(src)
+		v1 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
+		v1.AuxInt = SizeAndAlign(s).Size() - moveSize(SizeAndAlign(s).Align(), config)
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
 }
 func rewriteValueRISCV_OpMul16(v *Value, config *Config) bool {
 	b := v.Block
@@ -5501,7 +5521,25 @@ func rewriteValueRISCV_OpZero(v *Value, config *Config) bool {
 		v.AddArg(mem)
 		return true
 	}
-	return false
+	// match: (Zero [s] ptr mem)
+	// cond:
+	// result: (LoweredZero [SizeAndAlign(s).Align()] 		ptr 		(ADD <ptr.Type> ptr (MOVDconst [SizeAndAlign(s).Size()-moveSize(SizeAndAlign(s).Align(), config)])) 		mem)
+	for {
+		s := v.AuxInt
+		ptr := v.Args[0]
+		mem := v.Args[1]
+		v.reset(OpRISCVLoweredZero)
+		v.AuxInt = SizeAndAlign(s).Align()
+		v.AddArg(ptr)
+		v0 := b.NewValue0(v.Line, OpRISCVADD, ptr.Type)
+		v0.AddArg(ptr)
+		v1 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
+		v1.AuxInt = SizeAndAlign(s).Size() - moveSize(SizeAndAlign(s).Align(), config)
+		v0.AddArg(v1)
+		v.AddArg(v0)
+		v.AddArg(mem)
+		return true
+	}
 }
 func rewriteValueRISCV_OpZeroExt16to32(v *Value, config *Config) bool {
 	b := v.Block
