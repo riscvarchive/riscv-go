@@ -155,6 +155,28 @@ func storeByType(t ssa.Type) obj.As {
 	}
 }
 
+// largestMove returns the largest move instruction possible and its size,
+// given the alignment of the total size of the move.
+//
+// e.g., a 16-byte move may use MOV, but an 11-byte move must use MOVB.
+//
+// Note that the moves may not be on naturally aligned addresses depending on
+// the source and destination.
+//
+// This matches the calculation in ssa.moveSize.
+func largestMove(alignment int64) (obj.As, int64) {
+	switch {
+	case alignment%8 == 0:
+		return riscv.AMOV, 8
+	case alignment%4 == 0:
+		return riscv.AMOVW, 4
+	case alignment%2 == 0:
+		return riscv.AMOVH, 2
+	default:
+		return riscv.AMOVB, 1
+	}
+}
+
 // markMoves marks any MOVXconst ops that need to avoid clobbering flags.
 // RISC-V has no flags, so this is a no-op.
 func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {}
@@ -352,6 +374,73 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		if gc.Maxarg < v.AuxInt {
 			gc.Maxarg = v.AuxInt
 		}
+
+	case ssa.OpRISCVLoweredZero:
+		mov, sz := largestMove(v.AuxInt)
+
+		//	mov	ZERO, (Rarg0)
+		//	ADD	$sz, Rarg0
+		//	BNE	Rarg1, Rarg0, -2(PC)
+
+		p := gc.Prog(mov)
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = riscv.REG_ZERO
+		p.To.Type = obj.TYPE_MEM
+		p.To.Reg = v.Args[0].Reg()
+
+		p2 := gc.Prog(riscv.AADD)
+		p2.From.Type = obj.TYPE_CONST
+		p2.From.Offset = sz
+		p2.To.Type = obj.TYPE_REG
+		p2.To.Reg = v.Args[0].Reg()
+
+		p3 := gc.Prog(riscv.ABNE)
+		p3.To.Type = obj.TYPE_BRANCH
+		p3.Reg = v.Args[1].Reg()
+		p3.From.Type = obj.TYPE_REG
+		p3.From.Reg = v.Args[0].Reg()
+		gc.Patch(p3, p)
+
+	case ssa.OpRISCVLoweredMove:
+		mov, sz := largestMove(v.AuxInt)
+
+		//	mov	(Rarg1), T2
+		//	mov	T2, (Rarg0)
+		//	ADD	$sz, Rarg0
+		//	ADD	$sz, Rarg1
+		//	BNE	Rarg2, Rarg0, -4(PC)
+
+		p := gc.Prog(mov)
+		p.From.Type = obj.TYPE_MEM
+		p.From.Reg = v.Args[1].Reg()
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = riscv.REG_T2
+
+		p2 := gc.Prog(mov)
+		p2.From.Type = obj.TYPE_REG
+		p2.From.Reg = riscv.REG_T2
+		p2.To.Type = obj.TYPE_MEM
+		p2.To.Reg = v.Args[0].Reg()
+
+		p3 := gc.Prog(riscv.AADD)
+		p3.From.Type = obj.TYPE_CONST
+		p3.From.Offset = sz
+		p3.To.Type = obj.TYPE_REG
+		p3.To.Reg = v.Args[0].Reg()
+
+		p4 := gc.Prog(riscv.AADD)
+		p4.From.Type = obj.TYPE_CONST
+		p4.From.Offset = sz
+		p4.To.Type = obj.TYPE_REG
+		p4.To.Reg = v.Args[1].Reg()
+
+		p5 := gc.Prog(riscv.ABNE)
+		p5.To.Type = obj.TYPE_BRANCH
+		p5.Reg = v.Args[2].Reg()
+		p5.From.Type = obj.TYPE_REG
+		p5.From.Reg = v.Args[1].Reg()
+		gc.Patch(p5, p)
+
 	case ssa.OpRISCVLoweredNilCheck:
 		// Issue a load which will fault if arg is nil.
 		// TODO: optimizations. See arm and amd64 LoweredNilCheck.
