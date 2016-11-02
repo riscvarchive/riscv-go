@@ -441,6 +441,9 @@ const (
 	// 4.2.1: Supervisor Memory-Management Fence Instruction
 	ASFENCEVM
 
+	// The escape hatch. Inserts a single 32-bit word.
+	AWORD
+
 	// Fake instructions.  These get translated by the assembler into other
 	// instructions, based on their operands.
 	AFNEGD

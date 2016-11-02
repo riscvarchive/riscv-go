@@ -99,6 +99,9 @@ start:
 	SEQZ	A5, A5				// 93b71700
 	SNEZ	A5, A5				// b337f000
 
+	// Arbitrary bytes (entered in little-endian mode)
+	WORD	$0x12345678	// WORD $305419896	// 78563412
+
 
 	// M extension
 	MUL	T0, T1, T2			// b3035302

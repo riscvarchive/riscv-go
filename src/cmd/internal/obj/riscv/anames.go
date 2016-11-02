@@ -188,6 +188,7 @@ var Anames = []string{
 	"HRTS",
 	"WFI",
 	"SFENCEVM",
+	"WORD",
 	"FNEGD",
 	"FNEGS",
 	"FNED",
