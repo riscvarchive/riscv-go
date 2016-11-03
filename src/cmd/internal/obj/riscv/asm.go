@@ -1049,6 +1049,14 @@ func encodeUJ(p *obj.Prog) uint32 {
 	return imm | rd<<7 | i.opcode
 }
 
+func validateRaw(p *obj.Prog) {
+	wantImm(p, "raw", p.From, 32)
+}
+
+func encodeRaw(p *obj.Prog) uint32 {
+	return immi(p.From, 32)
+}
+
 type encoding struct {
 	encode   func(*obj.Prog) uint32 // encode returns the machine code for a Prog
 	validate func(*obj.Prog)        // validate validates a Prog, calling ctxt.Diag for any issues
@@ -1083,6 +1091,8 @@ var (
 	uEncoding = encoding{encode: encodeU, validate: validateU, length: 4}
 
 	ujEncoding = encoding{encode: encodeUJ, validate: validateUJ, length: 4}
+
+	rawEncoding = encoding{encode: encodeRaw, validate: validateRaw, length: 4}
 
 	// pseudoOpEncoding panics if encoding is attempted, but does no validation.
 	pseudoOpEncoding = encoding{encode: nil, validate: func(*obj.Prog) {}, length: 0}
@@ -1219,6 +1229,9 @@ var encodingForAs = [...]encoding{
 	AFEQD & obj.AMask: rFFIEncoding,
 	AFLTD & obj.AMask: rFFIEncoding,
 	AFLED & obj.AMask: rFFIEncoding,
+
+	// Escape hatch
+	AWORD & obj.AMask: rawEncoding,
 
 	// Pseudo-operations
 	obj.AFUNCDATA: pseudoOpEncoding,
