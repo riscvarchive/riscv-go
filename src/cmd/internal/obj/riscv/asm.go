@@ -441,13 +441,21 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				}
 			case obj.TYPE_REG:
 				switch p.To.Type {
-				case obj.TYPE_REG: // MOV Ra, Rb -> ADDI $0, Ra, Rb
-					if p.As != AMOV {
+				case obj.TYPE_REG:
+					switch p.As {
+					case AMOV: // MOV Ra, Rb -> ADDI $0, Ra, Rb
+						p.As = AADDI
+						*p.From3 = p.From
+						p.From = obj.Addr{Type: obj.TYPE_CONST}
+					case AMOVF: // MOVF Ra, Rb -> FSGNJS Ra, Ra, Rb
+						p.As = AFSGNJS
+						*p.From3 = p.From
+					case AMOVD: // MOVD Ra, Rb -> FSGNJD Ra, Ra, Rb
+						p.As = AFSGNJD
+						*p.From3 = p.From
+					default:
 						ctxt.Diag("progedit: unsupported register-register move at %v", p)
 					}
-					p.As = AADDI
-					*p.From3 = p.From
-					p.From = obj.Addr{Type: obj.TYPE_CONST}
 				case obj.TYPE_MEM: // MOV Rs, c(Rd) -> S $c, Rs, Rd
 					switch p.As {
 					case AMOVBU, AMOVHU, AMOVWU:
