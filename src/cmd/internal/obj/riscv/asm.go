@@ -692,8 +692,24 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	}
 }
 
-// Split32BitImmediate splits a 32-bit immediate into a 20-bit upper immediate
-// and a signed 12-bit lower immediate to be added to the upper result.
+// signExtend sign extends val starting at bit bit.
+func signExtend(val int64, bit uint) int64 {
+	// Mask off the bits to keep.
+	low := val
+	low &= 1<<bit - 1
+
+	// Generate upper sign bits, leaving space for the bottom bits.
+	val >>= bit - 1
+	val <<= 63
+	val >>= 64 - bit
+	val |= low  // put the low bits into place.
+
+	return val
+}
+
+// Split32BitImmediate splits a signed 32-bit immediate into a signed 20-bit
+// upper immediate and a signed 12-bit lower immediate to be added to the upper
+// result.
 //
 // For example, high may be used in LUI and low in a following ADDI to generate
 // a full 32-bit constant.
@@ -721,14 +737,8 @@ func Split32BitImmediate(imm int64) (low, high int64, err error) {
 		high++
 	}
 
-	// Generate our low 12 bit value.
-	lowBits := imm
-	lowBits &= 1<<12 - 1 // mask off the bits we just handled
-	// Generate upper sign bits, leaving space for the bottom 12 bits.
-	low = int64(lowBits >> 11)
-	low <<= 63
-	low >>= 64 - 12
-	low |= lowBits // put the low bits into place
+	high = signExtend(high, 20)
+	low = signExtend(imm, 12)
 
 	return
 }
