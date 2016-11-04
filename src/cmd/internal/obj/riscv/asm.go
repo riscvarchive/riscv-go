@@ -201,12 +201,24 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// p.From is actually an _output_ for this instruction.
 		p.From.Type = obj.TYPE_REG
 		p.From.Reg = REG_ZERO
+
 		switch p.To.Type {
 		case obj.TYPE_BRANCH:
 			p.As = AJAL
 		case obj.TYPE_MEM:
-			p.As = AJALR
-			lowerjalr(p)
+			switch p.To.Name {
+			case obj.NAME_AUTO, obj.NAME_PARAM, obj.NAME_NONE:
+				p.As = AJALR
+				lowerjalr(p)
+			case obj.NAME_EXTERN:
+				// JMP to symbol.
+				p.As = AJAL
+				// We will emit a relocation for this. Until then,
+				// we'll encode this as a constant.
+				p.To.Type = obj.TYPE_CONST
+			default:
+				ctxt.Diag("progedit: unsupported name %d for %v", p.To.Name, p)
+			}
 		default:
 			panic(fmt.Sprintf("unhandled type %+v", p.To.Type))
 		}
@@ -315,12 +327,15 @@ func InvertBranch(i obj.As) obj.As {
 }
 
 // containsCall reports whether the symbol contains a CALL (or equivalent)
-// instruction.
+// instruction. Must be called after progedit.
 func containsCall(sym *obj.LSym) bool {
+	// CALLs are JAL with link register RA.
 	for p := sym.Text; p != nil; p = p.Link {
 		switch p.As {
-		case obj.ACALL, AJAL, AJALR:
-			return true
+		case AJAL:
+			if p.From.Type == obj.TYPE_REG && p.From.Reg == REG_RA {
+				return true
+			}
 		}
 	}
 
@@ -1267,7 +1282,7 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 		switch p.As {
 		case AJAL:
 			if p.To.Sym != nil {
-				// This is a CALL which needs a relocation.
+				// This is a CALL/JMP which needs a relocation.
 				rel := obj.Addrel(cursym)
 				rel.Off = int32(p.Pc)
 				rel.Siz = 4

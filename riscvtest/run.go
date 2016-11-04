@@ -5,12 +5,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 )
 
 var tests = [...]struct {
 	name string
 	want int
+	dir  bool  // test is a multi-file package in its own directory
 }{
 	{name: "hellomain", want: 42},
 	{name: "loadstore", want: 0},
@@ -42,6 +44,7 @@ var tests = [...]struct {
 	{name: "global"},
 	{name: "live"},
 	{name: "typeswitch"},
+	{name: "jmp", dir: true},
 }
 
 func main() {
@@ -51,18 +54,32 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer os.Remove("tmp")
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatalf("unable to get working directory: %v", err)
+	}
+
+	tmp := filepath.Join(cwd, "tmp")
+	defer os.Remove(tmp)
 	for _, test := range tests {
-		filename := test.name + ".go"
 		// build
-		cmd := exec.Command("go", "build", "-o", "tmp", filename)
+		cmd := exec.Command("go", "build", "-o", tmp)
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=riscv")
+		if test.dir {
+			// Build everything in directory.
+			cmd.Dir = filepath.Join(cwd, test.name)
+		} else {
+			// Build the file.
+			filename := test.name + ".go"
+			cmd.Args = append(cmd.Args, filename)
+		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("compilation of %q failed:\n%s\n", filename, out)
+			log.Printf("compilation of %q failed:\n%s\n", test.name, out)
 			failed = true
 			continue
 		}
+
 		// run
 		cmd = exec.Command(spike, "pk", "tmp")
 		out, err = cmd.CombinedOutput()
@@ -70,20 +87,20 @@ func main() {
 			if test.want == 0 {
 				continue
 			}
-			fmt.Printf("rc(%q)=0, want %d\n", filename, test.want)
+			fmt.Printf("rc(%q)=0, want %d\n", test.name, test.want)
 			failed = true
 			continue
 		}
 		ee, ok := err.(*exec.ExitError)
 		if !ok {
-			log.Printf("%q: unexpected execution error type %T: %v", filename, err, err)
+			log.Printf("%q: unexpected execution error type %T: %v", test.name, err, err)
 			failed = true
 			continue
 		}
 		ws := ee.ProcessState.Sys().(syscall.WaitStatus)
 		rc := ws.ExitStatus()
 		if rc != test.want {
-			fmt.Printf("rc(%q)=%d, want %d\n", filename, rc, test.want)
+			fmt.Printf("rc(%q)=%d, want %d\n", test.name, rc, test.want)
 			failed = true
 			continue
 		}
