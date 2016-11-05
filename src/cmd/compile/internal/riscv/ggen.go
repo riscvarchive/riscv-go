@@ -74,35 +74,41 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 	p = appendpp(p, riscv.AADD,
 		obj.Addr{Type: obj.TYPE_CONST, Offset: frame + lo},
 		&obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_SP},
-		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0})
+		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
+		0)
 	p = appendpp(p, riscv.AADD,
 		obj.Addr{Type: obj.TYPE_CONST, Offset: cnt},
 		&obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
-		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T1})
+		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T1},
+		0)
 	p = appendpp(p, riscv.AMOVB,
 		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_ZERO},
 		nil,
-		obj.Addr{Type: obj.TYPE_MEM, Reg: riscv.REG_T0})
+		obj.Addr{Type: obj.TYPE_MEM, Reg: riscv.REG_T0},
+		0)
 	loop := p
 	p = appendpp(p, riscv.AADD,
 		obj.Addr{Type: obj.TYPE_CONST, Offset: 1},
 		nil,
-		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0})
+		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
+		0)
 	p = appendpp(p, riscv.ABNE,
 		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
-		&obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T1},
-		obj.Addr{Type: obj.TYPE_BRANCH})
+		nil,
+		obj.Addr{Type: obj.TYPE_BRANCH},
+                riscv.REG_T1)
 	gc.Patch(p, loop)
 	return p
 }
 
-func appendpp(p *obj.Prog, as obj.As, from obj.Addr, from3 *obj.Addr, to obj.Addr) *obj.Prog {
+func appendpp(p *obj.Prog, as obj.As, from obj.Addr, from3 *obj.Addr, to obj.Addr, reg int16) *obj.Prog {
 	q := gc.Ctxt.NewProg()
 	q.As = as
 	q.Lineno = p.Lineno
 	q.From = from
 	q.From3 = from3
 	q.To = to
+	q.Reg = reg
 	q.Link = p.Link
 	p.Link = q
 	return q
