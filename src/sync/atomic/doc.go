@@ -51,6 +51,10 @@ import (
 // alignment of 64-bit words accessed atomically. The first word in a global
 // variable or in an allocated struct or slice can be relied upon to be
 // 64-bit aligned.
+//
+// On RISC-V, it is the caller's responsibility to arrange for word alignment of
+// words accessed atomically. That is, 64-bit words must be 64-bit aligned, and
+// 32-bit words must be 32-bit aligned.
 
 // SwapInt32 atomically stores new into *addr and returns the previous *addr value.
 func SwapInt32(addr *int32, new int32) (old int32)
