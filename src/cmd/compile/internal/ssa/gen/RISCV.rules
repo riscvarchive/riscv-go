@@ -422,22 +422,14 @@
 (Addr {sym} base) -> (MOVaddr {sym} base)
 
 // Conditional branches
-(If (Eq64    x y) yes no) -> (BRANCH (BEQ  x y) yes no)
-(If (Neq64   x y) yes no) -> (BRANCH (BNE  x y) yes no)
-(If (Less64  x y) yes no) -> (BRANCH (BLT  x y) yes no)
-(If (Less64U x y) yes no) -> (BRANCH (BLTU x y) yes no)
-(If (Geq64   x y) yes no) -> (BRANCH (BGE  x y) yes no)
-(If (Geq64U  x y) yes no) -> (BRANCH (BGEU x y) yes no)
-
-// Conditional branches using reversed operands
-(If (Leq64      x y) yes no) -> (BRANCH (BGE  y x) yes no)
-(If (Leq64U     x y) yes no) -> (BRANCH (BGEU y x) yes no)
-(If (Greater64  x y) yes no) -> (BRANCH (BLT  y x) yes no)
-(If (Greater64U x y) yes no) -> (BRANCH (BLTU y x) yes no)
-
-// Conditional branches on a boolean value
-// This must be last in the rules file, so that all specialized If block rewrites take higher priority.
-(If cond yes no) && cond.Type.IsBoolean() -> (BRANCH (BNE (MOVDconst <cond.Type>) (ANDI <cond.Type> [1] cond)) yes no)
+//
+// cond is 1 if true. BNE compares against 0.
+//
+// TODO(prattmic): RISCV branch instructions take two operands to compare,
+// so we could generate more efficient code by computing the condition in the
+// branch itself. Unfortunately, the compiler doesn't current support Blocks
+// with two control values. Revisit adding support for two control values.
+(If cond yes no) -> (BNE cond yes no)
 
 // Calls
 (StaticCall  [argwid] {target}      mem) -> (CALLstatic  [argwid] {target}      mem)

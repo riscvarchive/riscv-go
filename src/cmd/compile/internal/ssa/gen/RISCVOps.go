@@ -72,11 +72,8 @@ func init() {
 	var (
 		gpstore = regInfo{inputs: []regMask{gpspsbMask, gpspMask, 0}} // SB in first input so we can load from a global, but not in second to avoid using SB as a temporary register
 		gp01    = regInfo{outputs: []regMask{gpMask}}
-		// FIXME(prattmic): This is a hack to get things to build, but it probably
-		// not correct.
 		gp11   = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{gpMask}}
 		gp21   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{gpMask}}
-		gp20   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{}}
 		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
 		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
 
@@ -160,20 +157,6 @@ func init() {
 		{name: "SLTI", argLength: 1, reg: gp11, asm: "SLTI", aux: "Int64"},   // arg0 < auxint, result is 0 or 1
 		{name: "SLTU", argLength: 2, reg: gp21, asm: "SLTU"},                 // arg0 < arg1, unsigned, result is 0 or 1
 		{name: "SLTIU", argLength: 1, reg: gp11, asm: "SLTIU", aux: "Int64"}, // arg0 < auxint, unsigned, result is 0 or 1
-
-		// Flag pseudo-ops.
-		// RISC-V doesn't have flags, but SSA wants branches to be flag-based.
-		// These are pseudo-ops that contain the arguments to the comparison.
-		// There is a single branching block type, BRANCH,
-		// which accepts one of these values as its control.
-		// During code generation we consult the control value
-		// to emit the correct conditional branch instruction.
-		{name: "BEQ", argLength: 2, reg: gp20, asm: "BEQ", typ: "Flags"},   // branch if arg0 == arg1
-		{name: "BNE", argLength: 2, reg: gp20, asm: "BNE", typ: "Flags"},   // branch if arg0 != arg1
-		{name: "BLT", argLength: 2, reg: gp20, asm: "BLT", typ: "Flags"},   // branch if arg0 < arg1
-		{name: "BLTU", argLength: 2, reg: gp20, asm: "BLTU", typ: "Flags"}, // branch if arg0 < arg1, unsigned
-		{name: "BGE", argLength: 2, reg: gp20, asm: "BGE", typ: "Flags"},   // branch if arg0 >= arg1
-		{name: "BGEU", argLength: 2, reg: gp20, asm: "BGEU", typ: "Flags"}, // branch if arg0 >= arg1, unsigned
 
 		// MOVconvert converts between pointers and integers.
 		// We have a special op for this so as to not confuse GC
@@ -284,7 +267,7 @@ func init() {
 	}
 
 	RISCVblocks := []blockData{
-		{name: "BRANCH"}, // see flag pseudo-ops above.
+		{name: "BNE"},  // Control != 0 (take a register)
 	}
 
 	archs = append(archs, arch{

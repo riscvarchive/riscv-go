@@ -93,7 +93,7 @@ const (
 	BlockPPC64FGT
 	BlockPPC64FGE
 
-	BlockRISCVBRANCH
+	BlockRISCVBNE
 
 	BlockS390XEQ
 	BlockS390XNE
@@ -192,7 +192,7 @@ var blockString = [...]string{
 	BlockPPC64FGT: "FGT",
 	BlockPPC64FGE: "FGE",
 
-	BlockRISCVBRANCH: "BRANCH",
+	BlockRISCVBNE: "BNE",
 
 	BlockS390XEQ:  "EQ",
 	BlockS390XNE:  "NE",
@@ -1296,12 +1296,6 @@ const (
 	OpRISCVSLTI
 	OpRISCVSLTU
 	OpRISCVSLTIU
-	OpRISCVBEQ
-	OpRISCVBNE
-	OpRISCVBLT
-	OpRISCVBLTU
-	OpRISCVBGE
-	OpRISCVBGEU
 	OpRISCVMOVconvert
 	OpRISCVCALLstatic
 	OpRISCVCALLclosure
@@ -16232,72 +16226,6 @@ var opcodeTable = [...]opInfo{
 			},
 			outputs: []outputInfo{
 				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BEQ",
-		argLen: 2,
-		asm:    riscv.ABEQ,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BNE",
-		argLen: 2,
-		asm:    riscv.ABNE,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BLT",
-		argLen: 2,
-		asm:    riscv.ABLT,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BLTU",
-		argLen: 2,
-		asm:    riscv.ABLTU,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BGE",
-		argLen: 2,
-		asm:    riscv.ABGE,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-		},
-	},
-	{
-		name:   "BGEU",
-		argLen: 2,
-		asm:    riscv.ABGEU,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-				{1, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
 			},
 		},
 	},
