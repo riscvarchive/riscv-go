@@ -340,10 +340,6 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.From.Reg = v.Args[0].Reg()
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = v.Reg()
-	case ssa.OpRISCVBEQ, ssa.OpRISCVBNE, ssa.OpRISCVBLT, ssa.OpRISCVBLTU, ssa.OpRISCVBGE, ssa.OpRISCVBGEU:
-		// These are flag pseudo-ops used as control values for conditional branch blocks.
-		// See the discussion in RISCVOps.
-		// The actual conditional branch instruction will be issued in ssaGenBlock.
 	case ssa.OpRISCVCALLstatic, ssa.OpRISCVCALLclosure, ssa.OpRISCVCALLdefer, ssa.OpRISCVCALLgo, ssa.OpRISCVCALLinter:
 		if v.Op == ssa.OpRISCVCALLstatic && v.Aux.(*gc.Sym) == gc.Deferreturn.Sym {
 			// Deferred calls will appear to be returning to
@@ -513,32 +509,13 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Name = obj.NAME_EXTERN
 		p.To.Sym = gc.Linksym(b.Aux.(*gc.Sym))
-	case ssa.BlockRISCVBRANCH:
-		// Conditional branch. The control value tells us what kind.
-		v := b.Control
-
-		// The control value need not be in this block, as the code
-		// below asserts. regalloc will ensure that it is in a register
-		// at this point so we can use it.
-		//
-		// FIXME(prattmic): Remove this block. It is left for now for
-		// easy debugging should the assertion above turn out to be
-		// incorrect after all.
-		if false {
-			// Double-check that the value is exactly where we expect it.
-			if v.Block != b {
-				gc.Fatalf("control value in the wrong block %v, want %v: %v", v.Block, b, v.LongString())
-			}
-			if v != b.Values[len(b.Values)-1] {
-				gc.Fatalf("badly scheduled control value for block %v: %v", b, v.LongString())
-			}
-		}
-
-		p := gc.Prog(v.Op.Asm())
+	case ssa.BlockRISCVBNE:
+		// Conditional branch if Control != 0.
+		p := gc.Prog(riscv.ABNE)
 		p.To.Type = obj.TYPE_BRANCH
-		p.Reg = v.Args[1].Reg()
+		p.Reg = b.Control.Reg()
 		p.From.Type = obj.TYPE_REG
-		p.From.Reg = v.Args[0].Reg()
+		p.From.Reg = riscv.REG_ZERO
 		switch next {
 		case b.Succs[0].Block():
 			p.As = riscv.InvertBranch(p.As)
