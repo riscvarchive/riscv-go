@@ -32,13 +32,13 @@
 
 #include "textflag.h"
 
-TEXT ·SwapInt32(SB),NOSPLIT,$0-24
+TEXT ·SwapInt32(SB),NOSPLIT,$0-20
 	JMP	·SwapUint32(SB)
 
 TEXT ·SwapInt64(SB),NOSPLIT,$0-24
 	JMP	·SwapUint64(SB)
 
-TEXT ·SwapUint32(SB),NOSPLIT,$0-24
+TEXT ·SwapUint32(SB),NOSPLIT,$0-20
 	MOV	addr+0(FP), A0
 	MOVW	new+8(FP), A1
 	WORD	$0x0cb525af	// amoswap.w.aq a1,a1,(a0)
@@ -58,30 +58,30 @@ TEXT ·SwapUintptr(SB),NOSPLIT,$0-24
 TEXT ·SwapPointer(SB),NOSPLIT,$0-24
 	JMP	·SwapUint64(SB)
 
-TEXT ·CompareAndSwapInt32(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapInt32(SB),NOSPLIT,$0-17
 	JMP	·CompareAndSwapUint32(SB)
 
-TEXT ·CompareAndSwapInt64(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapInt64(SB),NOSPLIT,$0-25
 	JMP	·CompareAndSwapUint64(SB)
 
-TEXT ·CompareAndSwapUint32(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapUint32(SB),NOSPLIT,$0-17
 	MOV	addr+0(FP), A0
 	MOVW	old+8(FP), A1
-	MOVW	new+16(FP), A2
+	MOVW	new+12(FP), A2
 cas:
 	WORD	$0x140522af	// lr.w.aq t0,(a0)
 	BNE	T0, A1, fail
 	WORD	$0x1cc5252f	// sc.w.aq a0,a2,(a0)
 	// a0 = 0 iff the sc succeeded. Convert that to a boolean.
 	SLTIU	$1, A0, A0
-	MOV	A0, swapped+24(FP)
+	MOV	A0, swapped+16(FP)
 	RET
 fail:
 	MOV	$0, A0
-	MOV	A0, swapped+24(FP)
+	MOV	A0, swapped+16(FP)
 	RET
 
-TEXT ·CompareAndSwapUint64(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapUint64(SB),NOSPLIT,$0-25
 	MOV	addr+0(FP), A0
 	MOV	old+8(FP), A1
 	MOV	new+16(FP), A2
@@ -98,16 +98,16 @@ fail:
 	MOV	A0, swapped+24(FP)
 	RET
 
-TEXT ·CompareAndSwapUintptr(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapUintptr(SB),NOSPLIT,$0-25
 	JMP	·CompareAndSwapUint64(SB)
 
-TEXT ·CompareAndSwapPointer(SB),NOSPLIT,$0-32
+TEXT ·CompareAndSwapPointer(SB),NOSPLIT,$0-25
 	JMP	·CompareAndSwapUint64(SB)
 
-TEXT ·AddInt32(SB),NOSPLIT,$0-24
+TEXT ·AddInt32(SB),NOSPLIT,$0-20
 	JMP	·AddUint32(SB)
 
-TEXT ·AddUint32(SB),NOSPLIT,$0-24
+TEXT ·AddUint32(SB),NOSPLIT,$0-20
 	MOV	addr+0(FP), A0
 	MOVW	delta+8(FP), A1
 	WORD	$0x04b5252f	// amoadd.w.aq a0,a1,(a0)
@@ -129,13 +129,13 @@ TEXT ·AddUint64(SB),NOSPLIT,$0-24
 TEXT ·AddUintptr(SB),NOSPLIT,$0-24
 	JMP	·AddUint64(SB)
 
-TEXT ·LoadInt32(SB),NOSPLIT,$0-16
+TEXT ·LoadInt32(SB),NOSPLIT,$0-12
 	JMP	·LoadUint32(SB)
 
 TEXT ·LoadInt64(SB),NOSPLIT,$0-16
 	JMP	·LoadUint64(SB)
 
-TEXT ·LoadUint32(SB),NOSPLIT,$0-16
+TEXT ·LoadUint32(SB),NOSPLIT,$0-12
 	MOV	addr+0(FP), A0
 	// Since addr is aligned (see comments in doc.go), this load is atomic
 	// automatically.
@@ -157,13 +157,13 @@ TEXT ·LoadUintptr(SB),NOSPLIT,$0-16
 TEXT ·LoadPointer(SB),NOSPLIT,$0-16
 	JMP	·LoadUint64(SB)
 
-TEXT ·StoreInt32(SB),NOSPLIT,$0-16
+TEXT ·StoreInt32(SB),NOSPLIT,$0-12
 	JMP	·StoreUint32(SB)
 
 TEXT ·StoreInt64(SB),NOSPLIT,$0-16
 	JMP	·StoreUint64(SB)
 
-TEXT ·StoreUint32(SB),NOSPLIT,$0-16
+TEXT ·StoreUint32(SB),NOSPLIT,$0-12
 	MOV	addr+0(FP), A0
 	MOVW	val+8(FP), A1
 	// Since addr is aligned (see comments in doc.go), this store is atomic
