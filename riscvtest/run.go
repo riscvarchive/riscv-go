@@ -12,7 +12,7 @@ import (
 var tests = [...]struct {
 	name string
 	want int
-	dir  bool  // test is a multi-file package in its own directory
+	dir  bool // test is a multi-file package in its own directory
 }{
 	{name: "hellomain", want: 42},
 	{name: "loadstore", want: 0},
