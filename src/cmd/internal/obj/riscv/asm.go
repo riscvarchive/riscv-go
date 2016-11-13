@@ -532,7 +532,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					//
 					// Or remove REG_TMP from the general purposes registers used by the compiler
 					// and emulate riscv.rules, using REG_TMP as the 32 bit value staging ground?
-					ctxt.Diag("%v: constant %d too large; see riscv.rules MOVQconst for how to make a 64 bit constant: ", p, off, err)
+					ctxt.Diag("%v: constant %d too large; see riscv.rules MOVQconst for how to make a 64 bit constant: %v", p, off, err)
 				}
 
 				// LUI is only necessary if the offset doesn't fit in 12-bits.
@@ -717,7 +717,7 @@ func signExtend(val int64, bit uint) int64 {
 	val >>= bit - 1
 	val <<= 63
 	val >>= 64 - bit
-	val |= low  // put the low bits into place.
+	val |= low // put the low bits into place.
 
 	return val
 }
