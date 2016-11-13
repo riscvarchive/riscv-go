@@ -2,7 +2,7 @@ package main
 
 //go:noinline
 func maxInt32() uint32 {
-	return 1<<31-1
+	return 1<<31 - 1
 }
 
 func main() {

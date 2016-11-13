@@ -96,7 +96,7 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
 		nil,
 		obj.Addr{Type: obj.TYPE_BRANCH},
-                riscv.REG_T1)
+		riscv.REG_T1)
 	gc.Patch(p, loop)
 	return p
 }
