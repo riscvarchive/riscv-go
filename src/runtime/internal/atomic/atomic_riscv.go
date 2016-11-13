@@ -78,5 +78,5 @@ func Store64(ptr *uint64, val uint64) {
 }
 
 // NO go:nosplit annotation; see atomic_pointer.go.
-func Storep1(ptr unsafe.Pointer, val unsafe.Pointer) {
+func StorepNoWB(ptr unsafe.Pointer, val unsafe.Pointer) {
 }
