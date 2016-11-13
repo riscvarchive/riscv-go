@@ -4,11 +4,6 @@
 
 package gc
 
-import (
-	"cmd/internal/sys"
-	"log"
-)
-
 //	case OADD:
 //		if(n->right->op == OLITERAL) {
 //			v = n->right->vconst;
@@ -93,12 +88,6 @@ func anyinit(n []*Node) bool {
 }
 
 func fninit(n []*Node) {
-	if Thearch.LinkArch.Family == sys.RISCV {
-		// FIXME: remove once we can link in the runtime (even if its not entirely working)
-		log.Println("TODO: init function needs runtime.throwinit")
-		return
-	}
-
 	nf := initfix(n)
 	if !anyinit(nf) {
 		return
