@@ -147,6 +147,7 @@ var ptrSizeMap = map[string]int64{
 	"mips64le": 8,
 	"ppc64":    8,
 	"ppc64le":  8,
+	"riscv":    8,
 	"s390":     4,
 	"s390x":    8,
 }
@@ -160,6 +161,7 @@ var intSizeMap = map[string]int64{
 	"mips64le": 8,
 	"ppc64":    8,
 	"ppc64le":  8,
+	"riscv":    8,
 	"s390":     4,
 	"s390x":    8,
 }
