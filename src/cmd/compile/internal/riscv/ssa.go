@@ -493,6 +493,11 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 		gc.Prog(obj.AUNDEF)
 	case ssa.BlockRet:
 		gc.Prog(obj.ARET)
+	case ssa.BlockRetJmp:
+		p := gc.Prog(obj.AJMP)
+		p.To.Type = obj.TYPE_MEM
+		p.To.Name = obj.NAME_EXTERN
+		p.To.Sym = gc.Linksym(b.Aux.(*gc.Sym))
 	case ssa.BlockRISCVBRANCH:
 		// Conditional branch. The control value tells us what kind.
 		v := b.Control
