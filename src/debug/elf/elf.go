@@ -237,6 +237,7 @@ const (
 	EM_TINYJ       Machine = 61  /* Advanced Logic Corp. TinyJ processor. */
 	EM_X86_64      Machine = 62  /* Advanced Micro Devices x86-64 */
 	EM_AARCH64     Machine = 183 /* ARM 64-bit Architecture (AArch64) */
+	EM_RISCV       Machine = 243 /* RISC-V */
 
 	/* Non-standard or deprecated. */
 	EM_486         Machine = 6      /* Intel i486. */
@@ -289,6 +290,7 @@ var machineStrings = []intName{
 	{60, "EM_ST100"},
 	{61, "EM_TINYJ"},
 	{62, "EM_X86_64"},
+	{243, "EM_RISCV"},
 
 	/* Non-standard or deprecated. */
 	{6, "EM_486"},
@@ -1724,6 +1726,42 @@ var rppc64Strings = []intName{
 
 func (i R_PPC64) String() string   { return stringName(uint32(i), rppc64Strings, false) }
 func (i R_PPC64) GoString() string { return stringName(uint32(i), rppc64Strings, true) }
+
+// Relocation types for RISC-V processors.
+type R_RISCV int
+
+const (
+	R_RISCV_NONE         R_RISCV = 0  /* No relocation. */
+	R_RISCV_32           R_RISCV = 1  /* Add 32 bit zero extended symbol value */
+	R_RISCV_64           R_RISCV = 2  /* Add 64 bit symbol value. */
+	R_RISCV_RELATIVE     R_RISCV = 3  /* Add load address of shared object. */
+	R_RISCV_COPY         R_RISCV = 4  /* Copy data from shared object. */
+	R_RISCV_JUMP_SLOT    R_RISCV = 5  /* Set GOT entry to code address. */
+	R_RISCV_TLS_DTPMOD32 R_RISCV = 6  /* 32 bit ID of module containing symbol */
+	R_RISCV_TLS_DTPMOD64 R_RISCV = 7  /* ID of module containing symbol */
+	R_RISCV_TLS_DTPREL32 R_RISCV = 8  /* 32 bit relative offset in TLS block */
+	R_RISCV_TLS_DTPREL64 R_RISCV = 9  /* Relative offset in TLS block */
+	R_RISCV_TLS_TPREL32  R_RISCV = 10 /* 32 bit relative offset in static TLS block */
+	R_RISCV_TLS_TPREL64  R_RISCV = 11 /* Relative offset in static TLS block */
+)
+
+var rxRISCVStrings = []intName{
+	{0, "R_RISCV_NONE"},
+	{1, "R_RISCV_32"},
+	{2, "R_RISCV_64"},
+	{3, "R_RISCV_RELATIVE"},
+	{4, "R_RISCV_COPY"},
+	{5, "R_RISCV_JUMP_SLOT"},
+	{6, "R_RISCV_TLS_DTPMOD32"},
+	{7, "R_RISCV_TLS_DTPMOD64"},
+	{8, "R_RISCV_TLS_DTPREL32"},
+	{9, "R_RISCV_TLS_DTPREL64"},
+	{10, "R_RISCV_TLS_TPREL32"},
+	{11, "R_RISCV_TLS_TPREL64"},
+}
+
+func (i R_RISCV) String() string   { return stringName(uint32(i), rxRISCVStrings, false) }
+func (i R_RISCV) GoString() string { return stringName(uint32(i), rxRISCVStrings, true) }
 
 // Relocation types for s390x processors.
 type R_390 int
