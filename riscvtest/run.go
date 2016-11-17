@@ -23,7 +23,7 @@ var tests = [...]struct {
 	// {name: "rem", want: 12}, // TODO: uncomment when we fix the runtime.panicdivide linker failure
 	{name: "fadd", want: 12},
 	{name: "dadd", want: 12},
-	{name: "fmv", want: 5},
+	{name: "fmv"},
 	{name: "dmv", want: 5},
 	{name: "zero8", want: 3},
 	{name: "cmp"},
