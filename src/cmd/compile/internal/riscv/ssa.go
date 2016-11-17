@@ -288,7 +288,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		// Convert the float to the equivalent integer literal so we can
 		// move it using existing infrastructure.
 		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = int64(math.Float32bits(float32(math.Float64frombits(uint64(v.AuxInt)))))
+		p.From.Offset = int64(int32(math.Float32bits(float32(math.Float64frombits(uint64(v.AuxInt))))))
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = v.Reg()
 	case ssa.OpRISCVMOVaddr:
