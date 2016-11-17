@@ -483,6 +483,21 @@ func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
 	s.SetLineno(b.Line)
 
 	switch b.Kind {
+	case ssa.BlockDefer:
+		// defer returns in A0:
+		// 0 if we should continue executing
+		// 1 if we should jump to deferreturn call
+		p := gc.Prog(riscv.ABNE)
+		p.To.Type = obj.TYPE_BRANCH
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = riscv.REG_ZERO
+		p.Reg = riscv.REG_A0
+		s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[1].Block()})
+		if b.Succs[0].Block() != next {
+			p := gc.Prog(obj.AJMP)
+			p.To.Type = obj.TYPE_BRANCH
+			s.Branches = append(s.Branches, gc.Branch{P: p, B: b.Succs[0].Block()})
+		}
 	case ssa.BlockPlain:
 		if b.Succs[0].Block() != next {
 			p := gc.Prog(obj.AJMP)
