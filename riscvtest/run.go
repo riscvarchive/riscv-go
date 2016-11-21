@@ -45,6 +45,7 @@ var tests = [...]struct {
 	{name: "live"},
 	{name: "typeswitch"},
 	{name: "immediate"},
+	{name: "largestack"},
 	{name: "jmp", dir: true},
 }
 
@@ -76,7 +77,7 @@ func main() {
 		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("compilation of %q failed:\n%s\n", test.name, out)
+			log.Printf("compilation of %q failed:\n%s: %s\n", test.name, out, err)
 			failed = true
 			continue
 		}
