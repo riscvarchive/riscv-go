@@ -647,6 +647,130 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		}
 	}
 
+	// Split immediates larger that 12-bits
+	for p := cursym.Text; p != nil; p = p.Link {
+		switch p.As {
+		// <opi> $imm, FROM3, TO
+		case AADDI, AANDI, AORI, AXORI:
+			// LUI $high, TMP
+			// ADDI $low, TMP, TMP
+			// <op> TMP, FROM3, TO
+			q := *p
+			low, high, err := Split32BitImmediate(p.From.Offset)
+			if err != nil {
+				ctxt.Diag("%v: constant %d too large", p, p.From.Offset, err)
+			}
+			if high == 0 {
+				break // no need to split
+			}
+
+			p.As = ALUI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: high}
+			p.From3 = nil
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.Spadj = 0 // needed if TO is SP
+			p = obj.Appendp(ctxt, p)
+
+			p.As = AADDI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: low}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			switch q.As {
+			case AADDI:
+				p.As = AADD
+			case AANDI:
+				p.As = AAND
+			case AORI:
+				p.As = AOR
+			case AXORI:
+				p.As = AXOR
+			default:
+				ctxt.Diag("progedit: unsupported inst %v for splitting", q)
+			}
+			p.Spadj = q.Spadj
+			p.To = q.To
+			p.From3 = q.From3
+			p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+
+		// <load> $imm, FROM3, TO (load $imm+(FROM3), TO)
+		case ALD, ALB, ALH, ALW, ALBU, ALHU:
+			// LUI $high, TMP
+			// ADDI $low, TMP, TMP
+			// ADD TMP, FROM3, TMP
+			// <load> $0, TMP, TO
+			q := *p
+			low, high, err := Split32BitImmediate(p.From.Offset)
+			if err != nil {
+				ctxt.Diag("%v: constant %d too large", p, p.From.Offset)
+			}
+			if high == 0 {
+				break // no need to split
+			}
+
+			p.As = ALUI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: high}
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = AADDI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: low}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = AADD
+			p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.From3 = q.From3
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = q.As
+			p.To = q.To
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+
+		// <store> $imm, FROM3, TO (store $imm+(TO), FROM3)
+		case ASD, ASB, ASH, ASW:
+			// LUI $high, TMP
+			// ADDI $low, TMP, TMP
+			// ADD TMP, TO, TMP
+			// <store> $0, FROM3, TMP
+			q := *p
+			low, high, err := Split32BitImmediate(p.From.Offset)
+			if err != nil {
+				ctxt.Diag("%v: constant %d too large", p, p.From.Offset)
+			}
+			if high == 0 {
+				break // no need to split
+			}
+
+			p.As = ALUI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: high}
+			p.From3 = nil
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = AADDI
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: low}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = AADD
+			p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: q.To.Reg}
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p = obj.Appendp(ctxt, p)
+
+			p.As = q.As
+			p.From3 = q.From3
+			p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+		}
+	}
+
 	// Expand each long branch into a short branch and a jump.  This is a
 	// fairly inefficient algorithm in theory, but it's only pathological
 	// when there are a large quantity of long branches, which is unusual.
