@@ -18,7 +18,7 @@ TEXT runtime·memmove(SB),NOSPLIT,$-0-24
 	BLTU	T1, T0, b
 
 	// If less than eight bytes, do one byte at a time.
-	SLTU	T2, $8, T3
+	SLTU	$8, T2, T3
 	BNE	T3, ZERO, f_outcheck
 
 	// Do one byte at a time until from is eight-aligned.
@@ -59,7 +59,7 @@ f_outcheck:
 b:
 	ADD	T0, T2, T4
 	// If less than eight bytes, do one byte at a time.
-	SLTU	T2, $8, T3
+	SLTU	$8, T2, T3
 	BNE	T3, ZERO, b_outcheck
 
 	// Do one byte at a time until from+n is eight-aligned.
