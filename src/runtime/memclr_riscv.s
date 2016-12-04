@@ -13,7 +13,7 @@ TEXT runtime·memclr(SB),NOSPLIT,$0-16
 	ADD	T1, T2, T4
 
 	// If less than eight bytes, do one byte at a time.
-	SLTU	T2, $8, T3
+	SLTU	$8, T2, T3
 	BNE	T3, ZERO, out
 
 	// Do one byte at a time until eight-aligned.
