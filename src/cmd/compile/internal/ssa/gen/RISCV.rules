@@ -345,10 +345,6 @@
 (MOVDstore [off1] {sym1} (MOVaddr [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
 	(MOVDstore [off1+off2] {mergeSym(sym1,sym2)} base val mem)
 
-// Similarly, fold ADDI into MOVaddr to avoid confusing live variable analysis
-// with OffPtr -> ADDI.
-(ADDI [c] (MOVaddr [d] {s} x)) && is32Bit(c+d) -> (MOVaddr [c+d] {s} x)
-
 // Zeroing
 // TODO: more optimized zeroing, including attempting to use aligned accesses.
 (Zero [s]   _ mem) && SizeAndAlign(s).Size() == 0 -> mem
@@ -398,8 +394,13 @@
 (NeqB x y) -> (Neq8 x y)
 (Not  x)   -> (XORI [1] x)
 
+// Fold OffPtr into MOVaddr to avoid confusing live variable analysis.
+(OffPtr [off] (MOVaddr [d] {s} x)) && is32Bit(off+d) -> (MOVaddr [off+d] {s} x)
+
+// Use an immediate if it will fit, otherwise load into a register.
 // TODO: Special handling for SP offsets, like ARM
-(OffPtr [off] ptr) -> (ADDI [off] ptr)
+(OffPtr [off] ptr) && is12Bit(off) -> (ADDI [off] ptr)
+(OffPtr [off] ptr)                 -> (ADD (MOVDconst [off]) ptr)
 
 (Const8 [val]) -> (MOVBconst [val])
 (Const16 [val]) -> (MOVHconst [val])
