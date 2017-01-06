@@ -384,7 +384,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		prologue.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
 		prologue.To.Type = obj.TYPE_REG
 		prologue.To.Reg = REG_SP
-		prologue.Spadj = int32(-stacksize)
+		prologue.Spadj = int32(stacksize)
 	}
 
 	// Actually save RA.
@@ -606,7 +606,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
 				p.To.Type = obj.TYPE_REG
 				p.To.Reg = REG_SP
-				p.Spadj = int32(stacksize)
+				p.Spadj = int32(-stacksize)
 				p = obj.Appendp(ctxt, p)
 			}
 
@@ -616,6 +616,13 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_RA}
 			p.To.Type = obj.TYPE_REG
 			p.To.Reg = REG_ZERO
+			// "Add back" the stack removed in the previous instruction.
+			//
+			// This is to avoid confusing pctospadj, which sums
+			// Spadj from function entry to each PC, and shouldn't
+			// count adjustments from earlier epilogues, since they
+			// won't affect later PCs.
+			p.Spadj = int32(stacksize)
 
 		// Replace FNE[SD] with FEQ[SD] and NOT.
 		case AFNES:
