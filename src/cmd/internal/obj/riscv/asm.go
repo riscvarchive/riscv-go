@@ -234,8 +234,11 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 			// We will emit a relocation for this. Until then,
 			// we'll encode this as a constant.
 			p.To.Type = obj.TYPE_CONST
+		case obj.TYPE_REG:
+			p.As = AJALR
+			lowerjalr(p)
 		default:
-			ctxt.Diag("unknown destination type %+v (want TYPE_MEM) in CALL: %v", p.To.Type, p)
+			ctxt.Diag("unknown destination type %+v in CALL: %v", p.To.Type, p)
 		}
 
 	case AJALR:
