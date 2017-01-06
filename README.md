@@ -1,43 +1,47 @@
 # The Go Programming Language
 
-Go is an open source programming language that makes it easy to build simple,
-reliable, and efficient software.
+## RISC-V Go Port
 
-![Gopher image](doc/gopher/fiveyears.jpg)
+This repository is home of the RISC-V port of the Go programming language.
 
-For documentation about how to install and use Go,
-visit https://golang.org/ or load doc/install-source.html
-in your web browser.
+The upstream Go project can be found at https://github.com/golang/go.
 
-Our canonical Git repository is located at https://go.googlesource.com/go.
-There is a mirror of the repository at https://github.com/golang/go.
+### Quick Start
 
-Go is the work of hundreds of contributors. We appreciate your help!
+Setup:
 
-To contribute, please read the contribution guidelines:
-	https://golang.org/doc/contribute.html
+```sh
+$ export GOROOT_BOOTSTRAP=/path/to/prebuilt/go/tree
+$ export GOROOT=$(pwd)
+$ cd src
+$ ./make.bash
+$ export PATH="$PATH:$GOROOT/misc/riscv"
+$ export PATH="$PATH:$GOROOT/bin"
+```
 
-##### Note that we do not accept pull requests and that we use the issue tracker for bug reports and proposals only. Please ask questions on https://forum.golangbridge.org or https://groups.google.com/forum/#!forum/golang-nuts.
+Compile and run in spike using pk:
 
-Unless otherwise noted, the Go source files are distributed
-under the BSD-style license found in the LICENSE file.
+```sh
+$ GOARCH=riscv GOOS=linux go run $GOROOT/riscvtest/add.go
+```
 
---
+Build:
 
-## Binary Distribution Notes
+```sh
+$ GOARCH=riscv GOOS=linux go build $GOROOT/riscvtest/add.go
+```
 
-If you have just untarred a binary Go distribution, you need to set
-the environment variable $GOROOT to the full path of the go
-directory (the one containing this file).  You can omit the
-variable if you unpack it into /usr/local/go, or if you rebuild
-from sources by running all.bash (see doc/install-source.html).
-You should also add the Go binary directory $GOROOT/bin
-to your shell's path.
+### Contributing
 
-For example, if you extracted the tar file into $HOME/go, you might
-put the following in your .profile:
+All contributors must sign the upstream [Contributor License
+Agreement](https://golang.org/doc/contribute.html#cla), as this port will be
+merged into upstream Go upon completion.
 
-	export GOROOT=$HOME/go
-	export PATH=$PATH:$GOROOT/bin
+Code review occurs via our
+[GerritHub](https://review.gerrithub.io/#/admin/projects/riscv/riscv-go)
+project, rather than via GitHub Pull Requests.
 
-See https://golang.org/doc/install or doc/install.html for more details.
+The upstream [contribution guidelines](https://golang.org/doc/contribute.html)
+include a basic overview of using Gerrit. While the upstream Go Gerrit server
+is different from ours, `codereview.cfg` will configure `git-codereview` to
+send CLs to GerritHub.
