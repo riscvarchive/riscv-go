@@ -940,22 +940,24 @@ func (f *File) applyRelocationsRISCV(dst []byte, rels []byte) error {
 			continue
 		}
 		sym := &symbols[symNo-1]
-		if SymType(sym.Info&0xf) != STT_SECTION {
-			// We don't handle non-section relocations for now.
-			continue
-		}
+
+		buf := dst[rela.Off:]
 
 		switch t {
 		case R_RISCV_64:
-			if rela.Off+8 >= uint64(len(dst)) || rela.Addend < 0 {
+			if rela.Off+8 >= uint64(len(dst)) {
 				continue
 			}
-			f.ByteOrder.PutUint64(dst[rela.Off:rela.Off+8], uint64(rela.Addend))
+			val := f.ByteOrder.Uint64(buf)
+			val += uint64(sym.Value) + uint64(rela.Addend)
+			f.ByteOrder.PutUint64(buf, val)
 		case R_RISCV_32:
-			if rela.Off+4 >= uint64(len(dst)) || rela.Addend < 0 {
+			if rela.Off+4 >= uint64(len(dst)) {
 				continue
 			}
-			f.ByteOrder.PutUint32(dst[rela.Off:rela.Off+4], uint32(rela.Addend))
+			val := f.ByteOrder.Uint32(buf)
+			val += uint32(sym.Value) + uint32(rela.Addend)
+			f.ByteOrder.PutUint32(buf, val)
 		}
 	}
 
