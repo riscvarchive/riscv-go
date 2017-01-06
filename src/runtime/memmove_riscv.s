@@ -93,6 +93,6 @@ b_out:
 	ADD	$-1, T4
 	ADD	$-1, T5
 b_outcheck:
-	BNE	T4, T1, b_out
+	BNE	T5, T1, b_out
 
 	RET

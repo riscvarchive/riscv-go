@@ -14,7 +14,7 @@ TEXT runtime·memclrNoHeapPointers(SB),NOSPLIT,$0-16
 
 	// If less than eight bytes, do one byte at a time.
 	SLTU	$8, T2, T3
-	BNE	T3, ZERO, out
+	BNE	T3, ZERO, outcheck
 
 	// Do one byte at a time until eight-aligned.
 	JMP	aligncheck
