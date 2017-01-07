@@ -130,8 +130,8 @@ func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 		auipc := int64(uint32(*val))
 		second := int64(uint32(*val >> 32))
 
-		auipc = (auipc &^ riscv.UTypeImmMask) | auipcImm
-		second = (second &^ secondImmMask) | secondImm
+		auipc = (auipc &^ riscv.UTypeImmMask) | int64(uint32(auipcImm))
+		second = (second &^ secondImmMask) | int64(uint32(secondImm))
 
 		*val = second<<32 | auipc
 
