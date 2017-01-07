@@ -365,6 +365,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 			p.To.Name = obj.NAME_EXTERN
 			p.To.Sym = gc.Linksym(gc.Newproc.Sym)
 		case ssa.OpRISCVCALLclosure, ssa.OpRISCVCALLinter:
+			p.To.Type = obj.TYPE_REG
 			p.To.Reg = v.Args[0].Reg()
 		}
 		if gc.Maxarg < v.AuxInt {
