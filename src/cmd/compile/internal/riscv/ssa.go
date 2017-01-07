@@ -451,10 +451,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		}
 	case ssa.OpRISCVLoweredGetClosurePtr:
 		// Closure pointer is S4 (riscv.REG_CTXT).
-		// TODO: replace this inline check with gc.CheckLoweredGetClosurePtr(v) once upstream dev.ssa is merged
-		if entry := v.Block.Func.Entry; entry != v.Block || entry.Values[0] != v {
-			gc.Fatalf("badly placed LoweredGetClosurePtr: %v %v", v.Block, v)
-		}
+		gc.CheckLoweredGetClosurePtr(v)
 	case ssa.OpRISCVLoweredExitProc:
 		// MOV rc, A0
 		p := gc.Prog(riscv.AMOV)
