@@ -25,9 +25,24 @@ func main() {
 		riscvexit(2)
 	}
 
-	// Check function pointers
+	// Check function pointers.
 	if fn := ret1234; fn() != 0x1234 {
 		riscvexit(3)
+	}
+
+	// Check closures.
+	a := 0
+	// Assigning the closure then calling it ensures that it uses the
+	// closure pointer rather than just passing &a as an argument.
+	//
+	// Warning! This might get optimized away in the future, but it works
+	// for now.
+	fn := func() {
+		a += 1
+	}
+	fn()
+	if a != 1 {
+		riscvexit(4)
 	}
 
 	riscvexit(0)
