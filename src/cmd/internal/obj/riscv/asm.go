@@ -719,7 +719,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 		// <load> $imm, FROM3, TO (load $imm+(FROM3), TO)
 		// <store> $imm, FROM3, TO (store $imm+(TO), FROM3)
-		case ALD, ALB, ALH, ALW, ALBU, ALHU,
+		case ALD, ALB, ALH, ALW, ALBU, ALHU, ALWU,
 			 ASD, ASB, ASH, ASW:
 			// LUI $high, TMP
 			// ADDI $low, TMP, TMP
@@ -734,7 +734,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p = loadImmIntoRegTmp(ctxt, p, low, high)
 
 			switch q.As {
-				case ALD, ALB, ALH, ALW, ALBU, ALHU:
+				case ALD, ALB, ALH, ALW, ALBU, ALHU, ALWU:
 					// ADD TMP, FROM3, TMP
 					// <load> $0, TMP, TO
 					p.As = AADD
