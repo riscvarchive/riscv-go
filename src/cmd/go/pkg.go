@@ -916,8 +916,7 @@ func (p *Package) load(stk *importStack, bp *build.Package, err error) *Package 
 
 	// Everything depends on runtime, except runtime, its internal
 	// subpackages, and unsafe.
-	// FIXME: Remove riscv clause once we can compile the runtime.
-	if goarch != "riscv" && (!p.Standard || (p.ImportPath != "runtime" && !strings.HasPrefix(p.ImportPath, "runtime/internal/") && p.ImportPath != "unsafe")) {
+	if (!p.Standard || (p.ImportPath != "runtime" && !strings.HasPrefix(p.ImportPath, "runtime/internal/") && p.ImportPath != "unsafe")) {
 		importPaths = append(importPaths, "runtime")
 		// When race detection enabled everything depends on runtime/race.
 		// Exclude certain packages to avoid circular dependencies.
