@@ -354,11 +354,6 @@ func is20Bit(n int64) bool {
 	return -(1<<19) <= n && n < (1<<19)
 }
 
-// is12Bit reports whether n can be represented as a signed 12 bit integer.
-func is12Bit(n int64) bool {
-	return -(1<<11) <= n && n < (1<<11)
-}
-
 // b2i translates a boolean value to 0 or 1 for assigning to auxInt.
 func b2i(b bool) int64 {
 	if b {

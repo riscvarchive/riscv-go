@@ -348,6 +348,8 @@ func rewriteValueRISCV(v *Value, config *Config) bool {
 		return rewriteValueRISCV_OpOr8(v, config)
 	case OpOrB:
 		return rewriteValueRISCV_OpOrB(v, config)
+	case OpRISCVADDI:
+		return rewriteValueRISCV_OpRISCVADDI(v, config)
 	case OpRISCVMOVBUload:
 		return rewriteValueRISCV_OpRISCVMOVBUload(v, config)
 	case OpRISCVMOVBload:
@@ -3572,51 +3574,14 @@ func rewriteValueRISCV_OpNot(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpOffPtr(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (OffPtr [off] (MOVaddr [d] {s} x))
-	// cond: is32Bit(off+d)
-	// result: (MOVaddr [off+d] {s} x)
-	for {
-		off := v.AuxInt
-		v_0 := v.Args[0]
-		if v_0.Op != OpRISCVMOVaddr {
-			break
-		}
-		d := v_0.AuxInt
-		s := v_0.Aux
-		x := v_0.Args[0]
-		if !(is32Bit(off + d)) {
-			break
-		}
-		v.reset(OpRISCVMOVaddr)
-		v.AuxInt = off + d
-		v.Aux = s
-		v.AddArg(x)
-		return true
-	}
 	// match: (OffPtr [off] ptr)
-	// cond: is12Bit(off)
+	// cond:
 	// result: (ADDI [off] ptr)
 	for {
 		off := v.AuxInt
 		ptr := v.Args[0]
-		if !(is12Bit(off)) {
-			break
-		}
 		v.reset(OpRISCVADDI)
 		v.AuxInt = off
-		v.AddArg(ptr)
-		return true
-	}
-	// match: (OffPtr [off] ptr)
-	// cond:
-	// result: (ADD (MOVDconst [off]) ptr)
-	for {
-		off := v.AuxInt
-		ptr := v.Args[0]
-		v.reset(OpRISCVADD)
-		v0 := b.NewValue0(v.Line, OpRISCVMOVDconst, config.fe.TypeUInt64())
-		v0.AuxInt = off
-		v.AddArg(v0)
 		v.AddArg(ptr)
 		return true
 	}
@@ -3695,6 +3660,32 @@ func rewriteValueRISCV_OpOrB(v *Value, config *Config) bool {
 		v.AddArg(y)
 		return true
 	}
+}
+func rewriteValueRISCV_OpRISCVADDI(v *Value, config *Config) bool {
+	b := v.Block
+	_ = b
+	// match: (ADDI [c] (MOVaddr [d] {s} x))
+	// cond: is32Bit(c+d)
+	// result: (MOVaddr [c+d] {s} x)
+	for {
+		c := v.AuxInt
+		v_0 := v.Args[0]
+		if v_0.Op != OpRISCVMOVaddr {
+			break
+		}
+		d := v_0.AuxInt
+		s := v_0.Aux
+		x := v_0.Args[0]
+		if !(is32Bit(c + d)) {
+			break
+		}
+		v.reset(OpRISCVMOVaddr)
+		v.AuxInt = c + d
+		v.Aux = s
+		v.AddArg(x)
+		return true
+	}
+	return false
 }
 func rewriteValueRISCV_OpRISCVMOVBUload(v *Value, config *Config) bool {
 	b := v.Block
