@@ -697,7 +697,6 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			if high == 0 {
 				break // no need to split
 			}
-
 			p = loadImmIntoRegTmp(ctxt, p, low, high)
 
 			switch q.As {
@@ -720,7 +719,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		// <load> $imm, FROM3, TO (load $imm+(FROM3), TO)
 		// <store> $imm, FROM3, TO (store $imm+(TO), FROM3)
 		case ALD, ALB, ALH, ALW, ALBU, ALHU, ALWU,
-			 ASD, ASB, ASH, ASW:
+			ASD, ASB, ASH, ASW:
 			// LUI $high, TMP
 			// ADDI $low, TMP, TMP
 			q := *p
@@ -734,32 +733,32 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 			p = loadImmIntoRegTmp(ctxt, p, low, high)
 
 			switch q.As {
-				case ALD, ALB, ALH, ALW, ALBU, ALHU, ALWU:
-					// ADD TMP, FROM3, TMP
-					// <load> $0, TMP, TO
-					p.As = AADD
-					p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-					p.From3 = q.From3
-					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-					p = obj.Appendp(ctxt, p)
+			case ALD, ALB, ALH, ALW, ALBU, ALHU, ALWU:
+				// ADD TMP, FROM3, TMP
+				// <load> $0, TMP, TO
+				p.As = AADD
+				p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p.From3 = q.From3
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p = obj.Appendp(ctxt, p)
 
-					p.As = q.As
-					p.To = q.To
-					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
-					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-				case ASD, ASB, ASH, ASW:
-					// ADD TMP, TO, TMP
-					// <store> $0, FROM3, TMP
-					p.As = AADD
-					p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: q.To.Reg}
-					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-					p = obj.Appendp(ctxt, p)
+				p.As = q.As
+				p.To = q.To
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+			case ASD, ASB, ASH, ASW:
+				// ADD TMP, TO, TMP
+				// <store> $0, FROM3, TMP
+				p.As = AADD
+				p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: q.To.Reg}
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p = obj.Appendp(ctxt, p)
 
-					p.As = q.As
-					p.From3 = q.From3
-					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
-					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+				p.As = q.As
+				p.From3 = q.From3
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
 			}
 		}
 	}
