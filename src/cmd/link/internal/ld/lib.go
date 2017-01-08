@@ -409,10 +409,7 @@ func (ctxt *Link) loadlib() {
 		Adduint8(ctxt, s, 1)
 	}
 
-	if SysArch.Family != sys.RISCV {
-		// FIXME: restore this call when we are ready to link in the runtime.
-		loadinternal(ctxt, "runtime")
-	}
+	loadinternal(ctxt, "runtime")
 	if SysArch.Family == sys.ARM {
 		loadinternal(ctxt, "math")
 	}
@@ -2022,12 +2019,6 @@ func genasmsym(ctxt *Link, put func(*Link, *Symbol, string, SymbolType, int64, *
 }
 
 func Symaddr(s *Symbol) int64 {
-	// FIXME: we need this s == nil check temporarily for risc-v
-	// because we don't emit an algarray, because we don't link with the runtime.
-	// Once we link with the runtime, fix that and remove this check.
-	if s == nil {
-		return 0
-	}
 	if !s.Attr.Reachable() {
 		Errorf(s, "unreachable symbol in symaddr")
 	}
