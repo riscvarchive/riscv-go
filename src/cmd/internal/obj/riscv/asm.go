@@ -1380,6 +1380,7 @@ var encodingForAs = [...]encoding{
 	obj.APCDATA:   pseudoOpEncoding,
 	obj.ATEXT:     pseudoOpEncoding,
 	obj.AUNDEF:    pseudoOpEncoding,
+	obj.ANOP:      pseudoOpEncoding,
 }
 
 // encodingForP returns the encoding (encode+validate funcs) for a Prog.
