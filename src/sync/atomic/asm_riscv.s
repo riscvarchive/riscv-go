@@ -55,9 +55,6 @@ TEXT ·SwapUint64(SB),NOSPLIT,$0-24
 TEXT ·SwapUintptr(SB),NOSPLIT,$0-24
 	JMP	·SwapUint64(SB)
 
-TEXT ·SwapPointer(SB),NOSPLIT,$0-24
-	JMP	·SwapUint64(SB)
-
 TEXT ·CompareAndSwapInt32(SB),NOSPLIT,$0-17
 	JMP	·CompareAndSwapUint32(SB)
 
@@ -99,9 +96,6 @@ fail:
 	RET
 
 TEXT ·CompareAndSwapUintptr(SB),NOSPLIT,$0-25
-	JMP	·CompareAndSwapUint64(SB)
-
-TEXT ·CompareAndSwapPointer(SB),NOSPLIT,$0-25
 	JMP	·CompareAndSwapUint64(SB)
 
 TEXT ·AddInt32(SB),NOSPLIT,$0-20
@@ -180,7 +174,4 @@ TEXT ·StoreUint64(SB),NOSPLIT,$0-16
 	RET
 
 TEXT ·StoreUintptr(SB),NOSPLIT,$0-16
-	JMP	·StoreUint64(SB)
-
-TEXT ·StorePointer(SB),NOSPLIT,$0-16
 	JMP	·StoreUint64(SB)
