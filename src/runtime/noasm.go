@@ -5,7 +5,7 @@
 // Routines that are implemented in assembly in asm_{amd64,386,arm,arm64,ppc64x,s390x}.s
 // These routines have corresponding stubs in stubs_asm.go.
 
-// +build mips64 mips64le
+// +build mips64 mips64le riscv
 
 package runtime
 
