@@ -32,7 +32,7 @@ words:
 	MOV	ZERO, (T1)
 	ADD	$8, T1
 wordscheck:
-	SLTU	T1, T5, T3
+	SLTU	T5, T1, T3
 	BNE	T3, ZERO, words
 
 	JMP	outcheck

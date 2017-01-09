@@ -41,7 +41,7 @@ f_words:
 	ADD	$8, T0
 	ADD	$8, T1
 f_wordscheck:
-	SLTU	T1, T6, T3
+	SLTU	T6, T1, T3
 	BNE	T3, ZERO, f_words
 
 	// Finish off the remaining partial word.
@@ -77,10 +77,10 @@ b_aligncheck:
 	ADD	$7, T1, T6
 	JMP	b_wordscheck
 b_words:
-	MOV	(T5), T3
-	MOV	T3, (T4)
 	ADD	$-8, T4
 	ADD	$-8, T5
+	MOV	(T5), T3
+	MOV	T3, (T4)
 b_wordscheck:
 	SLTU	T5, T6, T3
 	BNE	T3, ZERO, b_words
@@ -88,10 +88,10 @@ b_wordscheck:
 	// Finish off the remaining partial word.
 	JMP	b_outcheck
 b_out:
-	MOVB	(T5), T3
-	MOVB	T3, (T4)
 	ADD	$-1, T4
 	ADD	$-1, T5
+	MOVB	(T5), T3
+	MOVB	T3, (T4)
 b_outcheck:
 	BNE	T5, T1, b_out
 
