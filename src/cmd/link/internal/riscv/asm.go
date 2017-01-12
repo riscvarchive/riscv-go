@@ -201,7 +201,7 @@ func asmb(ctxt *ld.Link) {
 		switch ld.Headtype {
 		default:
 			if ld.Iself {
-				symo = uint32(ld.Segdwarf.Fileoff + ld.Segdata.Filelen)
+				symo = uint32(ld.Segdwarf.Fileoff + ld.Segdwarf.Filelen)
 				symo = uint32(ld.Rnd(int64(symo), int64(*ld.FlagRound)))
 			}
 
