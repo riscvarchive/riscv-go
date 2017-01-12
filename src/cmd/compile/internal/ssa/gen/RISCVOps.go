@@ -197,7 +197,8 @@ func init() {
 		// general unaligned move
 		// arg0 = address of dst memory (in T0, changed as side effect)
 		// arg1 = address of src memory (in T1, changed as side effect)
-		// arg2 = address of the last element of src
+		// arg2 = address of the last element of src (can't be T2 as we clobber it before the compiler
+		//	  can use it)
 		// arg3 = mem
 		// auxint = alignment
 		// clobbers T2 as a tmp register.
@@ -212,7 +213,7 @@ func init() {
 			aux:       "Int64",
 			argLength: 4,
 			reg: regInfo{
-				inputs:   []regMask{regNamed["T0"], regNamed["T1"], gpMask},
+				inputs:   []regMask{regNamed["T0"], regNamed["T1"], gpMask &^ regNamed["T2"]},
 				clobbers: regNamed["T0"] | regNamed["T1"] | regNamed["T2"],
 			},
 			typ:            "Mem",
