@@ -401,8 +401,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	case ssa.OpRISCVLoweredMove:
 		mov, sz := largestMove(v.AuxInt)
 
-		//	mov	(Rarg1), T2
-		//	mov	T2, (Rarg0)
+		//	mov	(Rarg1), TMP
+		//	mov	TMP, (Rarg0)
 		//	ADD	$sz, Rarg0
 		//	ADD	$sz, Rarg1
 		//	BNE	Rarg2, Rarg0, -4(PC)
@@ -411,11 +411,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p.From.Type = obj.TYPE_MEM
 		p.From.Reg = v.Args[1].Reg()
 		p.To.Type = obj.TYPE_REG
-		p.To.Reg = riscv.REG_T2
+		p.To.Reg = riscv.REG_TMP
 
 		p2 := gc.Prog(mov)
 		p2.From.Type = obj.TYPE_REG
-		p2.From.Reg = riscv.REG_T2
+		p2.From.Reg = riscv.REG_TMP
 		p2.To.Type = obj.TYPE_MEM
 		p2.To.Reg = v.Args[0].Reg()
 
