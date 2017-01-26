@@ -103,6 +103,7 @@ start:
 
 	// Arbitrary bytes (entered in little-endian mode)
 	WORD	$0x12345678	// WORD $305419896	// 78563412
+	WORD	$0x9abcdef0	// WORD $2596069104	// f0debc9a
 
 
 	// M extension

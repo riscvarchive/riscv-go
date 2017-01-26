@@ -1191,11 +1191,29 @@ func encodeUJ(p *obj.Prog) uint32 {
 }
 
 func validateRaw(p *obj.Prog) {
-	wantImm(p, "raw", p.From, 32)
+	// Treat the raw value specially as a 32-bit unsigned integer. Nobody
+	// wants to enter negative machine code.
+	a := p.From
+	if a.Type != obj.TYPE_CONST {
+		p.Ctxt.Diag("%v\texpected immediate in raw position but got %s", p, p.Ctxt.Dconv(&a))
+		return
+	}
+	if a.Offset < 0 || 1<<32 <= a.Offset {
+		p.Ctxt.Diag("%v\timmediate in raw position cannot be larger than 32 bits but got %d", p, a.Offset)
+	}
 }
 
 func encodeRaw(p *obj.Prog) uint32 {
-	return immi(p.From, 32)
+	// Treat the raw value specially as a 32-bit unsigned integer. Nobody
+	// wants to enter negative machine code.
+	a := p.From
+	if a.Type != obj.TYPE_CONST {
+		panic(fmt.Sprintf("ill typed: %+v", a))
+	}
+	if a.Offset < 0 || 1<<32 <= a.Offset {
+		panic(fmt.Sprintf("immediate %d in %v cannot fit in 32 bits", a.Offset, a))
+	}
+	return uint32(a.Offset)
 }
 
 type encoding struct {
