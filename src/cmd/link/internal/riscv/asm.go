@@ -65,30 +65,7 @@ func machoreloc1(s *ld.Symbol, r *ld.Reloc, sectoff int64) int {
 func archreloc(ctxt *ld.Link, r *ld.Reloc, s *ld.Symbol, val *int64) int {
 	switch r.Type {
 	case obj.R_CALLRISCV:
-		pc := s.Value + int64(r.Off)
-		off := ld.Symaddr(r.Sym) + r.Add - pc
-
-		// This is always a JAL instruction, we just need
-		// to replace the immediate.
-		//
-		// TODO(prattmic): sanity check the opcode.
-		if off&1 != 0 {
-			ld.Errorf(s, "R_CALLRISCV relocation for %s is not aligned: %#x", r.Sym.Name, off)
-			return 0
-		}
-
-		imm, err := riscv.EncodeUJImmediate(off)
-		if err != nil {
-			// TODO(mpratt): We can only fit 1MB offsets in the
-			// immediate, which we will quickly outgrow.
-			ld.Errorf(s, "cannot encode R_CALLRISCV relocation offset for %s: %v", r.Sym.Name, err)
-			return 0
-		}
-
-		// The assembler is encoding a normal JAL instruction with the
-		// immediate as whatever p.To.Offset. We need to replace that
-		// immediate with the relocated value.
-		*val = (*val &^ riscv.UJTypeImmMask) | int64(imm)
+		// Nothing to do.
 
 	case obj.R_RISCV_PCREL_ITYPE, obj.R_RISCV_PCREL_STYPE:
 		pc := s.Value + int64(r.Off)
