@@ -90,8 +90,14 @@ func lowerjalr(p *obj.Prog) {
 	//
 	// TODO(bbaren): Handle sym, symkind, index, and scale.
 	p.From, *p.From3, p.To = p.To, p.To, p.From
+
+	// Reset Reg so the string looks correct.
 	p.From.Type = obj.TYPE_CONST
+	p.From.Reg = obj.REG_NONE
+
+	// Reset Offset so the string looks correct.
 	p.From3.Type = obj.TYPE_REG
+	p.From3.Offset = 0
 }
 
 // movtol converts a MOV mnemonic into the corresponding load instruction.
@@ -211,11 +217,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 				p.As = AJALR
 				lowerjalr(p)
 			case obj.NAME_EXTERN:
-				// JMP to symbol.
-				p.As = AJAL
-				// We will emit a relocation for this. Until then,
-				// we'll encode this as a constant.
-				p.To.Type = obj.TYPE_CONST
+				// Handled in preprocess.
 			default:
 				ctxt.Diag("progedit: unsupported name %d for %v", p.To.Name, p)
 			}
@@ -224,18 +226,13 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		}
 
 	case obj.ACALL:
-		// p.From is actually an _output_ for this instruction.
-		p.From.Type = obj.TYPE_REG
-		p.From.Reg = REG_RA
-
 		switch p.To.Type {
 		case obj.TYPE_MEM:
-			p.As = AJAL
-			// We will emit a relocation for this. Until then,
-			// we'll encode this as a constant.
-			p.To.Type = obj.TYPE_CONST
+			// Handled in preprocess.
 		case obj.TYPE_REG:
 			p.As = AJALR
+			p.From.Type = obj.TYPE_REG
+			p.From.Reg = REG_RA
 			lowerjalr(p)
 		default:
 			ctxt.Diag("unknown destination type %+v in CALL: %v", p.To.Type, p)
@@ -332,10 +329,12 @@ func InvertBranch(i obj.As) obj.As {
 // containsCall reports whether the symbol contains a CALL (or equivalent)
 // instruction. Must be called after progedit.
 func containsCall(sym *obj.LSym) bool {
-	// CALLs are JAL with link register RA.
+	// CALLs are CALL or JAL(R) with link register RA.
 	for p := sym.Text; p != nil; p = p.Link {
 		switch p.As {
-		case AJAL:
+		case obj.ACALL:
+			return true
+		case AJAL, AJALR:
 			if p.From.Type == obj.TYPE_REG && p.From.Reg == REG_RA {
 				return true
 			}
@@ -613,6 +612,82 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				}
 			default:
 				ctxt.Diag("progedit: unsupported MOV at %v", p)
+			}
+
+		case obj.ACALL:
+			switch p.To.Type {
+			case obj.TYPE_MEM:
+				// AUIPC $off_hi, TMP
+				// ADDI $off_lo, TMP
+				// JALR RA, TMP
+				to := p.To
+
+				p.As = AAUIPC
+				// This offset isn't really encoded
+				// with either instruction. It will be
+				// extracted for a relocation later.
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: to.Offset, Sym: to.Sym}
+				p.From3 = &obj.Addr{}
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p.Mark |= NEED_PCREL_ITYPE_RELOC
+				p = obj.Appendp(ctxt, p)
+
+				p.As = AADDI
+				p.From = obj.Addr{Type: obj.TYPE_CONST}
+				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+				p = obj.Appendp(ctxt, p)
+
+				p.As = AJALR
+				p.From.Type = obj.TYPE_REG
+				p.From.Reg = REG_RA
+				// Leave Sym only for the CALL reloc below.
+				p.From.Sym = to.Sym
+				p.From3 = &obj.Addr{}
+				p.To.Type = obj.TYPE_REG
+				p.To.Reg = REG_TMP
+				lowerjalr(p)
+			}
+
+		case obj.AJMP:
+			switch p.To.Type {
+			case obj.TYPE_MEM:
+				switch p.To.Name {
+				case obj.NAME_EXTERN:
+					// JMP to symbol.
+
+					// AUIPC $off_hi, TMP
+					// ADDI $off_lo, TMP
+					// JALR ZERO, TMP
+					to := p.To
+
+					p.As = AAUIPC
+					// This offset isn't really encoded
+					// with either instruction. It will be
+					// extracted for a relocation later.
+					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: to.Offset, Sym: to.Sym}
+					p.From3 = &obj.Addr{}
+					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+					p.Mark |= NEED_PCREL_ITYPE_RELOC
+					p = obj.Appendp(ctxt, p)
+
+					p.As = AADDI
+					p.From = obj.Addr{Type: obj.TYPE_CONST}
+					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+					p = obj.Appendp(ctxt, p)
+
+					p.As = AJALR
+					p.From.Type = obj.TYPE_REG
+					p.From.Reg = REG_ZERO
+					// Leave Sym only for the CALL reloc
+					// below.
+					p.From.Sym = to.Sym
+					p.From3 = &obj.Addr{}
+					p.To.Type = obj.TYPE_REG
+					p.To.Reg = REG_TMP
+					lowerjalr(p)
+				}
 			}
 
 		// Replace RET with epilogue.
@@ -1425,9 +1500,11 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 	var symcode []uint32 // machine code for this symbol
 	for p := cursym.Text; p != nil; p = p.Link {
 		switch p.As {
-		case AJAL:
+		case AJALR:
 			if p.To.Sym != nil {
-				// This is a CALL/JMP which needs a relocation.
+				// This is a CALL/JMP. We add a relocation only
+				// for linker stack checking. No actual
+				// relocation is needed.
 				rel := obj.Addrel(cursym)
 				rel.Off = int32(p.Pc)
 				rel.Siz = 4
