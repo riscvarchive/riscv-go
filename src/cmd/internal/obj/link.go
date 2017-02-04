@@ -554,9 +554,7 @@ const (
 	// R_CALLMIPS (only used on mips64) resolves to non-PC-relative target address
 	// of a CALL (JAL) instruction, by encoding the address into the instruction.
 	R_CALLMIPS
-	// R_CALLRISCV resolves to a PC-relative target address of a JAL
-	// instruction (used for CALL and JMP), by encoding the address into
-	// the instruction
+	// R_CALLRISCV is a no-op. It simply marks CALLs for stack checking.
 	R_CALLRISCV
 	R_CONST
 	R_PCREL
