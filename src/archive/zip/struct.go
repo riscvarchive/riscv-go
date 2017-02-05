@@ -5,7 +5,7 @@
 /*
 Package zip provides support for reading and writing ZIP archives.
 
-See: https://www.pkware.com/documents/casestudies/APPNOTE.TXT
+See: https://www.pkware.com/appnote
 
 This package does not support disk spanning.
 
@@ -63,9 +63,6 @@ const (
 
 	// extra header id's
 	zip64ExtraId = 0x0001 // zip64 Extended Information Extra Field
-	ntfsExtraId  = 0x000a // NTFS Extra Field
-	unixExtraId  = 0x000d // UNIX Extra Field
-	exttsExtraId = 0x5455 // Extended Timestamp Extra Field
 )
 
 // FileHeader describes a file within a zip file.

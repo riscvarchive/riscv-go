@@ -5,6 +5,7 @@
 package gc
 
 import (
+	"cmd/internal/src"
 	"fmt"
 	"strings"
 )
@@ -186,8 +187,7 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		OPLUS,
 		OREAL,
 		OIMAG,
-		OCOM,
-		OSQRT:
+		OCOM:
 		instrumentnode(&n.Left, init, wr, 0)
 		goto ret
 
@@ -226,7 +226,6 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 
 	case OLSH,
 		ORSH,
-		OLROT,
 		OAND,
 		OANDNOT,
 		OOR,
@@ -318,6 +317,15 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		instrumentnode(&n.Left, init, 0, 0)
 		goto ret
 
+	case OAS2DOTTYPE:
+		instrumentnode(&n.Left, init, 1, 0)
+		instrumentnode(&n.Right, init, 0, 0)
+		goto ret
+
+	case ODOTTYPE, ODOTTYPE2:
+		instrumentnode(&n.Left, init, 0, 0)
+		goto ret
+
 		// should not appear in AST by now
 	case OSEND,
 		ORECV,
@@ -345,9 +353,6 @@ func instrumentnode(np **Node, init *Nodes, wr int, skip int) {
 		// lowered to call
 		OCMPSTR,
 		OADDSTR,
-		ODOTTYPE,
-		ODOTTYPE2,
-		OAS2DOTTYPE,
 		OCALLPART,
 		// lowered to PTRLIT
 		OCLOSURE,  // lowered to PTRLIT
@@ -438,7 +443,7 @@ func isartificial(n *Node) bool {
 		}
 
 		// autotmp's are always local
-		if strings.HasPrefix(n.Sym.Name, "autotmp_") {
+		if n.IsAutoTmp() {
 			return true
 		}
 
@@ -490,7 +495,7 @@ func callinstr(np **Node, init *Nodes, wr int, skip int) bool {
 			*np = n
 		}
 
-		n = treecopy(n, 0)
+		n = treecopy(n, src.NoXPos)
 		makeaddable(n)
 		var f *Node
 		if flag_msan {

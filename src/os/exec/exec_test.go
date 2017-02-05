@@ -246,6 +246,42 @@ func TestStdinClose(t *testing.T) {
 	check("Wait", cmd.Wait())
 }
 
+// Issue 17647.
+// It used to be the case that TestStdinClose, above, would fail when
+// run under the race detector. This test is a variant of TestStdinClose
+// that also used to fail when run under the race detector.
+// This test is run by cmd/dist under the race detector to verify that
+// the race detector no longer reports any problems.
+func TestStdinCloseRace(t *testing.T) {
+	cmd := helperCommand(t, "stdinClose")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("StdinPipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	go func() {
+		if err := cmd.Process.Kill(); err != nil {
+			t.Errorf("Kill: %v", err)
+		}
+	}()
+	go func() {
+		// Send the wrong string, so that the child fails even
+		// if the other goroutine doesn't manage to kill it first.
+		// This test is to check that the race detector does not
+		// falsely report an error, so it doesn't matter how the
+		// child process fails.
+		io.Copy(stdin, strings.NewReader("unexpected string"))
+		if err := stdin.Close(); err != nil {
+			t.Errorf("stdin.Close: %v", err)
+		}
+	}()
+	if err := cmd.Wait(); err == nil {
+		t.Fatalf("Wait: succeeded unexpectedly")
+	}
+}
+
 // Issue 5071
 func TestPipeLookPathLeak(t *testing.T) {
 	fd0, lsof0 := numOpenFDS(t)
@@ -432,7 +468,7 @@ func TestExtraFilesFDShuffle(t *testing.T) {
 		buf := make([]byte, 512)
 		n, err := stderr.Read(buf)
 		if err != nil {
-			t.Fatalf("Read: %s", err)
+			t.Errorf("Read: %s", err)
 			ch <- err.Error()
 		} else {
 			ch <- string(buf[:n])
@@ -952,7 +988,7 @@ func TestContextCancel(t *testing.T) {
 			break
 		}
 		if time.Since(start) > time.Second {
-			t.Fatal("cancelling context did not stop program")
+			t.Fatal("canceling context did not stop program")
 		}
 		time.Sleep(time.Millisecond)
 	}

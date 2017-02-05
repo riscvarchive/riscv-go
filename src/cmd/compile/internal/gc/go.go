@@ -8,6 +8,7 @@ import (
 	"cmd/compile/internal/ssa"
 	"cmd/internal/bio"
 	"cmd/internal/obj"
+	"cmd/internal/src"
 )
 
 const (
@@ -42,10 +43,10 @@ type Sym struct {
 
 	// saved and restored by dcopy
 	Pkg        *Pkg
-	Name       string // object name
-	Def        *Node  // definition: ONAME OTYPE OPACK or OLITERAL
-	Block      int32  // blocknumber to catch redeclaration
-	Lastlineno int32  // last declaration for diagnostic
+	Name       string   // object name
+	Def        *Node    // definition: ONAME OTYPE OPACK or OLITERAL
+	Block      int32    // blocknumber to catch redeclaration
+	Lastlineno src.XPos // last declaration for diagnostic
 
 	Label   *Node // corresponding label (ephemeral)
 	Origpkg *Pkg  // original package for . import
@@ -63,8 +64,11 @@ const (
 	SymSiggen
 	SymAsm
 	SymAlgGen
-	SymAlias // alias, original is Sym.Def.Sym
 )
+
+func (sym *Sym) isAlias() bool {
+	return sym.Def != nil && sym.Def.Sym != sym
+}
 
 // The Class of a variable/function describes the "storage class"
 // of a variable or function. During parsing, storage classes are
@@ -87,7 +91,7 @@ const (
 // of the compilers arrays.
 //
 // typedef	struct
-// {					// must not move anything
+// {				// must not move anything
 // 	uchar	array[8];	// pointer to data
 // 	uchar	nel[4];		// number of elements
 // 	uchar	cap[4];		// allocated number of elements
@@ -104,7 +108,7 @@ var sizeof_Array int // runtime sizeof(Array)
 // of the compilers strings.
 //
 // typedef	struct
-// {					// must not move anything
+// {				// must not move anything
 // 	uchar	array[8];	// pointer to data
 // 	uchar	nel[4];		// number of elements
 // } String;
@@ -112,15 +116,17 @@ var sizeof_String int // runtime sizeof(String)
 
 var pragcgobuf string
 
-var infile string
-
 var outfile string
 var linkobj string
 
 var bout *bio.Writer
 
+// nerrors is the number of compiler errors reported
+// since the last call to saveerrors.
 var nerrors int
 
+// nsavederrors is the total number of compiler errors
+// reported before the last call to saveerrors.
 var nsavederrors int
 
 var nsyntaxerrors int
@@ -216,12 +222,6 @@ var funcsyms []*Node
 var dclcontext Class // PEXTERN/PAUTO
 
 var statuniqgen int // name generator for static temps
-
-var iota_ int64
-
-var lastconst []*Node
-
-var lasttype *Node
 
 var Maxarg int64
 
@@ -363,18 +363,20 @@ var pcloc int32
 
 var Thearch Arch
 
-var Newproc *Node
-
-var Deferproc *Node
-
-var Deferreturn *Node
-
-var panicindex *Node
-
-var panicslice *Node
-
-var panicdivide *Node
-
-var growslice *Node
-
-var panicdottype *Node
+var (
+	staticbytes,
+	zerobase,
+	Newproc,
+	Deferproc,
+	Deferreturn,
+	panicindex,
+	panicslice,
+	panicdivide,
+	growslice,
+	panicdottype,
+	panicnildottype,
+	assertE2I,
+	assertE2I2,
+	assertI2I,
+	assertI2I2 *Node
+)

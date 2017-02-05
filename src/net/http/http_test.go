@@ -12,7 +12,12 @@ import (
 	"os/exec"
 	"reflect"
 	"testing"
+	"time"
 )
+
+func init() {
+	shutdownPollInterval = 5 * time.Millisecond
+}
 
 func TestForeachHeaderElement(t *testing.T) {
 	tests := []struct {
@@ -77,6 +82,7 @@ func TestCleanHost(t *testing.T) {
 // This catches accidental dependencies between the HTTP transport and
 // server code.
 func TestCmdGoNoHTTPServer(t *testing.T) {
+	t.Parallel()
 	goBin := testenv.GoToolPath(t)
 	out, err := exec.Command(goBin, "tool", "nm", goBin).CombinedOutput()
 	if err != nil {

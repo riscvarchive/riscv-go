@@ -87,9 +87,10 @@ TEXT runtime·usleep(SB),NOSPLIT,$16
 TEXT runtime·raise(SB),NOSPLIT,$12
 	MOVW	$0x12B, R12
 	SWI	$0			// sys_getthrid
-					// arg 1 - pid, already in R0
+					// arg 1 - tid, already in R0
 	MOVW	sig+0(FP), R1		// arg 2 - signum
-	MOVW	$37, R12		// sys_kill
+	MOVW	$0, R2			// arg 3 - tcb
+	MOVW	$119, R12		// sys_thrkill
 	SWI	$0
 	RET
 
@@ -98,7 +99,7 @@ TEXT runtime·raiseproc(SB),NOSPLIT,$12
 	SWI	$0			// sys_getpid
 					// arg 1 - pid, already in R0
 	MOVW	sig+0(FP), R1		// arg 2 - signum
-	MOVW	$37, R12		// sys_kill
+	MOVW	$122, R12		// sys_kill
 	SWI	$0
 	RET
 
@@ -149,8 +150,8 @@ TEXT runtime·setitimer(SB),NOSPLIT,$0
 	SWI	$0
 	RET
 
-// func now() (sec int64, nsec int32)
-TEXT time·now(SB), NOSPLIT, $32
+// func walltime() (sec int64, nsec int32)
+TEXT runtime·walltime(SB), NOSPLIT, $32
 	MOVW	CLOCK_REALTIME, R0	// arg 1 - clock_id
 	MOVW	$8(R13), R1		// arg 2 - tp
 	MOVW	$87, R12		// sys_clock_gettime

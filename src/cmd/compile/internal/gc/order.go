@@ -5,8 +5,8 @@
 package gc
 
 import (
+	"cmd/internal/src"
 	"fmt"
-	"strings"
 )
 
 // Rewrite tree to use separate statements to enforce
@@ -170,14 +170,6 @@ func ordersafeexpr(n *Node, order *Order) *Node {
 	}
 }
 
-// Istemp reports whether n is a temporary variable.
-func istemp(n *Node) bool {
-	if n.Op != ONAME {
-		return false
-	}
-	return strings.HasPrefix(n.Sym.Name, "autotmp_")
-}
-
 // Isaddrokay reports whether it is okay to pass n's address to runtime routines.
 // Taking the address of a variable makes the liveness and optimization analyses
 // lose track of where the variable's lifetime ends. To avoid hurting the analyses
@@ -185,13 +177,29 @@ func istemp(n *Node) bool {
 // because we emit explicit VARKILL instructions marking the end of those
 // temporaries' lifetimes.
 func isaddrokay(n *Node) bool {
-	return islvalue(n) && (n.Op != ONAME || n.Class == PEXTERN || istemp(n))
+	return islvalue(n) && (n.Op != ONAME || n.Class == PEXTERN || n.IsAutoTmp())
 }
 
 // Orderaddrtemp ensures that n is okay to pass by address to runtime routines.
 // If the original argument n is not okay, orderaddrtemp creates a tmp, emits
 // tmp = n, and then returns tmp.
+// The result of orderaddrtemp MUST be assigned back to n, e.g.
+// 	n.Left = orderaddrtemp(n.Left, order)
 func orderaddrtemp(n *Node, order *Order) *Node {
+	if consttype(n) >= 0 {
+		// TODO: expand this to all static composite literal nodes?
+		n = defaultlit(n, nil)
+		dowidth(n.Type)
+		vstat := staticname(n.Type)
+		vstat.Name.Readonly = true
+		var out []*Node
+		staticassign(vstat, n, &out)
+		if out != nil {
+			Fatalf("staticassign of const generated code: %+v", n)
+		}
+		vstat = typecheck(vstat, Erv)
+		return vstat
+	}
 	if isaddrokay(n) {
 		return n
 	}
@@ -438,10 +446,10 @@ func ordermapassign(n *Node, order *Order) {
 		for i1, n1 := range n.List.Slice() {
 			if n1.Op == OINDEXMAP {
 				m = n1
-				if !istemp(m.Left) {
+				if !m.Left.IsAutoTmp() {
 					m.Left = ordercopyexpr(m.Left, m.Left.Type, order, 0)
 				}
-				if !istemp(m.Right) {
+				if !m.Right.IsAutoTmp() {
 					m.Right = ordercopyexpr(m.Right, m.Right.Type, order, 0)
 				}
 				n.List.SetIndex(i1, ordertemp(m.Type, order, false))
@@ -520,7 +528,7 @@ func orderstmt(n *Node, order *Order) {
 
 		n.Left = orderexpr(n.Left, order, nil)
 		n.Left = ordersafeexpr(n.Left, order)
-		tmp1 := treecopy(n.Left, 0)
+		tmp1 := treecopy(n.Left, src.NoXPos)
 		if tmp1.Op == OINDEXMAP {
 			tmp1.Etype = 0 // now an rvalue not an lvalue
 		}
@@ -903,11 +911,11 @@ func orderstmt(n *Node, order *Order) {
 					// r->left is c, r->right is x, both are always evaluated.
 					r.Left = orderexpr(r.Left, order, nil)
 
-					if !istemp(r.Left) {
+					if !r.Left.IsAutoTmp() {
 						r.Left = ordercopyexpr(r.Left, r.Left.Type, order, 0)
 					}
 					r.Right = orderexpr(r.Right, order, nil)
-					if !istemp(r.Right) {
+					if !r.Right.IsAutoTmp() {
 						r.Right = ordercopyexpr(r.Right, r.Right.Type, order, 0)
 					}
 				}

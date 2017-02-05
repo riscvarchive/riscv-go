@@ -21,6 +21,9 @@ import (
 // TestAssembly checks to make sure the assembly generated for
 // functions contains certain expected instructions.
 func TestAssembly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test; skipping")
+	}
 	testenv.MustHaveGoBuild(t)
 	if runtime.GOOS == "windows" {
 		// TODO: remove if we can get "go tool compile -S" to work on windows.
@@ -154,6 +157,54 @@ func f(b []byte, i int) uint32 {
 `,
 		[]string{"\tMOVL\t\\(.*\\)\\(.*\\*1\\),"},
 	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte) uint64 {
+	return binary.BigEndian.Uint64(b)
+}
+`,
+		[]string{"\tBSWAPQ\t"},
+	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte, i int) uint64 {
+	return binary.BigEndian.Uint64(b[i:])
+}
+`,
+		[]string{"\tBSWAPQ\t"},
+	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte, v uint64) {
+	binary.BigEndian.PutUint64(b, v)
+}
+`,
+		[]string{"\tBSWAPQ\t"},
+	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte) uint32 {
+	return binary.BigEndian.Uint32(b)
+}
+`,
+		[]string{"\tBSWAPL\t"},
+	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte, i int) uint32 {
+	return binary.BigEndian.Uint32(b[i:])
+}
+`,
+		[]string{"\tBSWAPL\t"},
+	},
+	{"amd64", "linux", `
+import "encoding/binary"
+func f(b []byte, v uint32) {
+	binary.BigEndian.PutUint32(b, v)
+}
+`,
+		[]string{"\tBSWAPL\t"},
+	},
 	{"386", "linux", `
 import "encoding/binary"
 func f(b []byte) uint32 {
@@ -169,6 +220,225 @@ func f(b []byte, i int) uint32 {
 }
 `,
 		[]string{"\tMOVL\t\\(.*\\)\\(.*\\*1\\),"},
+	},
+
+	// Structure zeroing.  See issue #18370.
+	{"amd64", "linux", `
+type T struct {
+	a, b, c int
+}
+func f(t *T) {
+	*t = T{}
+}
+`,
+		[]string{"\tMOVQ\t\\$0, \\(.*\\)", "\tMOVQ\t\\$0, 8\\(.*\\)", "\tMOVQ\t\\$0, 16\\(.*\\)"},
+	},
+	// TODO: add a test for *t = T{3,4,5} when we fix that.
+
+	// Rotate tests
+	{"amd64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 | x>>57
+	}
+`,
+		[]string{"\tROLQ\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 + x>>57
+	}
+`,
+		[]string{"\tROLQ\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 ^ x>>57
+	}
+`,
+		[]string{"\tROLQ\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 + x>>25
+	}
+`,
+		[]string{"\tROLL\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 | x>>25
+	}
+`,
+		[]string{"\tROLL\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 ^ x>>25
+	}
+`,
+		[]string{"\tROLL\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint16) uint16 {
+		return x<<7 + x>>9
+	}
+`,
+		[]string{"\tROLW\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint16) uint16 {
+		return x<<7 | x>>9
+	}
+`,
+		[]string{"\tROLW\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint16) uint16 {
+		return x<<7 ^ x>>9
+	}
+`,
+		[]string{"\tROLW\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint8) uint8 {
+		return x<<7 + x>>1
+	}
+`,
+		[]string{"\tROLB\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint8) uint8 {
+		return x<<7 | x>>1
+	}
+`,
+		[]string{"\tROLB\t[$]7,"},
+	},
+	{"amd64", "linux", `
+	func f(x uint8) uint8 {
+		return x<<7 ^ x>>1
+	}
+`,
+		[]string{"\tROLB\t[$]7,"},
+	},
+
+	{"arm", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 + x>>25
+	}
+`,
+		[]string{"\tMOVW\tR[0-9]+@>25,"},
+	},
+	{"arm", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 | x>>25
+	}
+`,
+		[]string{"\tMOVW\tR[0-9]+@>25,"},
+	},
+	{"arm", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 ^ x>>25
+	}
+`,
+		[]string{"\tMOVW\tR[0-9]+@>25,"},
+	},
+
+	{"arm64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 + x>>57
+	}
+`,
+		[]string{"\tROR\t[$]57,"},
+	},
+	{"arm64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 | x>>57
+	}
+`,
+		[]string{"\tROR\t[$]57,"},
+	},
+	{"arm64", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 ^ x>>57
+	}
+`,
+		[]string{"\tROR\t[$]57,"},
+	},
+	{"arm64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 + x>>25
+	}
+`,
+		[]string{"\tRORW\t[$]25,"},
+	},
+	{"arm64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 | x>>25
+	}
+`,
+		[]string{"\tRORW\t[$]25,"},
+	},
+	{"arm64", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 ^ x>>25
+	}
+`,
+		[]string{"\tRORW\t[$]25,"},
+	},
+
+	{"s390x", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 + x>>57
+	}
+`,
+		[]string{"\tRLLG\t[$]7,"},
+	},
+	{"s390x", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 | x>>57
+	}
+`,
+		[]string{"\tRLLG\t[$]7,"},
+	},
+	{"s390x", "linux", `
+	func f(x uint64) uint64 {
+		return x<<7 ^ x>>57
+	}
+`,
+		[]string{"\tRLLG\t[$]7,"},
+	},
+	{"s390x", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 + x>>25
+	}
+`,
+		[]string{"\tRLL\t[$]7,"},
+	},
+	{"s390x", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 | x>>25
+	}
+`,
+		[]string{"\tRLL\t[$]7,"},
+	},
+	{"s390x", "linux", `
+	func f(x uint32) uint32 {
+		return x<<7 ^ x>>25
+	}
+`,
+		[]string{"\tRLL\t[$]7,"},
+	},
+
+	// Rotate after inlining (see issue 18254).
+	{"amd64", "linux", `
+	func f(x uint32, k uint) uint32 {
+		return x<<k | x>>(32-k)
+	}
+	func g(x uint32) uint32 {
+		return f(x, 7)
+	}
+`,
+		[]string{"\tROLL\t[$]7,"},
 	},
 }
 
@@ -222,6 +492,6 @@ var issue16214src = `
 package main
 
 func Mod32(x uint32) uint32 {
-	return x % 3 // frontend rewrites it as HMUL with 2863311531, the LITERAL node has Lineno 0
+	return x % 3 // frontend rewrites it as HMUL with 2863311531, the LITERAL node has unknown Pos
 }
 `

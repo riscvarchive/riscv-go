@@ -7,9 +7,7 @@ package ld
 import (
 	"cmd/internal/obj"
 	"cmd/internal/sys"
-	"flag"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"unicode"
 )
@@ -245,15 +243,15 @@ func (d *deadcodepass) init() {
 		if *FlagLinkshared && (Buildmode == BuildmodeExe || Buildmode == BuildmodePIE) {
 			names = append(names, "main.main", "main.init")
 		} else if Buildmode == BuildmodePlugin {
-			pluginName := strings.TrimSuffix(filepath.Base(flag.Arg(0)), ".a")
-			pluginInit := pluginName + ".init"
-			names = append(names, pluginInit, "go.plugin.tabs")
+			names = append(names, *flagPluginPath+".init", *flagPluginPath+".main", "go.plugin.tabs")
 
 			// We don't keep the go.plugin.exports symbol,
 			// but we do keep the symbols it refers to.
 			exports := d.ctxt.Syms.ROLookup("go.plugin.exports", 0)
-			for _, r := range exports.R {
-				d.mark(r.Sym, nil)
+			if exports != nil {
+				for _, r := range exports.R {
+					d.mark(r.Sym, nil)
+				}
 			}
 		}
 		for _, name := range markextra {
@@ -288,6 +286,11 @@ func (d *deadcodepass) flood() {
 		}
 
 		if strings.HasPrefix(s.Name, "type.") && s.Name[5] != '.' {
+			if len(s.P) == 0 {
+				// Probably a bug. The undefined symbol check
+				// later will give a better error than deadcode.
+				continue
+			}
 			if decodetypeKind(s)&kindMask == kindInterface {
 				for _, sig := range decodeIfaceMethods(d.ctxt.Arch, s) {
 					if d.ctxt.Debugvlog > 1 {
@@ -303,6 +306,12 @@ func (d *deadcodepass) flood() {
 		for i := 0; i < len(s.R); i++ {
 			r := &s.R[i]
 			if r.Sym == nil {
+				continue
+			}
+			if r.Type == obj.R_WEAKADDROFF {
+				// An R_WEAKADDROFF relocation is not reason
+				// enough to mark the pointed-to symbol as
+				// reachable.
 				continue
 			}
 			if r.Type != obj.R_METHODOFF {

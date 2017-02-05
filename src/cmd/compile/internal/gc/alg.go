@@ -186,7 +186,7 @@ func genhash(sym *Sym, t *Type) {
 		fmt.Printf("genhash %v %v\n", sym, t)
 	}
 
-	lineno = 1 // less confusing than end of input
+	lineno = MakePos(nil, 1, 0) // less confusing than end of input
 	dclcontext = PEXTERN
 	markdcl()
 
@@ -303,7 +303,9 @@ func genhash(sym *Sym, t *Type) {
 	typecheckslice(fn.Nbody.Slice(), Etop)
 	Curfn = nil
 	popdcl()
-	testdclstack()
+	if debug_dclstack != 0 {
+		testdclstack()
+	}
 
 	// Disable safemode while compiling this code: the code we
 	// generate internally can refer to unsafe.Pointer.
@@ -362,7 +364,7 @@ func geneq(sym *Sym, t *Type) {
 		fmt.Printf("geneq %v %v\n", sym, t)
 	}
 
-	lineno = 1 // less confusing than end of input
+	lineno = MakePos(nil, 1, 0) // less confusing than end of input
 	dclcontext = PEXTERN
 	markdcl()
 
@@ -493,7 +495,9 @@ func geneq(sym *Sym, t *Type) {
 	typecheckslice(fn.Nbody.Slice(), Etop)
 	Curfn = nil
 	popdcl()
-	testdclstack()
+	if debug_dclstack != 0 {
+		testdclstack()
+	}
 
 	// Disable safemode while compiling this code: the code we
 	// generate internally can refer to unsafe.Pointer.

@@ -213,7 +213,7 @@ func dumpglobls() {
 	}
 
 	for _, n := range funcsyms {
-		dsymptr(n.Sym, 0, n.Sym.Def.Func.Shortname.Sym, 0)
+		dsymptr(n.Sym, 0, n.Sym.Def.Func.Shortname, 0)
 		ggloblsym(n.Sym, int32(Widthptr), obj.DUPOK|obj.RODATA)
 	}
 
@@ -350,6 +350,12 @@ func dsymptrLSym(s *obj.LSym, off int, x *obj.LSym, xoff int) int {
 
 func dsymptrOffLSym(s *obj.LSym, off int, x *obj.LSym, xoff int) int {
 	s.WriteOff(Ctxt, int64(off), x, int64(xoff))
+	off += 4
+	return off
+}
+
+func dsymptrWeakOffLSym(s *obj.LSym, off int, x *obj.LSym) int {
+	s.WriteWeakOff(Ctxt, int64(off), x, 0)
 	off += 4
 	return off
 }

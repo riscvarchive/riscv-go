@@ -7,7 +7,7 @@ package runtime
 import "unsafe"
 
 //go:linkname plugin_lastmoduleinit plugin.lastmoduleinit
-func plugin_lastmoduleinit() map[string]interface{} {
+func plugin_lastmoduleinit() (path string, syms map[string]interface{}, mismatchpkg string) {
 	md := firstmoduledata.next
 	if md == nil {
 		throw("runtime: no plugin module data")
@@ -19,30 +19,46 @@ func plugin_lastmoduleinit() map[string]interface{} {
 		throw("runtime: plugin already initialized")
 	}
 
-	if fmd := &firstmoduledata; inRange(fmd.text, fmd.etext, md.text, md.etext) ||
-		inRange(fmd.bss, fmd.ebss, md.bss, md.ebss) ||
-		inRange(fmd.data, fmd.edata, md.data, md.edata) ||
-		inRange(fmd.types, fmd.etypes, md.types, md.etypes) {
-		println("plugin: new module data overlaps with firstmoduledata")
-		println("\tfirstmoduledata.text-etext=", hex(fmd.text), "-", hex(fmd.etext))
-		println("\tfirstmoduledata.bss-ebss=", hex(fmd.bss), "-", hex(fmd.ebss))
-		println("\tfirstmoduledata.data-edata=", hex(fmd.data), "-", hex(fmd.edata))
-		println("\tfirstmoduledata.types-etypes=", hex(fmd.types), "-", hex(fmd.etypes))
-		println("\tmd.text-etext=", hex(md.text), "-", hex(md.etext))
-		println("\tmd.bss-ebss=", hex(md.bss), "-", hex(md.ebss))
-		println("\tmd.data-edata=", hex(md.data), "-", hex(md.edata))
-		println("\tmd.types-etypes=", hex(md.types), "-", hex(md.etypes))
-		throw("plugin: new module data overlaps with firstmoduledata")
+	for _, pmd := range activeModules() {
+		if pmd.pluginpath == md.pluginpath {
+			println("plugin: plugin", md.pluginpath, "already loaded")
+			throw("plugin: plugin already loaded")
+		}
+
+		if inRange(pmd.text, pmd.etext, md.text, md.etext) ||
+			inRange(pmd.bss, pmd.ebss, md.bss, md.ebss) ||
+			inRange(pmd.data, pmd.edata, md.data, md.edata) ||
+			inRange(pmd.types, pmd.etypes, md.types, md.etypes) {
+			println("plugin: new module data overlaps with previous moduledata")
+			println("\tpmd.text-etext=", hex(pmd.text), "-", hex(pmd.etext))
+			println("\tpmd.bss-ebss=", hex(pmd.bss), "-", hex(pmd.ebss))
+			println("\tpmd.data-edata=", hex(pmd.data), "-", hex(pmd.edata))
+			println("\tpmd.types-etypes=", hex(pmd.types), "-", hex(pmd.etypes))
+			println("\tmd.text-etext=", hex(md.text), "-", hex(md.etext))
+			println("\tmd.bss-ebss=", hex(md.bss), "-", hex(md.ebss))
+			println("\tmd.data-edata=", hex(md.data), "-", hex(md.edata))
+			println("\tmd.types-etypes=", hex(md.types), "-", hex(md.etypes))
+			throw("plugin: new module data overlaps with previous moduledata")
+		}
+	}
+	for _, pkghash := range md.pkghashes {
+		if pkghash.linktimehash != *pkghash.runtimehash {
+			return "", nil, pkghash.modulename
+		}
 	}
 
 	// Initialize the freshly loaded module.
+	modulesinit()
 	typelinksinit()
-	md.gcdatamask = progToPointerMask((*byte)(unsafe.Pointer(md.gcdata)), md.edata-md.data)
-	md.gcbssmask = progToPointerMask((*byte)(unsafe.Pointer(md.gcbss)), md.ebss-md.bss)
+
+	pluginftabverify(md)
+	moduledataverify1(md)
 
 	lock(&ifaceLock)
 	for _, i := range md.itablinks {
-		additab(i, true, false)
+		if i.inhash == 0 {
+			additab(i, true, false)
+		}
 	}
 	unlock(&ifaceLock)
 
@@ -54,7 +70,7 @@ func plugin_lastmoduleinit() map[string]interface{} {
 	// Because functions are handled specially in the plugin package,
 	// function symbol names are prefixed here with '.' to avoid
 	// a dependency on the reflect package.
-	syms := make(map[string]interface{}, len(md.ptab))
+	syms = make(map[string]interface{}, len(md.ptab))
 	for _, ptab := range md.ptab {
 		symName := resolveNameOff(unsafe.Pointer(md.types), ptab.name)
 		t := (*_type)(unsafe.Pointer(md.types)).typeOff(ptab.typ)
@@ -68,7 +84,36 @@ func plugin_lastmoduleinit() map[string]interface{} {
 		}
 		syms[name] = val
 	}
-	return syms
+	return md.pluginpath, syms, ""
+}
+
+func pluginftabverify(md *moduledata) {
+	badtable := false
+	for i := 0; i < len(md.ftab); i++ {
+		entry := md.ftab[i].entry
+		if md.minpc <= entry && entry <= md.maxpc {
+			continue
+		}
+
+		f := (*_func)(unsafe.Pointer(&md.pclntable[md.ftab[i].funcoff]))
+		name := funcname(f)
+
+		// A common bug is f.entry has a relocation to a duplicate
+		// function symbol, meaning if we search for its PC we get
+		// a valid entry with a name that is useful for debugging.
+		name2 := "none"
+		entry2 := uintptr(0)
+		f2 := findfunc(entry)
+		if f2 != nil {
+			name2 = funcname(f2)
+			entry2 = f2.entry
+		}
+		badtable = true
+		println("ftab entry outside pc range: ", hex(entry), "/", hex(entry2), ": ", name, "/", name2)
+	}
+	if badtable {
+		throw("runtime: plugin has bad symbol table")
+	}
 }
 
 // inRange reports whether v0 or v1 are in the range [r0, r1].

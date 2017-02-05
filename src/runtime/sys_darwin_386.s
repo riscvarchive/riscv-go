@@ -217,8 +217,8 @@ inreg:
 	ADCL	$0, DX
 	RET
 
-// func now() (sec int64, nsec int32)
-TEXT time·now(SB),NOSPLIT,$0
+// func walltime() (sec int64, nsec int32)
+TEXT runtime·walltime(SB),NOSPLIT,$0
 	CALL	runtime·now(SB)
 	MOVL	$1000000000, CX
 	DIVL	CX
@@ -254,12 +254,12 @@ TEXT runtime·sigfwd(SB),NOSPLIT,$0-16
 	MOVL	info+8(FP), CX
 	MOVL	ctx+12(FP), DX
 	MOVL	SP, SI
-	SUBL	$32, SP		// align stack; handler might be C code
-	ANDL	$~15, SP
+	SUBL	$32, SP
+	ANDL	$~15, SP	// align stack: handler might be a C function
 	MOVL	BX, 0(SP)
 	MOVL	CX, 4(SP)
 	MOVL	DX, 8(SP)
-	MOVL	SI, 12(SP)
+	MOVL	SI, 12(SP)	// save SI: handler might be a Go function
 	CALL	AX
 	MOVL	12(SP), AX
 	MOVL	AX, SP

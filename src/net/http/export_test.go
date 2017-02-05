@@ -24,6 +24,7 @@ var (
 	ExportErrRequestCanceled     = errRequestCanceled
 	ExportErrRequestCanceledConn = errRequestCanceledConn
 	ExportServeFile              = serveFile
+	ExportScanETag               = scanETag
 	ExportHttp2ConfigureServer   = http2ConfigureServer
 )
 
@@ -85,6 +86,12 @@ func (t *Transport) IdleConnKeysForTesting() (keys []string) {
 	}
 	sort.Strings(keys)
 	return
+}
+
+func (t *Transport) IdleConnKeyCountForTesting() int {
+	t.idleMu.Lock()
+	defer t.idleMu.Unlock()
+	return len(t.idleConn)
 }
 
 func (t *Transport) IdleConnStrsForTesting() []string {
@@ -180,3 +187,15 @@ func ExportHttp2ConfigureTransport(t *Transport) error {
 }
 
 var Export_shouldCopyHeaderOnRedirect = shouldCopyHeaderOnRedirect
+
+func (s *Server) ExportAllConnsIdle() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for c := range s.activeConn {
+		st, ok := c.curState.Load().(ConnState)
+		if !ok || st != StateIdle {
+			return false
+		}
+	}
+	return true
+}

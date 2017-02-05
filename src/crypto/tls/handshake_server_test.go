@@ -137,6 +137,10 @@ func TestNoRC4ByDefault(t *testing.T) {
 	testClientHelloFailure(t, serverConfig, clientHello, "no cipher suite supported by both client and server")
 }
 
+func TestRejectSNIWithTrailingDot(t *testing.T) {
+	testClientHelloFailure(t, testConfig, &clientHelloMsg{vers: VersionTLS12, serverName: "foo.com."}, "unexpected message")
+}
+
 func TestDontSelectECDSAWithRSAKey(t *testing.T) {
 	// Test that, even when both sides support an ECDSA cipher suite, it
 	// won't be selected if the server's private key doesn't support it.
@@ -206,7 +210,8 @@ func TestRenegotiationExtension(t *testing.T) {
 		buf = make([]byte, 1024)
 		n, err := c.Read(buf)
 		if err != nil {
-			t.Fatalf("Server read returned error: %s", err)
+			t.Errorf("Server read returned error: %s", err)
+			return
 		}
 		buf = buf[:n]
 		c.Close()
@@ -660,6 +665,7 @@ func (test *serverTest) run(t *testing.T, write bool) {
 }
 
 func runServerTestForVersion(t *testing.T, template *serverTest, prefix, option string) {
+	setParallel(t)
 	test := *template
 	test.name = prefix + test.name
 	if len(test.command) == 0 {
@@ -1054,6 +1060,7 @@ FMBexFe01MNvja5oHt1vzobhfm6ySD6B5U7ixohLZNz1MLvT/2XMW/TdtWo+PtAd
 -----END EC PRIVATE KEY-----`
 
 func TestClientAuth(t *testing.T) {
+	setParallel(t)
 	var certPath, keyPath, ecdsaCertPath, ecdsaKeyPath string
 
 	if *update {

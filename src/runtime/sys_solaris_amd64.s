@@ -290,11 +290,16 @@ exit:
 	RET
 
 TEXT runtime·sigfwd(SB),NOSPLIT,$0-32
-	MOVL	sig+8(FP), DI
+	MOVQ	fn+0(FP),    AX
+	MOVL	sig+8(FP),   DI
 	MOVQ	info+16(FP), SI
-	MOVQ	ctx+24(FP), DX
-	MOVQ	fn+0(FP), AX
+	MOVQ	ctx+24(FP),  DX
+	PUSHQ	BP
+	MOVQ	SP, BP
+	ANDQ	$~15, SP     // alignment for x86_64 ABI
 	CALL	AX
+	MOVQ	BP, SP
+	POPQ	BP
 	RET
 
 // Called from runtime·usleep (Go). Can be called on Go stack, on OS stack,
@@ -349,8 +354,8 @@ TEXT runtime·osyield1(SB),NOSPLIT,$0
 	CALL	AX
 	RET
 
-// func now() (sec int64, nsec int32)
-TEXT time·now(SB),NOSPLIT,$8-12
+// func walltime() (sec int64, nsec int32)
+TEXT runtime·walltime(SB),NOSPLIT,$8-12
 	CALL	runtime·nanotime(SB)
 	MOVQ	0(SP), AX
 

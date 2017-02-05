@@ -269,11 +269,10 @@ func (p *Package) guessKinds(f *File) []*Name {
 			}
 		}
 
-		needType = append(needType, n)
-
 		// If this is a struct, union, or enum type name, no need to guess the kind.
 		if strings.HasPrefix(n.C, "struct ") || strings.HasPrefix(n.C, "union ") || strings.HasPrefix(n.C, "enum ") {
 			n.Kind = "type"
+			needType = append(needType, n)
 			continue
 		}
 
@@ -429,6 +428,7 @@ func (p *Package) loadDWARF(f *File, names []*Name) {
 	var b bytes.Buffer
 	b.WriteString(f.Preamble)
 	b.WriteString(builtinProlog)
+	b.WriteString("#line 1 \"cgo-dwarf-inference\"\n")
 	for i, n := range names {
 		fmt.Fprintf(&b, "__typeof__(%s) *__cgo__%d;\n", n.C, i)
 		if n.Kind == "const" {
@@ -712,15 +712,7 @@ func (p *Package) rewriteCall(f *File, call *Call, name *Name) bool {
 			List: params,
 		},
 	}
-	var fbody ast.Stmt
-	if name.FuncType.Result == nil {
-		fbody = &ast.ExprStmt{
-			X: fcall,
-		}
-	} else {
-		fbody = &ast.ReturnStmt{
-			Results: []ast.Expr{fcall},
-		}
+	if name.FuncType.Result != nil {
 		rtype := p.rewriteUnsafe(name.FuncType.Result.Go)
 		if rtype != name.FuncType.Result.Go {
 			needsUnsafe = true
@@ -733,6 +725,45 @@ func (p *Package) rewriteCall(f *File, call *Call, name *Name) bool {
 			},
 		}
 	}
+
+	// There is a Ref pointing to the old call.Call.Fun.
+	for _, ref := range f.Ref {
+		if ref.Expr == &call.Call.Fun {
+			ref.Expr = &fcall.Fun
+
+			// If this call expects two results, we have to
+			// adjust the results of the function we generated.
+			if ref.Context == "call2" {
+				if ftype.Results == nil {
+					// An explicit void argument
+					// looks odd but it seems to
+					// be how cgo has worked historically.
+					ftype.Results = &ast.FieldList{
+						List: []*ast.Field{
+							&ast.Field{
+								Type: ast.NewIdent("_Ctype_void"),
+							},
+						},
+					}
+				}
+				ftype.Results.List = append(ftype.Results.List,
+					&ast.Field{
+						Type: ast.NewIdent("error"),
+					})
+			}
+		}
+	}
+
+	var fbody ast.Stmt
+	if ftype.Results == nil {
+		fbody = &ast.ExprStmt{
+			X: fcall,
+		}
+	} else {
+		fbody = &ast.ReturnStmt{
+			Results: []ast.Expr{fcall},
+		}
+	}
 	call.Call.Fun = &ast.FuncLit{
 		Type: ftype,
 		Body: &ast.BlockStmt{
@@ -741,22 +772,6 @@ func (p *Package) rewriteCall(f *File, call *Call, name *Name) bool {
 	}
 	call.Call.Lparen = token.NoPos
 	call.Call.Rparen = token.NoPos
-
-	// There is a Ref pointing to the old call.Call.Fun.
-	for _, ref := range f.Ref {
-		if ref.Expr == &call.Call.Fun {
-			ref.Expr = &fcall.Fun
-
-			// If this call expects two results, we have to
-			// adjust the results of the  function we generated.
-			if ref.Context == "call2" {
-				ftype.Results.List = append(ftype.Results.List,
-					&ast.Field{
-						Type: ast.NewIdent("error"),
-					})
-			}
-		}
-	}
 
 	return needsUnsafe
 }
@@ -799,6 +814,11 @@ func (p *Package) hasPointer(f *File, t ast.Expr, top bool) bool {
 		return false
 	case *ast.StarExpr: // Pointer type.
 		if !top {
+			return true
+		}
+		// Check whether this is a pointer to a C union (or class)
+		// type that contains a pointer.
+		if unionWithPointer[t.X] {
 			return true
 		}
 		return p.hasPointer(f, t.X, false)
@@ -1189,6 +1209,8 @@ func (p *Package) gccMachine() []string {
 		return []string{"-m64"}
 	case "mips64", "mips64le":
 		return []string{"-mabi=64"}
+	case "mips", "mipsle":
+		return []string{"-mabi=32"}
 	}
 	return nil
 }
@@ -1417,6 +1439,10 @@ var tagGen int
 var typedef = make(map[string]*Type)
 var goIdent = make(map[string]*ast.Ident)
 
+// unionWithPointer is true for a Go type that represents a C union (or class)
+// that may contain a pointer. This is used for cgo pointer checking.
+var unionWithPointer = make(map[ast.Expr]bool)
+
 func (c *typeConv) Init(ptrSize, intSize int64) {
 	c.ptrSize = ptrSize
 	c.intSize = intSize
@@ -1462,6 +1488,19 @@ func base(dt dwarf.Type) dwarf.Type {
 			continue
 		}
 		break
+	}
+	return dt
+}
+
+// unqual strips away qualifiers from a DWARF type.
+// In general we don't care about top-level qualifiers.
+func unqual(dt dwarf.Type) dwarf.Type {
+	for {
+		if d, ok := dt.(*dwarf.QualType); ok {
+			dt = d.Type
+		} else {
+			break
+		}
 	}
 	return dt
 }
@@ -1689,6 +1728,15 @@ func (c *typeConv) Type(dtype dwarf.Type, pos token.Pos) *Type {
 		if _, ok := base(dt.Type).(*dwarf.VoidType); ok {
 			t.Go = c.goVoidPtr
 			t.C.Set("void*")
+			dq := dt.Type
+			for {
+				if d, ok := dq.(*dwarf.QualType); ok {
+					t.C.Set(d.Qual + " " + t.C.String())
+					dq = d.Type
+				} else {
+					break
+				}
+			}
 			break
 		}
 
@@ -1701,9 +1749,16 @@ func (c *typeConv) Type(dtype dwarf.Type, pos token.Pos) *Type {
 		c.ptrs[dt.Type] = append(c.ptrs[dt.Type], t)
 
 	case *dwarf.QualType:
-		// Ignore qualifier.
-		t = c.Type(dt.Type, pos)
-		c.m[dtype] = t
+		t1 := c.Type(dt.Type, pos)
+		t.Size = t1.Size
+		t.Align = t1.Align
+		t.Go = t1.Go
+		if unionWithPointer[t1.Go] {
+			unionWithPointer[t.Go] = true
+		}
+		t.EnumValues = nil
+		t.Typedef = ""
+		t.C.Set("%s "+dt.Qual, t1.C)
 		return t
 
 	case *dwarf.StructType:
@@ -1735,6 +1790,9 @@ func (c *typeConv) Type(dtype dwarf.Type, pos token.Pos) *Type {
 		switch dt.Kind {
 		case "class", "union":
 			t.Go = c.Opaque(t.Size)
+			if c.dwarfHasPointer(dt, pos) {
+				unionWithPointer[t.Go] = true
+			}
 			if t.C.Empty() {
 				t.C.Set("__typeof__(unsigned char[%d])", t.Size)
 			}
@@ -1777,6 +1835,9 @@ func (c *typeConv) Type(dtype dwarf.Type, pos token.Pos) *Type {
 		goIdent[name.Name] = name
 		sub := c.Type(dt.Type, pos)
 		t.Go = name
+		if unionWithPointer[sub.Go] {
+			unionWithPointer[t.Go] = true
+		}
 		t.Size = sub.Size
 		t.Align = sub.Align
 		oldType := typedef[name.Name]
@@ -1907,7 +1968,7 @@ func isStructUnionClass(x ast.Expr) bool {
 // FuncArg returns a Go type with the same memory layout as
 // dtype when used as the type of a C function argument.
 func (c *typeConv) FuncArg(dtype dwarf.Type, pos token.Pos) *Type {
-	t := c.Type(dtype, pos)
+	t := c.Type(unqual(dtype), pos)
 	switch dt := dtype.(type) {
 	case *dwarf.ArrayType:
 		// Arrays are passed implicitly as pointers in C.
@@ -1937,9 +1998,12 @@ func (c *typeConv) FuncArg(dtype dwarf.Type, pos token.Pos) *Type {
 				return nil
 			}
 
-			// Remember the C spelling, in case the struct
-			// has __attribute__((unavailable)) on it. See issue 2888.
-			t.Typedef = dt.Name
+			// For a struct/union/class, remember the C spelling,
+			// in case it has __attribute__((unavailable)).
+			// See issue 2888.
+			if isStructUnionClass(t.Go) {
+				t.Typedef = dt.Name
+			}
 		}
 	}
 	return t
@@ -1968,7 +2032,7 @@ func (c *typeConv) FuncType(dtype *dwarf.FuncType, pos token.Pos) *FuncType {
 	if _, ok := dtype.ReturnType.(*dwarf.VoidType); ok {
 		gr = []*ast.Field{{Type: c.goVoid}}
 	} else if dtype.ReturnType != nil {
-		r = c.Type(dtype.ReturnType, pos)
+		r = c.Type(unqual(dtype.ReturnType), pos)
 		gr = []*ast.Field{{Type: r.Go}}
 	}
 	return &FuncType{
@@ -2153,6 +2217,44 @@ func (c *typeConv) Struct(dt *dwarf.StructType, pos token.Pos) (expr *ast.Struct
 	}
 	expr = &ast.StructType{Fields: &ast.FieldList{List: fld}}
 	return
+}
+
+// dwarfHasPointer returns whether the DWARF type dt contains a pointer.
+func (c *typeConv) dwarfHasPointer(dt dwarf.Type, pos token.Pos) bool {
+	switch dt := dt.(type) {
+	default:
+		fatalf("%s: unexpected type: %s", lineno(pos), dt)
+		return false
+
+	case *dwarf.AddrType, *dwarf.BoolType, *dwarf.CharType, *dwarf.EnumType,
+		*dwarf.FloatType, *dwarf.ComplexType, *dwarf.FuncType,
+		*dwarf.IntType, *dwarf.UcharType, *dwarf.UintType, *dwarf.VoidType:
+
+		return false
+
+	case *dwarf.ArrayType:
+		return c.dwarfHasPointer(dt.Type, pos)
+
+	case *dwarf.PtrType:
+		return true
+
+	case *dwarf.QualType:
+		return c.dwarfHasPointer(dt.Type, pos)
+
+	case *dwarf.StructType:
+		for _, f := range dt.Field {
+			if c.dwarfHasPointer(f.Type, pos) {
+				return true
+			}
+		}
+		return false
+
+	case *dwarf.TypedefType:
+		if dt.Name == "_GoString_" || dt.Name == "_GoBytes_" {
+			return true
+		}
+		return c.dwarfHasPointer(dt.Type, pos)
+	}
 }
 
 func upper(s string) string {

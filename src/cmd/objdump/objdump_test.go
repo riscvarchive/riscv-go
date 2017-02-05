@@ -6,6 +6,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"go/build"
 	"internal/testenv"
 	"io/ioutil"
@@ -17,21 +18,42 @@ import (
 	"testing"
 )
 
-func buildObjdump(t *testing.T) (tmp, exe string) {
-	testenv.MustHaveGoBuild(t)
+var tmp, exe string // populated by buildObjdump
 
-	tmp, err := ioutil.TempDir("", "TestObjDump")
+func TestMain(m *testing.M) {
+	if !testenv.HasGoBuild() {
+		return
+	}
+	var exitcode int
+	if err := buildObjdump(); err == nil {
+		exitcode = m.Run()
+	} else {
+		fmt.Println(err)
+		exitcode = 1
+	}
+	os.RemoveAll(tmp)
+	os.Exit(exitcode)
+}
+
+func buildObjdump() error {
+	var err error
+	tmp, err = ioutil.TempDir("", "TestObjDump")
 	if err != nil {
-		t.Fatal("TempDir failed: ", err)
+		return fmt.Errorf("TempDir failed: %v", err)
 	}
 
 	exe = filepath.Join(tmp, "testobjdump.exe")
-	out, err := exec.Command(testenv.GoToolPath(t), "build", "-o", exe, "cmd/objdump").CombinedOutput()
+	gotool, err := testenv.GoTool()
+	if err != nil {
+		return err
+	}
+	out, err := exec.Command(gotool, "build", "-o", exe, "cmd/objdump").CombinedOutput()
 	if err != nil {
 		os.RemoveAll(tmp)
-		t.Fatalf("go build -o %v cmd/objdump: %v\n%s", exe, err, string(out))
+		return fmt.Errorf("go build -o %v cmd/objdump: %v\n%s", exe, err, string(out))
 	}
-	return
+
+	return nil
 }
 
 var x86Need = []string{
@@ -70,9 +92,6 @@ var target = flag.String("target", "", "test disassembly of `goos/goarch` binary
 // can handle that one.
 
 func testDisasm(t *testing.T, flags ...string) {
-	tmp, exe := buildObjdump(t)
-	defer os.RemoveAll(tmp)
-
 	goarch := runtime.GOARCH
 	if *target != "" {
 		f := strings.Split(*target, "/")
@@ -147,7 +166,7 @@ func TestDisasmExtld(t *testing.T) {
 		t.Skipf("skipping on %s, no support for external linking, issue 9038", runtime.GOARCH)
 	case "arm64":
 		t.Skipf("skipping on %s, issue 10106", runtime.GOARCH)
-	case "mips64", "mips64le":
+	case "mips64", "mips64le", "mips", "mipsle":
 		t.Skipf("skipping on %s, issue 12559 and 12560", runtime.GOARCH)
 	case "s390x":
 		t.Skipf("skipping on %s, issue 15255", runtime.GOARCH)

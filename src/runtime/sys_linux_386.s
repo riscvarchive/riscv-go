@@ -151,8 +151,8 @@ TEXT runtime·mincore(SB),NOSPLIT,$0-16
 	MOVL	AX, ret+12(FP)
 	RET
 
-// func now() (sec int64, nsec int32)
-TEXT time·now(SB), NOSPLIT, $32
+// func walltime() (sec int64, nsec int32)
+TEXT runtime·walltime(SB), NOSPLIT, $32
 	MOVL	$265, AX			// syscall - clock_gettime
 	MOVL	$0, BX		// CLOCK_REALTIME
 	LEAL	8(SP), CX
@@ -212,17 +212,31 @@ TEXT runtime·rt_sigaction(SB),NOSPLIT,$0
 	RET
 
 TEXT runtime·sigfwd(SB),NOSPLIT,$12-16
-	MOVL	sig+4(FP), AX
-	MOVL	AX, 0(SP)
-	MOVL	info+8(FP), AX
-	MOVL	AX, 4(SP)
-	MOVL	ctx+12(FP), AX
-	MOVL	AX, 8(SP)
 	MOVL	fn+0(FP), AX
+	MOVL	sig+4(FP), BX
+	MOVL	info+8(FP), CX
+	MOVL	ctx+12(FP), DX
+	MOVL	SP, SI
+	SUBL	$32, SP
+	ANDL	$-15, SP	// align stack: handler might be a C function
+	MOVL	BX, 0(SP)
+	MOVL	CX, 4(SP)
+	MOVL	DX, 8(SP)
+	MOVL	SI, 12(SP)	// save SI: handler might be a Go function
 	CALL	AX
+	MOVL	12(SP), AX
+	MOVL	AX, SP
 	RET
 
-TEXT runtime·sigtramp(SB),NOSPLIT,$12
+TEXT runtime·sigtramp(SB),NOSPLIT,$28
+	// Save callee-saved C registers, since the caller may be a C signal handler.
+	MOVL	BX, bx-4(SP)
+	MOVL	BP, bp-8(SP)
+	MOVL	SI, si-12(SP)
+	MOVL	DI, di-16(SP)
+	// We don't save mxcsr or the x87 control word because sigtrampgo doesn't
+	// modify them.
+
 	MOVL	sig+0(FP), BX
 	MOVL	BX, 0(SP)
 	MOVL	info+4(FP), BX
@@ -230,6 +244,11 @@ TEXT runtime·sigtramp(SB),NOSPLIT,$12
 	MOVL	ctx+8(FP), BX
 	MOVL	BX, 8(SP)
 	CALL	runtime·sigtrampgo(SB)
+
+	MOVL	di-16(SP), DI
+	MOVL	si-12(SP), SI
+	MOVL	bp-8(SP),  BP
+	MOVL	bx-4(SP),  BX
 	RET
 
 TEXT runtime·cgoSigtramp(SB),NOSPLIT,$0

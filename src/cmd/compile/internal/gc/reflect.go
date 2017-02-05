@@ -495,26 +495,31 @@ func dgopkgpathOffLSym(s *obj.LSym, ot int, pkg *Pkg) int {
 }
 
 // isExportedField reports whether a struct field is exported.
-func isExportedField(ft *Field) bool {
+// It also returns the package to use for PkgPath for an unexported field.
+func isExportedField(ft *Field) (bool, *Pkg) {
 	if ft.Sym != nil && ft.Embedded == 0 {
-		return exportname(ft.Sym.Name)
+		return exportname(ft.Sym.Name), ft.Sym.Pkg
 	} else {
 		if ft.Type.Sym != nil &&
 			(ft.Type.Sym.Pkg == builtinpkg || !exportname(ft.Type.Sym.Name)) {
-			return false
+			return false, ft.Type.Sym.Pkg
 		} else {
-			return true
+			return true, nil
 		}
 	}
 }
 
 // dnameField dumps a reflect.name for a struct field.
-func dnameField(s *Sym, ot int, ft *Field) int {
+func dnameField(s *Sym, ot int, spkg *Pkg, ft *Field) int {
 	var name string
-	if ft.Sym != nil && ft.Embedded == 0 {
+	if ft.Sym != nil {
 		name = ft.Sym.Name
 	}
-	nsym := dname(name, ft.Note, nil, isExportedField(ft))
+	isExported, fpkg := isExportedField(ft)
+	if isExported || fpkg == spkg {
+		fpkg = nil
+	}
+	nsym := dname(name, ft.Note, fpkg, isExported)
 	return dsymptrLSym(Linksym(s), ot, nsym, 0)
 }
 
@@ -831,9 +836,13 @@ func dcommontype(s *Sym, ot int, t *Type) int {
 		algsym = dalgsym(t)
 	}
 
+	sptrWeak := true
 	var sptr *Sym
-	tptr := ptrto(t)
-	if !t.IsPtr() && (t.Sym != nil || methods(tptr) != nil) {
+	if !t.IsPtr() || t.ptrTo != nil {
+		tptr := ptrto(t)
+		if t.Sym != nil || methods(tptr) != nil {
+			sptrWeak = false
+		}
 		sptr = dtypesym(tptr)
 	}
 
@@ -920,17 +929,27 @@ func dcommontype(s *Sym, ot int, t *Type) int {
 
 	nsym := dname(p, "", nil, exported)
 	ot = dsymptrOffLSym(Linksym(s), ot, nsym, 0) // str
+	// ptrToThis
 	if sptr == nil {
 		ot = duint32(s, ot, 0)
+	} else if sptrWeak {
+		ot = dsymptrWeakOffLSym(Linksym(s), ot, Linksym(sptr))
 	} else {
-		ot = dsymptrOffLSym(Linksym(s), ot, Linksym(sptr), 0) // ptrToThis
+		ot = dsymptrOffLSym(Linksym(s), ot, Linksym(sptr), 0)
 	}
 
 	return ot
 }
 
 func typesym(t *Type) *Sym {
-	return Pkglookup(t.tconv(FmtLeft), typepkg)
+	name := t.tconv(FmtLeft)
+
+	// Use a separate symbol name for Noalg types for #17752.
+	if a, bad := algtype1(t); a == ANOEQ && bad.Noalg {
+		name = "noalg." + name
+	}
+
+	return Pkglookup(name, typepkg)
 }
 
 // tracksym returns the symbol for tracking use of field/method f, assumed
@@ -1328,9 +1347,16 @@ ok:
 
 		for _, f := range t.Fields().Slice() {
 			// ../../../../runtime/type.go:/structField
-			ot = dnameField(s, ot, f)
+			ot = dnameField(s, ot, pkg, f)
 			ot = dsymptr(s, ot, dtypesym(f.Type), 0)
-			ot = duintptr(s, ot, uint64(f.Offset))
+			offsetAnon := uint64(f.Offset) << 1
+			if offsetAnon>>1 != uint64(f.Offset) {
+				Fatalf("%v: bad field offset for %s", t, f.Sym.Name)
+			}
+			if f.Embedded != 0 {
+				offsetAnon |= 1
+			}
+			ot = duintptr(s, ot, offsetAnon)
 		}
 	}
 
@@ -1395,15 +1421,15 @@ func dumptypestructs() {
 		// }
 		o := dsymptr(i.sym, 0, dtypesym(i.itype), 0)
 		o = dsymptr(i.sym, o, dtypesym(i.t), 0)
-		o += Widthptr + 8                      // skip link/bad/unused fields
+		o += Widthptr + 8                      // skip link/bad/inhash fields
 		o += len(imethods(i.itype)) * Widthptr // skip fun method pointers
 		// at runtime the itab will contain pointers to types, other itabs and
 		// method functions. None are allocated on heap, so we can use obj.NOPTR.
-		ggloblsym(i.sym, int32(o), int16(obj.DUPOK|obj.NOPTR|obj.LOCAL))
+		ggloblsym(i.sym, int32(o), int16(obj.DUPOK|obj.NOPTR))
 
 		ilink := Pkglookup(i.t.tconv(FmtLeft)+","+i.itype.tconv(FmtLeft), itablinkpkg)
 		dsymptr(ilink, 0, i.sym, 0)
-		ggloblsym(ilink, int32(Widthptr), int16(obj.DUPOK|obj.RODATA|obj.LOCAL))
+		ggloblsym(ilink, int32(Widthptr), int16(obj.DUPOK|obj.RODATA))
 	}
 
 	// process ptabs
@@ -1419,7 +1445,7 @@ func dumptypestructs() {
 			// }
 			nsym := dname(p.s.Name, "", nil, true)
 			ot = dsymptrOffLSym(s, ot, nsym, 0)
-			ot = dsymptrOffLSym(s, ot, Linksym(typesym(p.t)), 0)
+			ot = dsymptrOffLSym(s, ot, Linksym(dtypesym(p.t)), 0)
 		}
 		ggloblLSym(s, int32(ot), int16(obj.RODATA))
 
@@ -1550,14 +1576,13 @@ func dalgsym(t *Type) *Sym {
 
 // maxPtrmaskBytes is the maximum length of a GC ptrmask bitmap,
 // which holds 1-bit entries describing where pointers are in a given type.
-// 16 bytes is enough to describe 128 pointer-sized words, 512 or 1024 bytes
-// depending on the system. Above this length, the GC information is
-// recorded as a GC program, which can express repetition compactly.
-// In either form, the information is used by the runtime to initialize the
-// heap bitmap, and for large types (like 128 or more words), they are
-// roughly the same speed. GC programs are never much larger and often
-// more compact. (If large arrays are involved, they can be arbitrarily more
-// compact.)
+// Above this length, the GC information is recorded as a GC program,
+// which can express repetition compactly. In either form, the
+// information is used by the runtime to initialize the heap bitmap,
+// and for large types (like 128 or more words), they are roughly the
+// same speed. GC programs are never much larger and often more
+// compact. (If large arrays are involved, they can be arbitrarily
+// more compact.)
 //
 // The cutoff must be large enough that any allocation large enough to
 // use a GC program is large enough that it does not share heap bitmap

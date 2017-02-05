@@ -1003,6 +1003,21 @@ func TestDurationNanoseconds(t *testing.T) {
 	}
 }
 
+var secDurationTests = []struct {
+	d    Duration
+	want float64
+}{
+	{Duration(300000000), 0.3},
+}
+
+func TestDurationSeconds(t *testing.T) {
+	for _, tt := range secDurationTests {
+		if got := tt.d.Seconds(); got != tt.want {
+			t.Errorf("d.Seconds() = %g; want: %g", got, tt.want)
+		}
+	}
+}
+
 var minDurationTests = []struct {
 	d    Duration
 	want float64
@@ -1011,6 +1026,7 @@ var minDurationTests = []struct {
 	{Duration(-1), -1 / 60e9},
 	{Duration(1), 1 / 60e9},
 	{Duration(60000000000), 1},
+	{Duration(3000), 5e-8},
 }
 
 func TestDurationMinutes(t *testing.T) {
@@ -1029,6 +1045,7 @@ var hourDurationTests = []struct {
 	{Duration(-1), -1 / 3600e9},
 	{Duration(1), 1 / 3600e9},
 	{Duration(3600000000000), 1},
+	{Duration(36), 1e-11},
 }
 
 func TestDurationHours(t *testing.T) {
@@ -1117,8 +1134,8 @@ var defaultLocTests = []struct {
 
 	{"Truncate", func(t1, t2 Time) bool { return t1.Truncate(Hour).Equal(t2.Truncate(Hour)) }},
 	{"Round", func(t1, t2 Time) bool { return t1.Round(Hour).Equal(t2.Round(Hour)) }},
-	
-	{"== Time{}", func(t1, t2 Time) bool { return (t1==Time{}) == (t2==Time{}) }},
+
+	{"== Time{}", func(t1, t2 Time) bool { return (t1 == Time{}) == (t2 == Time{}) }},
 }
 
 func TestDefaultLoc(t *testing.T) {
@@ -1228,5 +1245,12 @@ func TestMarshalBinaryZeroTime(t *testing.T) {
 	}
 	if t1 != t0 {
 		t.Errorf("t0=%#v\nt1=%#v\nwant identical structures", t0, t1)
+	}
+}
+
+// Issue 17720: Zero value of time.Month fails to print
+func TestZeroMonthString(t *testing.T) {
+	if got, want := Month(0).String(), "%!Month(0)"; got != want {
+		t.Errorf("zero month = %q; want %q", got, want)
 	}
 }

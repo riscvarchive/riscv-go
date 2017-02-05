@@ -159,12 +159,10 @@ var opnames = []string{
 	OINC:             "INC",
 	OEXTEND:          "EXTEND",
 	OHMUL:            "HMUL",
-	OLROT:            "LROT",
 	ORROTC:           "RROTC",
 	ORETJMP:          "RETJMP",
 	OPS:              "PS",
 	OPC:              "PC",
-	OSQRT:            "SQRT",
 	OGETG:            "GETG",
 	OEND:             "END",
 }

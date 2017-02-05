@@ -4,100 +4,101 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Test basic restrictions on alias declarations.
+// Test basic restrictions on type aliases.
 
 package p
 
 import (
-	"flag"
-	"fmt" // use at most once (to test "imported but not used" error)
-	"go/build"
-	. "go/build"
-	"io"
-	"math"
-	"unsafe"
+	"reflect"
+	. "reflect"
 )
 
-// helper
-var before struct {
-	f
+type T0 struct{}
+
+// Valid type alias declarations.
+
+type _ = T0
+type _ = int
+type _ = struct{}
+type _ = reflect.Value
+type _ = Value
+
+type (
+	A0 = T0
+	A1 = int
+	A2 = struct{}
+	A3 = reflect.Value
+	A4 = Value
+	A5 = Value
+
+	N0 A0
+)
+
+// Methods can be declared on the original named type and the alias.
+func (T0) m1()  {} // GCCGO_ERROR "previous"
+func (*T0) m1() {} // ERROR "method redeclared: T0\.m1|redefinition of .m1."
+func (A0) m1()  {} // ERROR "T0\.m1 redeclared in this block|redefinition of .m1."
+func (A0) m1()  {} // ERROR "T0\.m1 redeclared in this block|redefinition of .m1."
+func (A0) m2()  {}
+
+// Type aliases and the original type name can be used interchangeably.
+var _ A0 = T0{}
+var _ T0 = A0{}
+
+// But aliases and original types cannot be used with new types based on them.
+var _ N0 = T0{} // ERROR "cannot use T0 literal \(type T0\) as type N0 in assignment|incompatible type"
+var _ N0 = A0{} // ERROR "cannot use T0 literal \(type T0\) as type N0 in assignment|incompatible type"
+
+var _ A5 = Value{}
+
+var _ interface {
+	m1()
+	m2()
+} = T0{}
+
+var _ interface {
+	m1()
+	m2()
+} = A0{}
+
+func _() {
+	type _ = T0
+	type _ = int
+	type _ = struct{}
+	type _ = reflect.Value
+	type _ = Value
+
+	type (
+		A0 = T0
+		A1 = int
+		A2 = struct{}
+		A3 = reflect.Value
+		A4 = Value
+		A5 Value
+
+		N0 A0
+	)
+
+	var _ A0 = T0{}
+	var _ T0 = A0{}
+
+	var _ N0 = T0{} // ERROR "cannot use T0 literal \(type T0\) as type N0 in assignment|incompatible type"
+	var _ N0 = A0{} // ERROR "cannot use T0 literal \(type T0\) as type N0 in assignment|incompatible type"
+
+	var _ A5 = Value{} // ERROR "cannot use reflect\.Value literal \(type reflect.Value\) as type A5 in assignment|incompatible type"
 }
 
-// aliases must refer to package-qualified identifiers
-// TODO(gri) should only see one error for declaration below - fix this
-const _ => 0 // ERROR "unexpected literal 0|_ is not a package-qualified identifier"
+// Invalid type alias declarations.
 
-type _ => _ // ERROR "_ is not a package-qualified identifier"
-type t => _ // ERROR "_ is not a package-qualified identifier"
+type _ = reflect.ValueOf // ERROR "reflect.ValueOf is not a type|expected type"
 
-const _ => iota // ERROR "iota is not a package-qualified identifier"
-type _ => int   // ERROR "int is not a package-qualified identifier"
+func (A1) m() {} // ERROR "cannot define new methods on non-local type int|may not define methods on non-local type"
+func (A2) m() {} // ERROR "invalid receiver type"
+func (A3) m() {} // ERROR "cannot define new methods on non-local type reflect.Value|may not define methods on non-local type"
+func (A4) m() {} // ERROR "reflect.Value.m redeclared in this block" "cannot define new methods on non-local type reflect.Value|may not define methods on non-local type"
 
-const c => iota // ERROR "iota is not a package-qualified identifier"
-type t => int   // ERROR "int is not a package-qualified identifier"
+type B1 = struct{}
 
-// dot-imported identifiers are not qualified identifiers
-// TODO(gri) fix error printing - should not print a qualified identifier...
-var _ => Default // ERROR "build\.Default is not a package-qualified identifier"
+func (B1) m() {} // ERROR "m redeclared in this block" "invalid receiver type"
 
-// qualified identifiers must start with a package
-var _ => before.f  // ERROR "before is not a package"
-func _ => before.f // ERROR "before is not a package"
-var _ => after.m   // ERROR "after is not a package"
-func _ => after.m  // ERROR "after is not a package"
-
-var v => before.f  // ERROR "before is not a package"
-func f => before.f // ERROR "before is not a package"
-var v => after.m   // ERROR "after is not a package"
-func f => after.m  // ERROR "after is not a package"
-
-// TODO(gri) fix error printing - should print correct qualified identifier...
-var _ => Default.ARCH // ERROR "build.Default is not a package"
-
-// aliases may not refer to package unsafe
-type ptr => unsafe.Pointer // ERROR "ptr refers to package unsafe"
-func size => unsafe.Sizeof // ERROR "size refers to package unsafe"
-
-// aliases must refer to entities of the same kind
-const _ => math.Pi
-const pi => math.Pi
-const pi1 => math.Sin // ERROR "math.Sin is not a constant"
-
-type _ => io.Writer
-type writer => io.Writer
-type writer1 => math.Sin // ERROR "math.Sin is not a type"
-
-var _ => build.Default
-var def => build.Default
-var def1 => build.Import // ERROR "build.Import is not a variable"
-
-func _ => math.Sin
-func sin => math.Sin
-func sin1 => math.Pi // ERROR "math.Pi is not a function"
-
-// aliases may not be called init
-func init => flag.Parse // ERROR "cannot declare init"
-
-// alias reference to a package marks package as used
-func _ => fmt.Println
-
-// re-exported aliases
-const Pi => math.Pi
-
-type Writer => io.Writer
-
-var Def => build.Default
-
-func Sin => math.Sin
-
-// type aliases denote identical types
-type myPackage => build.Package
-
-var pkg myPackage
-var _ build.Package = pkg   // valid assignment
-var _ *build.Package = &pkg // valid assignment
-
-// helper
-type after struct{}
-
-func (after) m() {}
+// TODO(gri) expand

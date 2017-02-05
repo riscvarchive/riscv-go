@@ -224,6 +224,7 @@ var dayOutOfRangeTests = []struct {
 	{"Thu Nov 31 21:00:57 2010", false},
 	{"Thu Dec 31 21:00:57 2010", true},
 	{"Thu Dec 32 21:00:57 2010", false},
+	{"Thu Dec 00 21:00:57 2010", false},
 }
 
 func TestParseDayOutOfRange(t *testing.T) {
@@ -404,6 +405,7 @@ var parseTimeZoneTests = []ParseTimeZoneTest{
 	{"ESAST hi", 5, true},
 	{"ESASTT hi", 0, false}, // run of upper-case letters too long.
 	{"ESATY hi", 0, false},  // five letters must end in T.
+	{"WITA hi", 4, true},    // Issue #18251
 }
 
 func TestParseTimeZone(t *testing.T) {

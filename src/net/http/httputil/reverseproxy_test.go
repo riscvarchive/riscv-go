@@ -583,6 +583,47 @@ func TestReverseProxy_NilBody(t *testing.T) {
 	}
 }
 
+// Issue 14237. Test ModifyResponse and that an error from it
+// causes the proxy to return StatusBadGateway, or StatusOK otherwise.
+func TestReverseProxyModifyResponse(t *testing.T) {
+	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("X-Hit-Mod", fmt.Sprintf("%v", r.URL.Path == "/mod"))
+	}))
+	defer backendServer.Close()
+
+	rpURL, _ := url.Parse(backendServer.URL)
+	rproxy := NewSingleHostReverseProxy(rpURL)
+	rproxy.ErrorLog = log.New(ioutil.Discard, "", 0) // quiet for tests
+	rproxy.ModifyResponse = func(resp *http.Response) error {
+		if resp.Header.Get("X-Hit-Mod") != "true" {
+			return fmt.Errorf("tried to by-pass proxy")
+		}
+		return nil
+	}
+
+	frontendProxy := httptest.NewServer(rproxy)
+	defer frontendProxy.Close()
+
+	tests := []struct {
+		url      string
+		wantCode int
+	}{
+		{frontendProxy.URL + "/mod", http.StatusOK},
+		{frontendProxy.URL + "/schedule", http.StatusBadGateway},
+	}
+
+	for i, tt := range tests {
+		resp, err := http.Get(tt.url)
+		if err != nil {
+			t.Fatalf("failed to reach proxy: %v", err)
+		}
+		if g, e := resp.StatusCode, tt.wantCode; g != e {
+			t.Errorf("#%d: got res.StatusCode %d; expected %d", i, g, e)
+		}
+		resp.Body.Close()
+	}
+}
+
 // Issue 16659: log errors from short read
 func TestReverseProxy_CopyBuffer(t *testing.T) {
 	backendServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -621,5 +662,32 @@ func TestReverseProxy_CopyBuffer(t *testing.T) {
 		if !bytes.Contains(proxyLog.Bytes(), []byte(phrase)) {
 			t.Errorf("expected log to contain phrase %q", phrase)
 		}
+	}
+}
+
+type staticTransport struct {
+	res *http.Response
+}
+
+func (t *staticTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return t.res, nil
+}
+
+func BenchmarkServeHTTP(b *testing.B) {
+	res := &http.Response{
+		StatusCode: 200,
+		Body:       ioutil.NopCloser(strings.NewReader("")),
+	}
+	proxy := &ReverseProxy{
+		Director:  func(*http.Request) {},
+		Transport: &staticTransport{res},
+	}
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/", nil)
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		proxy.ServeHTTP(w, r)
 	}
 }

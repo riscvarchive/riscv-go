@@ -5,7 +5,6 @@
 package os
 
 import (
-	"errors"
 	"internal/syscall/windows"
 	"io"
 	"runtime"
@@ -27,9 +26,11 @@ type file struct {
 	l       sync.Mutex // used to implement windows pread/pwrite
 
 	// only for console io
-	isConsole bool
-	lastbits  []byte // first few bytes of the last incomplete rune in last write
-	readbuf   []byte // last few bytes of the last read that did not fit in the user buffer
+	isConsole      bool
+	lastbits       []byte   // first few bytes of the last incomplete rune in last write
+	readuint16     []uint16 // buffer to hold uint16s obtained with ReadConsole
+	readbyte       []byte   // buffer to hold decoding of readuint16 from utf16 to utf8
+	readbyteOffset int      // readbyte[readOffset:] is yet to be consumed with file.Read
 }
 
 // Fd returns the Windows handle referencing the open file.
@@ -53,7 +54,6 @@ func newFile(h syscall.Handle, name string) *File {
 func newConsoleFile(h syscall.Handle, name string) *File {
 	f := newFile(h, name)
 	f.isConsole = true
-	f.readbuf = make([]byte, 0, 4)
 	return f
 }
 
@@ -86,7 +86,7 @@ const DevNull = "NUL"
 func (f *file) isdir() bool { return f != nil && f.dirinfo != nil }
 
 func openFile(name string, flag int, perm FileMode) (file *File, err error) {
-	r, e := syscall.Open(name, flag|syscall.O_CLOEXEC, syscallMode(perm))
+	r, e := syscall.Open(fixLongPath(name), flag|syscall.O_CLOEXEC, syscallMode(perm))
 	if e != nil {
 		return nil, e
 	}
@@ -95,10 +95,13 @@ func openFile(name string, flag int, perm FileMode) (file *File, err error) {
 
 func openDir(name string) (file *File, err error) {
 	var mask string
-	if len(name) == 2 && name[1] == ':' { // it is a drive letter, like C:
-		mask = name + `*`
+
+	path := fixLongPath(name)
+
+	if len(path) == 2 && path[1] == ':' || (len(path) > 0 && path[len(path)-1] == '\\') { // it is a drive letter, like C:
+		mask = path + `*`
 	} else {
-		mask = name + `\*`
+		mask = path + `\*`
 	}
 	maskp, e := syscall.UTF16PtrFromString(mask)
 	if e != nil {
@@ -114,11 +117,11 @@ func openDir(name string) (file *File, err error) {
 			return nil, e
 		}
 		var fa syscall.Win32FileAttributeData
-		namep, e := syscall.UTF16PtrFromString(name)
+		pathp, e := syscall.UTF16PtrFromString(path)
 		if e != nil {
 			return nil, e
 		}
-		e = syscall.GetFileAttributesEx(namep, syscall.GetFileExInfoStandard, (*byte)(unsafe.Pointer(&fa)))
+		e = syscall.GetFileAttributesEx(pathp, syscall.GetFileExInfoStandard, (*byte)(unsafe.Pointer(&fa)))
 		if e != nil {
 			return nil, e
 		}
@@ -127,7 +130,7 @@ func openDir(name string) (file *File, err error) {
 		}
 		d.isempty = true
 	}
-	d.path = name
+	d.path = path
 	if !isAbs(d.path) {
 		d.path, e = syscall.FullPath(d.path)
 		if e != nil {
@@ -200,101 +203,79 @@ func (file *file) close() error {
 	return err
 }
 
-var (
-	// These variables are used for testing readConsole.
-	getCP    = windows.GetConsoleCP
-	readFile = syscall.ReadFile
-)
-
-func resetGetConsoleCPAndReadFileFuncs() {
-	getCP = windows.GetConsoleCP
-	readFile = syscall.ReadFile
-}
-
-// copyReadConsoleBuffer copies data stored in f.readbuf into buf.
-// It adjusts f.readbuf accordingly and returns number of bytes copied.
-func (f *File) copyReadConsoleBuffer(buf []byte) (n int, err error) {
-	n = copy(buf, f.readbuf)
-	newsize := copy(f.readbuf, f.readbuf[n:])
-	f.readbuf = f.readbuf[:newsize]
-	return n, nil
-}
-
-// readOneUTF16FromConsole reads single character from console,
-// converts it into utf16 and return it to the caller.
-func (f *File) readOneUTF16FromConsole() (uint16, error) {
-	var buf [1]byte
-	mbytes := make([]byte, 0, 4)
-	cp := getCP()
-	for {
-		var nmb uint32
-		err := readFile(f.fd, buf[:], &nmb, nil)
-		if err != nil {
-			return 0, err
-		}
-		if nmb == 0 {
-			continue
-		}
-		mbytes = append(mbytes, buf[0])
-
-		// Convert from 8-bit console encoding to UTF16.
-		// MultiByteToWideChar defaults to Unicode NFC form, which is the expected one.
-		nwc, err := windows.MultiByteToWideChar(cp, windows.MB_ERR_INVALID_CHARS, &mbytes[0], int32(len(mbytes)), nil, 0)
-		if err != nil {
-			if err == windows.ERROR_NO_UNICODE_TRANSLATION {
-				continue
-			}
-			return 0, err
-		}
-		if nwc != 1 {
-			return 0, errors.New("MultiByteToWideChar returns " + itoa(int(nwc)) + " characters, but only 1 expected")
-		}
-		var wchars [1]uint16
-		nwc, err = windows.MultiByteToWideChar(cp, windows.MB_ERR_INVALID_CHARS, &mbytes[0], int32(len(mbytes)), &wchars[0], nwc)
-		if err != nil {
-			return 0, err
-		}
-		return wchars[0], nil
-	}
-}
+var readConsole = syscall.ReadConsole // changed for testing
 
 // readConsole reads utf16 characters from console File,
-// encodes them into utf8 and stores them in buffer buf.
+// encodes them into utf8 and stores them in buffer b.
 // It returns the number of utf8 bytes read and an error, if any.
-func (f *File) readConsole(buf []byte) (n int, err error) {
-	if len(buf) == 0 {
+func (f *File) readConsole(b []byte) (n int, err error) {
+	if len(b) == 0 {
 		return 0, nil
 	}
-	if len(f.readbuf) > 0 {
-		return f.copyReadConsoleBuffer(buf)
+
+	if f.readuint16 == nil {
+		// Note: syscall.ReadConsole fails for very large buffers.
+		// The limit is somewhere around (but not exactly) 16384.
+		// Stay well below.
+		f.readuint16 = make([]uint16, 0, 10000)
+		f.readbyte = make([]byte, 0, 4*cap(f.readuint16))
 	}
-	wchar, err := f.readOneUTF16FromConsole()
-	if err != nil {
-		return 0, err
-	}
-	r := rune(wchar)
-	if utf16.IsSurrogate(r) {
-		wchar, err := f.readOneUTF16FromConsole()
+
+	for f.readbyteOffset >= len(f.readbyte) {
+		n := cap(f.readuint16) - len(f.readuint16)
+		if n > len(b) {
+			n = len(b)
+		}
+		var nw uint32
+		err := readConsole(f.fd, &f.readuint16[:len(f.readuint16)+1][len(f.readuint16)], uint32(n), &nw, nil)
 		if err != nil {
 			return 0, err
 		}
-		r = utf16.DecodeRune(r, rune(wchar))
-	}
-	if nr := utf8.RuneLen(r); nr > len(buf) {
-		start := len(f.readbuf)
-		for ; nr > 0; nr-- {
-			f.readbuf = append(f.readbuf, 0)
+		uint16s := f.readuint16[:len(f.readuint16)+int(nw)]
+		f.readuint16 = f.readuint16[:0]
+		buf := f.readbyte[:0]
+		for i := 0; i < len(uint16s); i++ {
+			r := rune(uint16s[i])
+			if utf16.IsSurrogate(r) {
+				if i+1 == len(uint16s) {
+					if nw > 0 {
+						// Save half surrogate pair for next time.
+						f.readuint16 = f.readuint16[:1]
+						f.readuint16[0] = uint16(r)
+						break
+					}
+					r = utf8.RuneError
+				} else {
+					r = utf16.DecodeRune(r, rune(uint16s[i+1]))
+					if r != utf8.RuneError {
+						i++
+					}
+				}
+			}
+			n := utf8.EncodeRune(buf[len(buf):cap(buf)], r)
+			buf = buf[:len(buf)+n]
 		}
-		utf8.EncodeRune(f.readbuf[start:cap(f.readbuf)], r)
-	} else {
-		utf8.EncodeRune(buf, r)
-		buf = buf[nr:]
-		n += nr
+		f.readbyte = buf
+		f.readbyteOffset = 0
+		if nw == 0 {
+			break
+		}
 	}
-	if n > 0 {
-		return n, nil
+
+	src := f.readbyte[f.readbyteOffset:]
+	var i int
+	for i = 0; i < len(src) && i < len(b); i++ {
+		x := src[i]
+		if x == 0x1A { // Ctrl-Z
+			if i == 0 {
+				f.readbyteOffset++
+			}
+			break
+		}
+		b[i] = x
 	}
-	return f.copyReadConsoleBuffer(buf)
+	f.readbyteOffset += i
+	return i, nil
 }
 
 // read reads up to len(b) bytes from the File.
@@ -439,7 +420,7 @@ func Truncate(name string, size int64) error {
 // Remove removes the named file or directory.
 // If there is an error, it will be of type *PathError.
 func Remove(name string) error {
-	p, e := syscall.UTF16PtrFromString(name)
+	p, e := syscall.UTF16PtrFromString(fixLongPath(name))
 	if e != nil {
 		return &PathError{"remove", name, e}
 	}
@@ -476,7 +457,7 @@ func Remove(name string) error {
 }
 
 func rename(oldname, newname string) error {
-	e := windows.Rename(oldname, newname)
+	e := windows.Rename(fixLongPath(oldname), fixLongPath(newname))
 	if e != nil {
 		return &LinkError{"rename", oldname, newname, e}
 	}
@@ -521,11 +502,11 @@ func TempDir() string {
 // Link creates newname as a hard link to the oldname file.
 // If there is an error, it will be of type *LinkError.
 func Link(oldname, newname string) error {
-	n, err := syscall.UTF16PtrFromString(newname)
+	n, err := syscall.UTF16PtrFromString(fixLongPath(newname))
 	if err != nil {
 		return &LinkError{"link", oldname, newname, err}
 	}
-	o, err := syscall.UTF16PtrFromString(oldname)
+	o, err := syscall.UTF16PtrFromString(fixLongPath(oldname))
 	if err != nil {
 		return &LinkError{"link", oldname, newname, err}
 	}
@@ -556,11 +537,11 @@ func Symlink(oldname, newname string) error {
 	fi, err := Lstat(destpath)
 	isdir := err == nil && fi.IsDir()
 
-	n, err := syscall.UTF16PtrFromString(newname)
+	n, err := syscall.UTF16PtrFromString(fixLongPath(newname))
 	if err != nil {
 		return &LinkError{"symlink", oldname, newname, err}
 	}
-	o, err := syscall.UTF16PtrFromString(oldname)
+	o, err := syscall.UTF16PtrFromString(fixLongPath(oldname))
 	if err != nil {
 		return &LinkError{"symlink", oldname, newname, err}
 	}

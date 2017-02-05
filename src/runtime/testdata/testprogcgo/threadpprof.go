@@ -1,4 +1,4 @@
-// Copyright 2016 The Go Authors.  All rights reserved.
+// Copyright 2016 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -61,7 +61,7 @@ static void* cpuHogDriver(void* arg __attribute__ ((unused))) {
 	return 0;
 }
 
-void runCPUHogThread() {
+void runCPUHogThread(void) {
 	pthread_t tid;
 	pthread_create(&tid, 0, cpuHogDriver, 0);
 }

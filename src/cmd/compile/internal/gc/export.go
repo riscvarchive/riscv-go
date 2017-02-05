@@ -41,10 +41,15 @@ func exportsym(n *Node) {
 	}
 
 	n.Sym.Flags |= SymExport
-
 	if Debug['E'] != 0 {
 		fmt.Printf("export symbol %v\n", n.Sym)
 	}
+
+	// Ensure original types are on exportlist before type aliases.
+	if n.Sym.isAlias() {
+		exportlist = append(exportlist, n.Sym.Def)
+	}
+
 	exportlist = append(exportlist, n)
 }
 
@@ -78,7 +83,7 @@ func autoexport(n *Node, ctxt Class) {
 	if (ctxt != PEXTERN && ctxt != PFUNC) || dclcontext != PEXTERN {
 		return
 	}
-	if n.Name.Param != nil && n.Name.Param.Ntype != nil && n.Name.Param.Ntype.Op == OTFUNC && n.Name.Param.Ntype.Left != nil { // method
+	if n.Type != nil && n.Type.IsKind(TFUNC) && n.Type.Recv() != nil { // method
 		return
 	}
 
@@ -103,7 +108,6 @@ func reexportdep(n *Node) {
 		return
 	}
 
-	//print("reexportdep %+hN\n", n);
 	switch n.Op {
 	case ONAME:
 		switch n.Class {
@@ -127,78 +131,6 @@ func reexportdep(n *Node) {
 				}
 				exportlist = append(exportlist, n)
 			}
-		}
-
-	// Local variables in the bodies need their type.
-	case ODCL:
-		t := n.Left.Type
-
-		if t != Types[t.Etype] && t != idealbool && t != idealstring {
-			if t.IsPtr() {
-				t = t.Elem()
-			}
-			if t != nil && t.Sym != nil && t.Sym.Def != nil && !exportedsym(t.Sym) {
-				if Debug['E'] != 0 {
-					fmt.Printf("reexport type %v from declaration\n", t.Sym)
-				}
-				exportlist = append(exportlist, t.Sym.Def)
-			}
-		}
-
-	case OLITERAL:
-		t := n.Type
-		if t != Types[n.Type.Etype] && t != idealbool && t != idealstring {
-			if t.IsPtr() {
-				t = t.Elem()
-			}
-			if t != nil && t.Sym != nil && t.Sym.Def != nil && !exportedsym(t.Sym) {
-				if Debug['E'] != 0 {
-					fmt.Printf("reexport literal type %v\n", t.Sym)
-				}
-				exportlist = append(exportlist, t.Sym.Def)
-			}
-		}
-		fallthrough
-
-	case OTYPE:
-		if n.Sym != nil && n.Sym.Def != nil && !exportedsym(n.Sym) {
-			if Debug['E'] != 0 {
-				fmt.Printf("reexport literal/type %v\n", n.Sym)
-			}
-			exportlist = append(exportlist, n)
-		}
-
-	// for operations that need a type when rendered, put the type on the export list.
-	case OCONV,
-		OCONVIFACE,
-		OCONVNOP,
-		ORUNESTR,
-		OARRAYBYTESTR,
-		OARRAYRUNESTR,
-		OSTRARRAYBYTE,
-		OSTRARRAYRUNE,
-		ODOTTYPE,
-		ODOTTYPE2,
-		OSTRUCTLIT,
-		OARRAYLIT,
-		OSLICELIT,
-		OPTRLIT,
-		OMAKEMAP,
-		OMAKESLICE,
-		OMAKECHAN:
-		t := n.Type
-
-		switch t.Etype {
-		case TARRAY, TCHAN, TPTR32, TPTR64, TSLICE:
-			if t.Sym == nil {
-				t = t.Elem()
-			}
-		}
-		if t != nil && t.Sym != nil && t.Sym.Def != nil && !exportedsym(t.Sym) {
-			if Debug['E'] != 0 {
-				fmt.Printf("reexport type for expression %v\n", t.Sym)
-			}
-			exportlist = append(exportlist, t.Sym.Def)
 		}
 	}
 
@@ -340,6 +272,27 @@ func importvar(s *Sym, t *Type) {
 
 	if Debug['E'] != 0 {
 		fmt.Printf("import var %v %L\n", s, t)
+	}
+}
+
+// importalias declares symbol s as an imported type alias with type t.
+func importalias(s *Sym, t *Type) {
+	importsym(s, OTYPE)
+	if s.Def != nil && s.Def.Op == OTYPE {
+		if eqtype(t, s.Def.Type) {
+			return
+		}
+		yyerror("inconsistent definition for type alias %v during import\n\t%v (in %q)\n\t%v (in %q)", s, s.Def.Type, s.Importdef.Path, t, importpkg.Path)
+	}
+
+	n := newname(s)
+	n.Op = OTYPE
+	s.Importdef = importpkg
+	n.Type = t
+	declare(n, PEXTERN)
+
+	if Debug['E'] != 0 {
+		fmt.Printf("import type %v = %L\n", s, t)
 	}
 }
 

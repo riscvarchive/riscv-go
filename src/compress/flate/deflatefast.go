@@ -55,12 +55,12 @@ func newDeflateFast() *deflateFast {
 	return &deflateFast{cur: maxStoreBlockSize, prev: make([]byte, 0, maxStoreBlockSize)}
 }
 
-// encode encodes a block given in src and encodes tokens
+// encode encodes a block given in src and appends tokens
 // to dst and returns the result.
 func (e *deflateFast) encode(dst []token, src []byte) []token {
 	// Ensure that e.cur doesn't wrap.
 	if e.cur > 1<<30 {
-		*e = deflateFast{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		e.resetAll()
 	}
 
 	// This check isn't in the Snappy implementation, but there, the caller
@@ -116,8 +116,7 @@ func (e *deflateFast) encode(dst []token, src []byte) []token {
 			nextHash = hash(now)
 
 			offset := s - (candidate.offset - e.cur)
-			// TODO: >= should be >, and add a test for that.
-			if offset >= maxMatchOffset || cv != candidate.val {
+			if offset > maxMatchOffset || cv != candidate.val {
 				// Out of range or not matched.
 				cv = now
 				continue
@@ -171,8 +170,7 @@ func (e *deflateFast) encode(dst []token, src []byte) []token {
 			e.table[currHash&tableMask] = tableEntry{offset: e.cur + s, val: uint32(x)}
 
 			offset := s - (candidate.offset - e.cur)
-			// TODO: >= should be >, and add a test for that.
-			if offset >= maxMatchOffset || uint32(x) != candidate.val {
+			if offset > maxMatchOffset || uint32(x) != candidate.val {
 				cv = uint32(x >> 8)
 				nextHash = hash(cv)
 				s++
@@ -267,6 +265,21 @@ func (e *deflateFast) reset() {
 
 	// Protect against e.cur wraparound.
 	if e.cur > 1<<30 {
-		*e = deflateFast{cur: maxStoreBlockSize, prev: e.prev[:0]}
+		e.resetAll()
+	}
+}
+
+// resetAll resets the deflateFast struct and is only called in rare
+// situations to prevent integer overflow. It manually resets each field
+// to avoid causing large stack growth.
+//
+// See https://golang.org/issue/18636.
+func (e *deflateFast) resetAll() {
+	// This is equivalent to:
+	//	*e = deflateFast{cur: maxStoreBlockSize, prev: e.prev[:0]}
+	e.cur = maxStoreBlockSize
+	e.prev = e.prev[:0]
+	for i := range e.table {
+		e.table[i] = tableEntry{}
 	}
 }

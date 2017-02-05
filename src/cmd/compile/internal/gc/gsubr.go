@@ -30,10 +30,7 @@
 
 package gc
 
-import (
-	"cmd/internal/obj"
-	"fmt"
-)
+import "cmd/internal/obj"
 
 func Prog(as obj.As) *obj.Prog {
 	var p *obj.Prog
@@ -43,12 +40,12 @@ func Prog(as obj.As) *obj.Prog {
 	Clearp(pc)
 	p.Link = pc
 
-	if lineno == 0 && Debug['K'] != 0 {
-		Warn("prog: line 0")
+	if !lineno.IsKnown() && Debug['K'] != 0 {
+		Warn("prog: unknown position (line 0)")
 	}
 
 	p.As = as
-	p.Lineno = lineno
+	p.Pos = lineno
 	return p
 }
 
@@ -63,7 +60,7 @@ func Appendpp(p *obj.Prog, as obj.As, ftype obj.AddrType, freg int16, foffset in
 	q := Ctxt.NewProg()
 	Clearp(q)
 	q.As = as
-	q.Lineno = p.Lineno
+	q.Pos = p.Pos
 	q.From.Type = ftype
 	q.From.Reg = freg
 	q.From.Offset = foffset
@@ -138,9 +135,6 @@ func Naddr(a *obj.Addr, n *Node) {
 
 	if s == nil {
 		Fatalf("naddr: nil sym %v", n)
-	}
-	if n.Name.Method && n.Type != nil && n.Type.Sym != nil && n.Type.Sym.Pkg != nil {
-		Fatalf("naddr: weird method %v", n)
 	}
 
 	a.Type = obj.TYPE_MEM
@@ -314,9 +308,5 @@ func Gins(as obj.As, f, t *Node) *obj.Prog {
 	p := Prog(as)
 	Naddr(&p.From, f)
 	Naddr(&p.To, t)
-
-	if Debug['g'] != 0 {
-		fmt.Printf("%v\n", p)
-	}
 	return p
 }

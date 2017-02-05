@@ -5,6 +5,8 @@
 package ssa
 
 import (
+	"cmd/internal/obj"
+	"cmd/internal/src"
 	"fmt"
 	"log"
 	"os"
@@ -128,7 +130,7 @@ func (f *Func) dumpFile(phaseName string) {
 
 	fi, err := os.Create(fname)
 	if err != nil {
-		f.Config.Warnl(0, "Unable to create after-phase dump file %s", fname)
+		f.Config.Warnl(src.NoXPos, "Unable to create after-phase dump file %s", fname)
 		return
 	}
 
@@ -349,6 +351,8 @@ var passes = [...]pass{
 	{name: "writebarrier", fn: writebarrier, required: true}, // expand write barrier ops
 	{name: "fuse", fn: fuse},
 	{name: "dse", fn: dse},
+	{name: "insert resched checks", fn: insertLoopReschedChecks,
+		disabled: obj.Preemptibleloops_enabled == 0}, // insert resched checks in loops.
 	{name: "tighten", fn: tighten}, // move values closer to their uses
 	{name: "lower", fn: lower, required: true},
 	{name: "lowered cse", fn: cse},
@@ -378,7 +382,13 @@ type constraint struct {
 }
 
 var passOrder = [...]constraint{
-	// prove reliese on common-subexpression elimination for maximum benefits.
+	// "insert resched checks" uses mem, better to clean out stores first.
+	{"dse", "insert resched checks"},
+	// insert resched checks adds new blocks containing generic instructions
+	{"insert resched checks", "lower"},
+	{"insert resched checks", "tighten"},
+
+	// prove relies on common-subexpression elimination for maximum benefits.
 	{"generic cse", "prove"},
 	// deadcode after prove to eliminate all new dead blocks.
 	{"prove", "generic deadcode"},

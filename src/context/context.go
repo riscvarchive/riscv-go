@@ -234,10 +234,7 @@ func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
 
 // newCancelCtx returns an initialized cancelCtx.
 func newCancelCtx(parent Context) cancelCtx {
-	return cancelCtx{
-		Context: parent,
-		done:    make(chan struct{}),
-	}
+	return cancelCtx{Context: parent}
 }
 
 // propagateCancel arranges for child to be canceled when parent is.
@@ -306,20 +303,32 @@ type canceler interface {
 	Done() <-chan struct{}
 }
 
+// closedchan is a reusable closed channel.
+var closedchan = make(chan struct{})
+
+func init() {
+	close(closedchan)
+}
+
 // A cancelCtx can be canceled. When canceled, it also cancels any children
 // that implement canceler.
 type cancelCtx struct {
 	Context
 
-	done chan struct{} // closed by the first cancel call.
-
-	mu       sync.Mutex
+	mu       sync.Mutex            // protects following fields
+	done     chan struct{}         // created lazily, closed by first cancel call
 	children map[canceler]struct{} // set to nil by the first cancel call
 	err      error                 // set to non-nil by the first cancel call
 }
 
 func (c *cancelCtx) Done() <-chan struct{} {
-	return c.done
+	c.mu.Lock()
+	if c.done == nil {
+		c.done = make(chan struct{})
+	}
+	d := c.done
+	c.mu.Unlock()
+	return d
 }
 
 func (c *cancelCtx) Err() error {
@@ -344,7 +353,11 @@ func (c *cancelCtx) cancel(removeFromParent bool, err error) {
 		return // already canceled
 	}
 	c.err = err
-	close(c.done)
+	if c.done == nil {
+		c.done = closedchan
+	} else {
+		close(c.done)
+	}
 	for child := range c.children {
 		// NOTE: acquiring the child's lock while holding parent's lock.
 		child.cancel(false, err)
@@ -443,9 +456,13 @@ func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc) {
 // Use context Values only for request-scoped data that transits processes and
 // APIs, not for passing optional parameters to functions.
 //
-// The provided key must be comparable and should not be
-// of type string or any other built-in type.
-// Users of WithValue should define their own types for keys.
+// The provided key must be comparable and should not be of type
+// string or any other built-in type to avoid collisions between
+// packages using context. Users of WithValue should define their own
+// types for keys. To avoid allocating when assigning to an
+// interface{}, context keys often have concrete type
+// struct{}. Alternatively, exported context key variables' static
+// type should be a pointer or interface.
 func WithValue(parent Context, key, val interface{}) Context {
 	if key == nil {
 		panic("nil key")

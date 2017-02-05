@@ -19,10 +19,12 @@ import (
 )
 
 func TestCgoCrashHandler(t *testing.T) {
+	t.Parallel()
 	testCrashHandler(t, true)
 }
 
 func TestCgoSignalDeadlock(t *testing.T) {
+	t.Parallel()
 	if testing.Short() && runtime.GOOS == "windows" {
 		t.Skip("Skipping in short mode") // takes up to 64 seconds
 	}
@@ -34,6 +36,7 @@ func TestCgoSignalDeadlock(t *testing.T) {
 }
 
 func TestCgoTraceback(t *testing.T) {
+	t.Parallel()
 	got := runTestProg(t, "testprogcgo", "CgoTraceback")
 	want := "OK\n"
 	if got != want {
@@ -42,11 +45,10 @@ func TestCgoTraceback(t *testing.T) {
 }
 
 func TestCgoCallbackGC(t *testing.T) {
+	t.Parallel()
 	switch runtime.GOOS {
 	case "plan9", "windows":
 		t.Skipf("no pthreads on %s", runtime.GOOS)
-	case "freebsd":
-		testenv.SkipFlaky(t, 16396)
 	}
 	if testing.Short() {
 		switch {
@@ -66,6 +68,7 @@ func TestCgoCallbackGC(t *testing.T) {
 }
 
 func TestCgoExternalThreadPanic(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "plan9" {
 		t.Skipf("no pthreads on %s", runtime.GOOS)
 	}
@@ -77,6 +80,7 @@ func TestCgoExternalThreadPanic(t *testing.T) {
 }
 
 func TestCgoExternalThreadSIGPROF(t *testing.T) {
+	t.Parallel()
 	// issue 9456.
 	switch runtime.GOOS {
 	case "plan9", "windows":
@@ -117,6 +121,7 @@ func TestCgoExternalThreadSIGPROF(t *testing.T) {
 }
 
 func TestCgoExternalThreadSignal(t *testing.T) {
+	t.Parallel()
 	// issue 10139
 	switch runtime.GOOS {
 	case "plan9", "windows":
@@ -152,6 +157,7 @@ func TestCgoDLLImports(t *testing.T) {
 }
 
 func TestCgoExecSignalMask(t *testing.T) {
+	t.Parallel()
 	// Test issue 13164.
 	switch runtime.GOOS {
 	case "windows", "plan9":
@@ -165,6 +171,7 @@ func TestCgoExecSignalMask(t *testing.T) {
 }
 
 func TestEnsureDropM(t *testing.T) {
+	t.Parallel()
 	// Test for issue 13881.
 	switch runtime.GOOS {
 	case "windows", "plan9":
@@ -181,6 +188,7 @@ func TestEnsureDropM(t *testing.T) {
 // Test that the program that doesn't need any cgo pointer checking
 // takes about the same amount of time with it as without it.
 func TestCgoCheckBytes(t *testing.T) {
+	t.Parallel()
 	// Make sure we don't count the build time as part of the run time.
 	testenv.MustHaveGoBuild(t)
 	exe, err := buildTestProg(t, "testprogcgo")
@@ -220,6 +228,7 @@ func TestCgoCheckBytes(t *testing.T) {
 }
 
 func TestCgoPanicDeadlock(t *testing.T) {
+	t.Parallel()
 	// test issue 14432
 	got := runTestProg(t, "testprogcgo", "CgoPanicDeadlock")
 	want := "panic: cgo error\n\n"
@@ -229,6 +238,7 @@ func TestCgoPanicDeadlock(t *testing.T) {
 }
 
 func TestCgoCCodeSIGPROF(t *testing.T) {
+	t.Parallel()
 	got := runTestProg(t, "testprogcgo", "CgoCCodeSIGPROF")
 	want := "OK\n"
 	if got != want {
@@ -237,6 +247,7 @@ func TestCgoCCodeSIGPROF(t *testing.T) {
 }
 
 func TestCgoCrashTraceback(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skipf("not yet supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
@@ -249,6 +260,7 @@ func TestCgoCrashTraceback(t *testing.T) {
 }
 
 func TestCgoTracebackContext(t *testing.T) {
+	t.Parallel()
 	got := runTestProg(t, "testprogcgo", "TracebackContext")
 	want := "OK\n"
 	if got != want {
@@ -257,6 +269,7 @@ func TestCgoTracebackContext(t *testing.T) {
 }
 
 func testCgoPprof(t *testing.T, buildArg, runArg string) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skipf("not yet supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
@@ -271,11 +284,10 @@ func testCgoPprof(t *testing.T, buildArg, runArg string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	fn := strings.TrimSpace(string(got))
 	defer os.Remove(fn)
 
-	cmd := testEnv(exec.Command(testenv.GoToolPath(t), "tool", "pprof", "-top", "-nodecount=1", "-symbolize=force", exe, fn))
+	cmd := testEnv(exec.Command(testenv.GoToolPath(t), "tool", "pprof", "-top", "-nodecount=1", exe, fn))
 
 	found := false
 	for i, e := range cmd.Env {
@@ -345,6 +357,7 @@ func TestRaceProf(t *testing.T) {
 }
 
 func TestRaceSignal(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
 		t.Skipf("not yet supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}

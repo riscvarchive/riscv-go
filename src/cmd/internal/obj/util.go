@@ -59,7 +59,7 @@ func Getgoextlinkenabled() string {
 }
 
 func (p *Prog) Line() string {
-	return p.Ctxt.LineHist.LineString(int(p.Lineno))
+	return p.Ctxt.PosTable.Pos(p.Pos).String()
 }
 
 var armCondCode = []string{
@@ -179,10 +179,6 @@ func (ctxt *Link) freeProgs() {
 		s[i] = Prog{}
 	}
 	ctxt.allocIdx = 0
-}
-
-func (ctxt *Link) Line(n int) string {
-	return ctxt.LineHist.LineString(n)
 }
 
 func Getcallerpc(interface{}) uintptr {
@@ -384,14 +380,14 @@ var regSpace []regSet
 const (
 	// Because of masking operations in the encodings, each register
 	// space should start at 0 modulo some power of 2.
-	RBase386    = 1 * 1024
-	RBaseAMD64  = 2 * 1024
-	RBaseARM    = 3 * 1024
-	RBasePPC64  = 4 * 1024  // range [4k, 8k)
-	RBaseARM64  = 8 * 1024  // range [8k, 13k)
-	RBaseMIPS64 = 13 * 1024 // range [13k, 14k)
-	RBaseS390X  = 14 * 1024 // range [14k, 15k)
-	RBaseRISCV  = 15 * 1024 // range [15k, 16k)
+	RBase386   = 1 * 1024
+	RBaseAMD64 = 2 * 1024
+	RBaseARM   = 3 * 1024
+	RBasePPC64 = 4 * 1024  // range [4k, 8k)
+	RBaseARM64 = 8 * 1024  // range [8k, 13k)
+	RBaseMIPS  = 13 * 1024 // range [13k, 14k)
+	RBaseS390X = 14 * 1024 // range [14k, 15k)
+	RBaseRISCV = 15 * 1024 // range [15k, 16k)
 )
 
 // RegisterRegister binds a pretty-printer (Rconv) for register

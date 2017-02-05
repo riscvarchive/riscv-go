@@ -6,8 +6,11 @@ package testing
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -357,7 +360,7 @@ func TestTRun(t *T) {
 		want := strings.TrimSpace(tc.output)
 		re := makeRegexp(want)
 		if ok, err := regexp.MatchString(re, got); !ok || err != nil {
-			t.Errorf("%s:ouput:\ngot:\n%s\nwant:\n%s", tc.desc, got, want)
+			t.Errorf("%s:output:\ngot:\n%s\nwant:\n%s", tc.desc, got, want)
 		}
 	}
 }
@@ -498,7 +501,7 @@ func TestBRun(t *T) {
 		want := strings.TrimSpace(tc.output)
 		re := makeRegexp(want)
 		if ok, err := regexp.MatchString(re, got); !ok || err != nil {
-			t.Errorf("%s:ouput:\ngot:\n%s\nwant:\n%s", tc.desc, got, want)
+			t.Errorf("%s:output:\ngot:\n%s\nwant:\n%s", tc.desc, got, want)
 		}
 	}
 }
@@ -514,4 +517,61 @@ func TestBenchmarkOutput(t *T) {
 	// normal case.
 	Benchmark(func(b *B) { b.Error("do not print this output") })
 	Benchmark(func(b *B) {})
+}
+
+func TestParallelSub(t *T) {
+	c := make(chan int)
+	block := make(chan int)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			<-block
+			t.Run(fmt.Sprint(i), func(t *T) {})
+			c <- 1
+		}(i)
+	}
+	close(block)
+	for i := 0; i < 10; i++ {
+		<-c
+	}
+}
+
+type funcWriter func([]byte) (int, error)
+
+func (fw funcWriter) Write(b []byte) (int, error) { return fw(b) }
+
+func TestRacyOutput(t *T) {
+	var runs int32  // The number of running Writes
+	var races int32 // Incremented for each race detected
+	raceDetector := func(b []byte) (int, error) {
+		// Check if some other goroutine is concurrently calling Write.
+		if atomic.LoadInt32(&runs) > 0 {
+			atomic.AddInt32(&races, 1) // Race detected!
+		}
+		atomic.AddInt32(&runs, 1)
+		defer atomic.AddInt32(&runs, -1)
+		runtime.Gosched() // Increase probability of a race
+		return len(b), nil
+	}
+
+	var wg sync.WaitGroup
+	root := &T{
+		common:  common{w: funcWriter(raceDetector), chatty: true},
+		context: newTestContext(1, newMatcher(regexp.MatchString, "", "")),
+	}
+	root.Run("", func(t *T) {
+		for i := 0; i < 100; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				t.Run(fmt.Sprint(i), func(t *T) {
+					t.Logf("testing run %d", i)
+				})
+			}(i)
+		}
+	})
+	wg.Wait()
+
+	if races > 0 {
+		t.Errorf("detected %d racy Writes", races)
+	}
 }

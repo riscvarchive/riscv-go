@@ -11,9 +11,6 @@ const (
 	switchKindExpr  = iota // switch a {...} or switch 5 {...}
 	switchKindTrue         // switch true {...} or switch {...}
 	switchKindFalse        // switch false {...}
-
-	// type switch
-	switchKindType // switch a.(type) {...}
 )
 
 const (
@@ -165,8 +162,13 @@ func typecheckswitch(n *Node) {
 							yyerror("impossible type switch case: %L cannot have dynamic type %v"+
 								" (wrong type for %v method)\n\thave %v%S\n\twant %v%S", n.Left.Right, n1.Type, missing.Sym, have.Sym, have.Type, missing.Sym, missing.Type)
 						} else if !missing.Broke {
-							yyerror("impossible type switch case: %L cannot have dynamic type %v"+
-								" (missing %v method)", n.Left.Right, n1.Type, missing.Sym)
+							if ptr != 0 {
+								yyerror("impossible type switch case: %L cannot have dynamic type %v"+
+									" (%v method has pointer receiver)", n.Left.Right, n1.Type, missing.Sym)
+							} else {
+								yyerror("impossible type switch case: %L cannot have dynamic type %v"+
+									" (missing %v method)", n.Left.Right, n1.Type, missing.Sym)
+							}
 						}
 					}
 				}
@@ -581,7 +583,7 @@ Outer:
 		}
 		for _, n := range prev {
 			if eqtype(n.Left.Type, c.node.Left.Type) {
-				yyerrorl(c.node.Lineno, "duplicate case %v in type switch\n\tprevious case at %v", c.node.Left.Type, n.Line())
+				yyerrorl(c.node.Pos, "duplicate case %v in type switch\n\tprevious case at %v", c.node.Left.Type, n.Line())
 				// avoid double-reporting errors
 				continue Outer
 			}

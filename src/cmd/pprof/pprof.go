@@ -15,13 +15,13 @@ import (
 	"sync"
 
 	"cmd/internal/objfile"
-	"cmd/internal/pprof/commands"
-	"cmd/internal/pprof/driver"
-	"cmd/internal/pprof/fetch"
-	"cmd/internal/pprof/plugin"
-	"cmd/internal/pprof/profile"
-	"cmd/internal/pprof/symbolizer"
-	"cmd/internal/pprof/symbolz"
+	"cmd/pprof/internal/commands"
+	"cmd/pprof/internal/driver"
+	"cmd/pprof/internal/fetch"
+	"cmd/pprof/internal/plugin"
+	"cmd/pprof/internal/symbolizer"
+	"cmd/pprof/internal/symbolz"
+	"internal/pprof/profile"
 )
 
 func main() {

@@ -141,7 +141,6 @@ func buildTestProg(t *testing.T, binary string, flags ...string) (string, error)
 	cmd.Dir = "testdata/" + binary
 	out, err := testEnv(cmd).CombinedOutput()
 	if err != nil {
-		exe = ""
 		target.err = fmt.Errorf("building %s %v: %v\n%s", binary, flags, err, out)
 		testprog.target[name] = target
 		return "", target.err
@@ -402,6 +401,7 @@ func TestRecoverBeforePanicAfterGoexit(t *testing.T) {
 }
 
 func TestNetpollDeadlock(t *testing.T) {
+	t.Parallel()
 	output := runTestProg(t, "testprognet", "NetpollDeadlock")
 	want := "done\n"
 	if !strings.HasSuffix(output, want) {
@@ -410,6 +410,7 @@ func TestNetpollDeadlock(t *testing.T) {
 }
 
 func TestPanicTraceback(t *testing.T) {
+	t.Parallel()
 	output := runTestProg(t, "testprog", "PanicTraceback")
 	want := "panic: hello"
 	if !strings.HasPrefix(output, want) {
@@ -417,7 +418,7 @@ func TestPanicTraceback(t *testing.T) {
 	}
 
 	// Check functions in the traceback.
-	fns := []string{"panic", "main.pt1.func1", "panic", "main.pt2.func1", "panic", "main.pt2", "main.pt1"}
+	fns := []string{"main.pt1.func1", "panic", "main.pt2.func1", "panic", "main.pt2", "main.pt1"}
 	for _, fn := range fns {
 		re := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(fn) + `\(.*\n`)
 		idx := re.FindStringIndex(output)

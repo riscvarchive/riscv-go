@@ -17,7 +17,7 @@
 // 	clean       remove object files
 // 	doc         show documentation for package or symbol
 // 	env         print Go environment information
-// 	bug         print information for bug reports
+// 	bug         start a bug report
 // 	fix         run go tool fix on packages
 // 	fmt         run gofmt on package sources
 // 	generate    generate Go files by processing source
@@ -324,15 +324,14 @@
 // each named variable on its own line.
 //
 //
-// Print information for bug reports
+// Start a bug report
 //
 // Usage:
 //
 // 	go bug
 //
-// Bug prints information that helps file effective bug reports.
-//
-// Bugs may be reported at https://golang.org/issue/new.
+// Bug opens the default browser and starts a new bug report.
+// The report includes useful system information.
 //
 //
 // Run go tool fix on packages
@@ -598,6 +597,8 @@
 //         SwigFiles      []string // .swig files
 //         SwigCXXFiles   []string // .swigcxx files
 //         SysoFiles      []string // .syso object files to add to archive
+//         TestGoFiles    []string // _test.go files in package
+//         XTestGoFiles   []string // _test.go files outside package
 //
 //         // Cgo directives
 //         CgoCFLAGS    []string // cgo: flags for C compiler
@@ -608,19 +609,22 @@
 //         CgoPkgConfig []string // cgo: pkg-config names
 //
 //         // Dependency information
-//         Imports []string // import paths used by this package
-//         Deps    []string // all (recursively) imported dependencies
+//         Imports      []string // import paths used by this package
+//         Deps         []string // all (recursively) imported dependencies
+//         TestImports  []string // imports from TestGoFiles
+//         XTestImports []string // imports from XTestGoFiles
 //
 //         // Error information
 //         Incomplete bool            // this package or a dependency has an error
 //         Error      *PackageError   // error loading package
 //         DepsErrors []*PackageError // errors loading dependencies
-//
-//         TestGoFiles  []string // _test.go files in package
-//         TestImports  []string // imports from TestGoFiles
-//         XTestGoFiles []string // _test.go files outside package
-//         XTestImports []string // imports from XTestGoFiles
 //     }
+//
+// Packages stored in vendor directories report an ImportPath that includes the
+// path to the vendor directory (for example, "d/vendor/p" instead of "p"),
+// so that the ImportPath uniquely identifies a given copy of a package.
+// The Imports, Deps, TestImports, and XTestImports lists also contain these
+// expanded imports paths. See golang.org/s/go15vendor for more about vendoring.
 //
 // The error information, if any, is
 //
@@ -924,8 +928,13 @@
 // On Windows, the value is a semicolon-separated string.
 // On Plan 9, the value is a list.
 //
-// GOPATH must be set to get, build and install packages outside the
-// standard Go tree.
+// If the environment variable is unset, GOPATH defaults
+// to a subdirectory named "go" in the user's home directory
+// ($HOME/go on Unix, %USERPROFILE%\go on Windows),
+// unless that directory holds a Go distribution.
+// Run "go env GOPATH" to see the current GOPATH.
+//
+// See https://golang.org/wiki/SettingGOPATH to set a custom GOPATH.
 //
 // Each directory listed in GOPATH must have a prescribed structure:
 //
@@ -953,9 +962,9 @@
 //
 // Here's an example directory layout:
 //
-//     GOPATH=/home/user/gocode
+//     GOPATH=/home/user/go
 //
-//     /home/user/gocode/
+//     /home/user/go/
 //         src/
 //             foo/
 //                 bar/               (go code in package bar)
@@ -981,7 +990,7 @@
 // by code in the directory tree rooted at the parent of "internal".
 // Here's an extended version of the directory layout above:
 //
-//     /home/user/gocode/
+//     /home/user/go/
 //         src/
 //             crash/
 //                 bang/              (go code in package bang)
@@ -1019,7 +1028,7 @@
 // but with the "internal" directory renamed to "vendor"
 // and a new foo/vendor/crash/bang directory added:
 //
-//     /home/user/gocode/
+//     /home/user/go/
 //         src/
 //             crash/
 //                 bang/              (go code in package bang)
@@ -1343,6 +1352,9 @@
 // - "cmd" expands to the Go repository's commands and their
 // internal libraries.
 //
+// Import paths beginning with "cmd/" only match source code in
+// the Go repository.
+//
 // An import path is a pattern if it includes one or more "..." wildcards,
 // each of which can match any string, including the empty string and
 // strings containing slashes.  Such a pattern expands to all package
@@ -1463,7 +1475,7 @@
 // 	    text from Log and Logf calls even if the test succeeds.
 //
 // The following flags are also recognized by 'go test' and can be used to
-// profile the tests during execution::
+// profile the tests during execution:
 //
 // 	-benchmem
 // 	    Print memory allocation statistics for benchmarks.
@@ -1499,6 +1511,15 @@
 // 	    runtime.MemProfileRate.  See 'go doc runtime.MemProfileRate'.
 // 	    To profile all memory allocations, use -test.memprofilerate=1
 // 	    and pass --alloc_space flag to the pprof tool.
+//
+// 	-mutexprofile mutex.out
+// 	    Write a mutex contention profile to the specified file
+// 	    when all tests are complete.
+// 	    Writes test binary as -c would.
+//
+// 	-mutexprofilefraction n
+// 	    Sample 1 in n stack traces of goroutines holding a
+// 	    contended mutex.
 //
 // 	-outputdir directory
 // 	    Place output files from profiling in the specified directory,
@@ -1586,7 +1607,8 @@
 // is compared exactly against the comment (see examples below). If the last
 // comment begins with "Unordered output:" then the output is compared to the
 // comment, however the order of the lines is ignored. An example with no such
-// comment, or with no text after "Output:" is compiled but not executed.
+// comment is compiled but not executed. An example with no text after
+// "Output:" is compiled, executed, and expected to produce no output.
 //
 // Godoc displays the body of ExampleXXX to demonstrate the use
 // of the function, constant, or variable XXX.  An example of a method M with

@@ -70,7 +70,7 @@ func (s *LSym) GrowCap(c int64) {
 // prepwrite prepares to write data of size siz into s at offset off.
 func (s *LSym) prepwrite(ctxt *Link, off int64, siz int) {
 	if off < 0 || siz < 0 || off >= 1<<30 {
-		log.Fatalf("prepwrite: bad off=%d siz=%d", off, siz)
+		log.Fatalf("prepwrite: bad off=%d siz=%d s=%v", off, siz, s)
 	}
 	if s.Type == SBSS || s.Type == STLSBSS {
 		ctxt.Diag("cannot supply data for BSS var")
@@ -142,6 +142,22 @@ func (s *LSym) WriteOff(ctxt *Link, off int64, rsym *LSym, roff int64) {
 	r.Siz = 4
 	r.Sym = rsym
 	r.Type = R_ADDROFF
+	r.Add = roff
+}
+
+// WriteWeakOff writes a weak 4 byte offset to rsym+roff into s at offset off.
+// After linking the 4 bytes stored at s+off will be
+// rsym+roff-(start of section that s is in).
+func (s *LSym) WriteWeakOff(ctxt *Link, off int64, rsym *LSym, roff int64) {
+	s.prepwrite(ctxt, off, 4)
+	r := Addrel(s)
+	r.Off = int32(off)
+	if int64(r.Off) != off {
+		ctxt.Diag("WriteOff: off overflow %d in %s", off, s.Name)
+	}
+	r.Siz = 4
+	r.Sym = rsym
+	r.Type = R_WEAKADDROFF
 	r.Add = roff
 }
 

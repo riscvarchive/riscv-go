@@ -848,6 +848,10 @@ Error:
 
 func ord(x Value) int {
 	switch x.(type) {
+	default:
+		// force invalid value into "x position" in match
+		// (don't panic here so that callers can provide a better error message)
+		return -1
 	case unknownVal:
 		return 0
 	case boolVal, stringVal:
@@ -862,15 +866,13 @@ func ord(x Value) int {
 		return 5
 	case complexVal:
 		return 6
-	default:
-		panic("unreachable")
 	}
 }
 
 // match returns the matching representation (same type) with the
 // smallest complexity for two values x and y. If one of them is
-// numeric, both of them must be numeric. If one of them is Unknown,
-// both results are Unknown.
+// numeric, both of them must be numeric. If one of them is Unknown
+// or invalid (say, nil) both results are that value.
 //
 func match(x, y Value) (_, _ Value) {
 	if ord(x) > ord(y) {
@@ -880,9 +882,6 @@ func match(x, y Value) (_, _ Value) {
 	// ord(x) <= ord(y)
 
 	switch x := x.(type) {
-	case unknownVal:
-		return x, x
-
 	case boolVal, stringVal, complexVal:
 		return x, y
 
@@ -921,6 +920,7 @@ func match(x, y Value) (_, _ Value) {
 		case complexVal:
 			return vtoc(x), y
 		}
+
 	case floatVal:
 		switch y := y.(type) {
 		case floatVal:
@@ -930,18 +930,23 @@ func match(x, y Value) (_, _ Value) {
 		}
 	}
 
-	panic("unreachable")
+	// force unknown and invalid values into "x position" in callers of match
+	// (don't panic here so that callers can provide a better error message)
+	return x, x
 }
 
 // BinaryOp returns the result of the binary expression x op y.
 // The operation must be defined for the operands. If one of the
 // operands is Unknown, the result is Unknown.
+// BinaryOp doesn't handle comparisons or shifts; use Compare
+// or Shift instead.
+//
 // To force integer division of Int operands, use op == token.QUO_ASSIGN
 // instead of token.QUO; the result is guaranteed to be Int in this case.
 // Division by zero leads to a run-time panic.
 //
-func BinaryOp(x Value, op token.Token, y Value) Value {
-	x, y = match(x, y)
+func BinaryOp(x_ Value, op token.Token, y_ Value) Value {
+	x, y := match(x_, y_)
 
 	switch x := x.(type) {
 	case unknownVal:
@@ -1108,7 +1113,7 @@ func BinaryOp(x Value, op token.Token, y Value) Value {
 	}
 
 Error:
-	panic(fmt.Sprintf("invalid binary operation %v %s %v", x, op, y))
+	panic(fmt.Sprintf("invalid binary operation %v %s %v", x_, op, y_))
 }
 
 func add(x, y Value) Value { return BinaryOp(x, token.ADD, y) }
@@ -1168,7 +1173,7 @@ func cmpZero(x int, op token.Token) bool {
 	case token.GEQ:
 		return x >= 0
 	}
-	panic("unreachable")
+	panic(fmt.Sprintf("invalid comparison %v %s 0", x, op))
 }
 
 // Compare returns the result of the comparison x op y.
@@ -1176,8 +1181,8 @@ func cmpZero(x int, op token.Token) bool {
 // If one of the operands is Unknown, the result is
 // false.
 //
-func Compare(x Value, op token.Token, y Value) bool {
-	x, y = match(x, y)
+func Compare(x_ Value, op token.Token, y_ Value) bool {
+	x, y := match(x_, y_)
 
 	switch x := x.(type) {
 	case unknownVal:
@@ -1247,5 +1252,5 @@ func Compare(x Value, op token.Token, y Value) bool {
 		}
 	}
 
-	panic(fmt.Sprintf("invalid comparison %v %s %v", x, op, y))
+	panic(fmt.Sprintf("invalid comparison %v %s %v", x_, op, y_))
 }

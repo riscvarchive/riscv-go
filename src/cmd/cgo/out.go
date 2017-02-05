@@ -126,6 +126,13 @@ func (p *Package) writeDefs() {
 		fmt.Fprint(fgo2, goProlog)
 	}
 
+	if fc != nil {
+		fmt.Fprintf(fc, "#line 1 \"cgo-generated-wrappers\"\n")
+	}
+	if fm != nil {
+		fmt.Fprintf(fm, "#line 1 \"cgo-generated-wrappers\"\n")
+	}
+
 	gccgoSymbolPrefix := p.gccgoSymbolPrefix()
 
 	cVars := make(map[string]bool)
@@ -348,11 +355,7 @@ func (p *Package) structType(n *Name) (string, int64) {
 			fmt.Fprintf(&buf, "\t\tchar __pad%d[%d];\n", off, pad)
 			off += pad
 		}
-		qual := ""
-		if c := t.C.String(); c[len(c)-1] == '*' {
-			qual = "const "
-		}
-		fmt.Fprintf(&buf, "\t\t%s%s r;\n", qual, t.C)
+		fmt.Fprintf(&buf, "\t\t%s r;\n", t.C)
 		off += t.Size
 	}
 	if off%p.PtrSize != 0 {
@@ -613,19 +616,9 @@ func (p *Package) writeOutputFunc(fgcc *os.File, n *Name) {
 		}
 	}
 	fmt.Fprintf(fgcc, "%s(", n.C)
-	for i, t := range n.FuncType.Params {
+	for i := range n.FuncType.Params {
 		if i > 0 {
 			fmt.Fprintf(fgcc, ", ")
-		}
-		// We know the type params are correct, because
-		// the Go equivalents had good type params.
-		// However, our version of the type omits the magic
-		// words const and volatile, which can provoke
-		// C compiler warnings. Silence them by casting
-		// all pointers to void*.  (Eventually that will produce
-		// other warnings.)
-		if c := t.C.String(); c[len(c)-1] == '*' {
-			fmt.Fprintf(fgcc, "(void*)")
 		}
 		fmt.Fprintf(fgcc, "a->p%d", i)
 	}
@@ -686,13 +679,9 @@ func (p *Package) writeGccgoOutputFunc(fgcc *os.File, n *Name) {
 		}
 	}
 	fmt.Fprintf(fgcc, "%s(", n.C)
-	for i, t := range n.FuncType.Params {
+	for i := range n.FuncType.Params {
 		if i > 0 {
 			fmt.Fprintf(fgcc, ", ")
-		}
-		// Cast to void* to avoid warnings due to omitted qualifiers.
-		if c := t.C.String(); c[len(c)-1] == '*' {
-			fmt.Fprintf(fgcc, "(void*)")
 		}
 		fmt.Fprintf(fgcc, "p%d", i)
 	}
@@ -1301,6 +1290,7 @@ func (p *Package) cgoType(e ast.Expr) *Type {
 }
 
 const gccProlog = `
+#line 1 "cgo-gcc-prolog"
 /*
   If x and y are not equal, the type will be invalid
   (have a negative array count) and an inscrutable error will come
@@ -1334,6 +1324,7 @@ const noTsanProlog = `
 
 // This must match the TSAN code in runtime/cgo/libcgo.h.
 const yesTsanProlog = `
+#line 1 "cgo-tsan-prolog"
 #define CGO_NO_SANITIZE_THREAD __attribute__ ((no_sanitize_thread))
 
 long long _cgo_sync __attribute__ ((common));
@@ -1356,6 +1347,7 @@ static void _cgo_tsan_release() {
 var tsanProlog = noTsanProlog
 
 const builtinProlog = `
+#line 1 "cgo-builtin-prolog"
 #include <stddef.h> /* for ptrdiff_t and size_t below */
 
 /* Define intgo when compiling with GCC.  */
@@ -1508,6 +1500,7 @@ func (p *Package) cPrologGccgo() string {
 }
 
 const cPrologGccgo = `
+#line 1 "cgo-c-prolog-gccgo"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1605,6 +1598,7 @@ func (p *Package) gccExportHeaderProlog() string {
 
 const gccExportHeaderProlog = `
 /* Start of boilerplate cgo prologue.  */
+#line 1 "cgo-gcc-export-header-prolog"
 
 #ifndef GO_CGO_PROLOGUE_H
 #define GO_CGO_PROLOGUE_H
@@ -1658,6 +1652,7 @@ const gccExportHeaderEpilog = `
 // We use weak declarations, and test the addresses, so that this code
 // works with older versions of gccgo.
 const gccgoExportFileProlog = `
+#line 1 "cgo-gccgo-export-file-prolog"
 extern _Bool runtime_iscgo __attribute__ ((weak));
 
 static void GoInit(void) __attribute__ ((constructor));

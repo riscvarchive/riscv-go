@@ -7,6 +7,7 @@ package tls
 import (
 	"container/list"
 	"crypto"
+	"crypto/internal/cipherhw"
 	"crypto/rand"
 	"crypto/sha512"
 	"crypto/x509"
@@ -162,8 +163,8 @@ type ConnectionState struct {
 	HandshakeComplete           bool                  // TLS handshake is complete
 	DidResume                   bool                  // connection resumes a previous TLS connection
 	CipherSuite                 uint16                // cipher suite in use (TLS_RSA_WITH_RC4_128_SHA, ...)
-	NegotiatedProtocol          string                // negotiated next protocol (from Config.NextProtos)
-	NegotiatedProtocolIsMutual  bool                  // negotiated protocol was advertised by server
+	NegotiatedProtocol          string                // negotiated next protocol (not guaranteed to be from Config.NextProtos)
+	NegotiatedProtocolIsMutual  bool                  // negotiated protocol was advertised by server (client side only)
 	ServerName                  string                // server name requested by client, if any (server side only)
 	PeerCertificates            []*x509.Certificate   // certificate chain presented by remote peer
 	VerifiedChains              [][]*x509.Certificate // verified chains built from PeerCertificates
@@ -919,10 +920,45 @@ func defaultCipherSuites() []uint16 {
 }
 
 func initDefaultCipherSuites() {
+	var topCipherSuites []uint16
+	if cipherhw.AESGCMSupport() {
+		// If AES-GCM hardware is provided then prioritise AES-GCM
+		// cipher suites.
+		topCipherSuites = []uint16{
+			TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+		}
+	} else {
+		// Without AES-GCM hardware, we put the ChaCha20-Poly1305
+		// cipher suites first.
+		topCipherSuites = []uint16{
+			TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+		}
+	}
+
 	varDefaultCipherSuites = make([]uint16, 0, len(cipherSuites))
+	for _, topCipher := range topCipherSuites {
+		varDefaultCipherSuites = append(varDefaultCipherSuites, topCipher)
+	}
+
+NextCipherSuite:
 	for _, suite := range cipherSuites {
 		if suite.flags&suiteDefaultOff != 0 {
 			continue
+		}
+		for _, existing := range varDefaultCipherSuites {
+			if existing == suite.id {
+				continue NextCipherSuite
+			}
 		}
 		varDefaultCipherSuites = append(varDefaultCipherSuites, suite.id)
 	}

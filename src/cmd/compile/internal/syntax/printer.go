@@ -473,11 +473,11 @@ func (p *printer) printRawNode(n Node) {
 
 	case *ChanType:
 		if n.Dir == RecvOnly {
-			p.print(_Larrow)
+			p.print(_Arrow)
 		}
 		p.print(_Chan)
 		if n.Dir == SendOnly {
-			p.print(_Larrow)
+			p.print(_Arrow)
 		}
 		p.print(blank, n.Elem)
 
@@ -495,7 +495,7 @@ func (p *printer) printRawNode(n Node) {
 		p.print(n.X)
 
 	case *SendStmt:
-		p.print(n.Chan, blank, _Larrow, blank, n.Value)
+		p.print(n.Chan, blank, _Arrow, blank, n.Value)
 
 	case *AssignStmt:
 		p.print(n.Lhs)
@@ -603,12 +603,6 @@ func (p *printer) printRawNode(n Node) {
 		}
 		p.print(n.Path)
 
-	case *AliasDecl:
-		if n.Group == nil {
-			p.print(n.Tok, blank)
-		}
-		p.print(n.Name, blank, _Rarrow, blank, n.Orig)
-
 	case *ConstDecl:
 		if n.Group == nil {
 			p.print(_Const, blank)
@@ -625,7 +619,11 @@ func (p *printer) printRawNode(n Node) {
 		if n.Group == nil {
 			p.print(_Type, blank)
 		}
-		p.print(n.Name, blank, n.Type)
+		p.print(n.Name, blank)
+		if n.Alias {
+			p.print(_Assign, blank)
+		}
+		p.print(n.Type)
 
 	case *VarDecl:
 		if n.Group == nil {
@@ -763,8 +761,6 @@ func groupFor(d Decl) (token, *Group) {
 	switch d := d.(type) {
 	case *ImportDecl:
 		return _Import, d.Group
-	case *AliasDecl:
-		return d.Tok, d.Group
 	case *ConstDecl:
 		return _Const, d.Group
 	case *TypeDecl:

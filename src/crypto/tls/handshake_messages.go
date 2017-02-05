@@ -4,7 +4,10 @@
 
 package tls
 
-import "bytes"
+import (
+	"bytes"
+	"strings"
+)
 
 type clientHelloMsg struct {
 	raw                          []byte
@@ -393,6 +396,12 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 				}
 				if nameType == 0 {
 					m.serverName = string(d[:nameLen])
+					// An SNI value may not include a
+					// trailing dot. See
+					// https://tools.ietf.org/html/rfc6066#section-3.
+					if strings.HasSuffix(m.serverName, ".") {
+						return false
+					}
 					break
 				}
 				d = d[nameLen:]
@@ -802,11 +811,8 @@ func (m *serverHelloMsg) unmarshal(data []byte) bool {
 			}
 			l := int(d[0])<<8 | int(d[1])
 			d = d[2:]
-			if len(d) != l {
+			if len(d) != l || l == 0 {
 				return false
-			}
-			if l == 0 {
-				continue
 			}
 
 			m.scts = make([][]byte, 0, 3)
@@ -816,7 +822,7 @@ func (m *serverHelloMsg) unmarshal(data []byte) bool {
 				}
 				sctLen := int(d[0])<<8 | int(d[1])
 				d = d[2:]
-				if len(d) < sctLen {
+				if sctLen == 0 || len(d) < sctLen {
 					return false
 				}
 				m.scts = append(m.scts, d[:sctLen])

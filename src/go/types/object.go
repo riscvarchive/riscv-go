@@ -25,7 +25,7 @@ type Object interface {
 	Name() string   // package local object name
 	Type() Type     // object type
 	Exported() bool // reports whether the name starts with a capital letter
-	Id() string     // object id (see Id below)
+	Id() string     // object name if exported, qualified name if not exported (see func Id)
 
 	// String returns a human-readable string of the object.
 	String() string
@@ -64,15 +64,10 @@ func Id(pkg *Package, name string) string {
 	// inside a package and outside a package - which breaks some
 	// tests)
 	path := "_"
-	// TODO(gri): shouldn't !ast.IsExported(name) => pkg != nil be an precondition?
-	// if pkg == nil {
-	// 	panic("nil package in lookup of unexported name")
-	// }
-	if pkg != nil {
+	// pkg is nil for objects in Universe scope and possibly types
+	// introduced via Eval (see also comment in object.sameId)
+	if pkg != nil && pkg.path != "" {
 		path = pkg.path
-		if path == "" {
-			path = "_"
-		}
 	}
 	return path + "." + name
 }
@@ -152,16 +147,35 @@ func NewConst(pos token.Pos, pkg *Package, name string, typ Type, val constant.V
 }
 
 func (obj *Const) Val() constant.Value { return obj.val }
+func (*Const) isDependency()           {} // a constant may be a dependency of an initialization expression
 
-func (*Const) isDependency() {} // a constant may be a dependency of an initialization expression
-
-// A TypeName represents a declared type.
+// A TypeName represents a name for a (named or alias) type.
 type TypeName struct {
 	object
 }
 
 func NewTypeName(pos token.Pos, pkg *Package, name string, typ Type) *TypeName {
 	return &TypeName{object{nil, pos, pkg, name, typ, 0, token.NoPos}}
+}
+
+// IsAlias reports whether obj is an alias name for a type.
+func (obj *TypeName) IsAlias() bool {
+	switch t := obj.typ.(type) {
+	case nil:
+		return false
+	case *Basic:
+		// Any user-defined type name for a basic type is an alias for a
+		// basic type (because basic types are pre-declared in the Universe
+		// scope, outside any package scope), and so is any type name with
+		// a different name than the name of the basic type it refers to.
+		// Additionaly, we need to look for "byte" and "rune" because they
+		// are aliases but have the same names (for better error messages).
+		return obj.pkg != nil || t.name != obj.name || t == universeByte || t == universeRune
+	case *Named:
+		return obj != t.obj
+	default:
+		return true
+	}
 }
 
 // A Variable represents a declared variable (including function parameters and results, and struct fields).
@@ -186,10 +200,8 @@ func NewField(pos token.Pos, pkg *Package, name string, typ Type, anonymous bool
 }
 
 func (obj *Var) Anonymous() bool { return obj.anonymous }
-
-func (obj *Var) IsField() bool { return obj.isField }
-
-func (*Var) isDependency() {} // a variable may be a dependency of an initialization expression
+func (obj *Var) IsField() bool   { return obj.isField }
+func (*Var) isDependency()       {} // a variable may be a dependency of an initialization expression
 
 // A Func represents a declared function, concrete method, or abstract
 // (interface) method. Its Type() is always a *Signature.
@@ -215,11 +227,8 @@ func (obj *Func) FullName() string {
 	return buf.String()
 }
 
-func (obj *Func) Scope() *Scope {
-	return obj.typ.(*Signature).scope
-}
-
-func (*Func) isDependency() {} // a function may be a dependency of an initialization expression
+func (obj *Func) Scope() *Scope { return obj.typ.(*Signature).scope }
+func (*Func) isDependency()     {} // a function may be a dependency of an initialization expression
 
 // A Label represents a declared label.
 type Label struct {
@@ -248,7 +257,9 @@ type Nil struct {
 }
 
 func writeObject(buf *bytes.Buffer, obj Object, qf Qualifier) {
+	var tname *TypeName
 	typ := obj.Type()
+
 	switch obj := obj.(type) {
 	case *PkgName:
 		fmt.Fprintf(buf, "package %s", obj.Name())
@@ -261,8 +272,8 @@ func writeObject(buf *bytes.Buffer, obj Object, qf Qualifier) {
 		buf.WriteString("const")
 
 	case *TypeName:
+		tname = obj
 		buf.WriteString("type")
-		typ = typ.Underlying()
 
 	case *Var:
 		if obj.isField {
@@ -302,10 +313,27 @@ func writeObject(buf *bytes.Buffer, obj Object, qf Qualifier) {
 		writePackage(buf, obj.Pkg(), qf)
 	}
 	buf.WriteString(obj.Name())
-	if typ != nil {
-		buf.WriteByte(' ')
-		WriteType(buf, typ, qf)
+
+	if typ == nil {
+		return
 	}
+
+	if tname != nil {
+		// We have a type object: Don't print anything more for
+		// basic types since there's no more information (names
+		// are the same; see also comment in TypeName.IsAlias).
+		if _, ok := typ.(*Basic); ok {
+			return
+		}
+		if tname.IsAlias() {
+			buf.WriteString(" =")
+		} else {
+			typ = typ.Underlying()
+		}
+	}
+
+	buf.WriteByte(' ')
+	WriteType(buf, typ, qf)
 }
 
 func writePackage(buf *bytes.Buffer, pkg *Package, qf Qualifier) {

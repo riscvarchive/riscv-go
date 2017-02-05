@@ -99,6 +99,7 @@ var keyPairTests = []struct {
 }
 
 func TestX509KeyPair(t *testing.T) {
+	t.Parallel()
 	var pem []byte
 	for _, test := range keyPairTests {
 		pem = []byte(test.cert + test.key)
@@ -294,12 +295,14 @@ func TestTLSUniqueMatches(t *testing.T) {
 		for i := 0; i < 2; i++ {
 			sconn, err := ln.Accept()
 			if err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				return
 			}
 			serverConfig := testConfig.Clone()
 			srv := Server(sconn, serverConfig)
 			if err := srv.Handshake(); err != nil {
-				t.Fatal(err)
+				t.Error(err)
+				return
 			}
 			serverTLSUniques <- srv.ConnectionState().TLSUnique
 		}
@@ -667,6 +670,7 @@ func throughput(b *testing.B, totalBytes int64, dynamicRecordSizingDisabled bool
 				panic(fmt.Errorf("accept: %v", err))
 			}
 			serverConfig := testConfig.Clone()
+			serverConfig.CipherSuites = nil // the defaults may prefer faster ciphers
 			serverConfig.DynamicRecordSizingDisabled = dynamicRecordSizingDisabled
 			srv := Server(sconn, serverConfig)
 			if err := srv.Handshake(); err != nil {
@@ -680,6 +684,7 @@ func throughput(b *testing.B, totalBytes int64, dynamicRecordSizingDisabled bool
 
 	b.SetBytes(totalBytes)
 	clientConfig := testConfig.Clone()
+	clientConfig.CipherSuites = nil // the defaults may prefer faster ciphers
 	clientConfig.DynamicRecordSizingDisabled = dynamicRecordSizingDisabled
 
 	buf := make([]byte, bufsize)

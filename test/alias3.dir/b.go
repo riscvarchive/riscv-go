@@ -1,4 +1,4 @@
-// Copyright 2016 The Go Authors. All rights reserved.
+// Copyright 2017 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,56 +6,21 @@ package b
 
 import (
 	"./a"
-	"bytes"
-	"go/build"
-	"io"
-	"math"
+	. "go/build"
 )
 
-func F => a.F
-func Inlined => a.Inlined
-
-var _ func(*Context, io.Writer) = a.F
-
-// check aliases
-func Check() {
-	if Pi != math.Pi {
-		panic(0)
-	}
-
-	var w Writer
-	a.F(new(Context), w)
-	F(new(build.Context), bytes.NewBuffer(nil))
-
-	if !Inlined() {
-		panic(1)
-	}
-
-	if &Default != &build.Default {
-		panic(2)
-	}
-
-	if Sin(1) != math.Sin(1) {
-		panic(3)
-	}
-
-	var _ *LimitedReader = new(LimitedReader2)
+func F(x float64) a.Float64 {
+	return x
 }
 
-// re-export aliases
-const Pi => a.Pi
+type MyContext = Context // = build.Context
 
-type (
-	Context => a.Context // not an interface
-	Writer  => a.Writer  // interface
-)
+var C a.Context = Default
 
-// different aliases may refer to the same original
-type LimitedReader => a.LimitedReader
-type LimitedReader2 => a.LimitedReader2
+type S struct{}
 
-var Default => a.Default
-var Default2 => a.Default2
+func (S) M1(x a.IntAlias) float64 { return a.Float64(x) }
+func (S) M2() Context             { return Default }
 
-func Sin => a.Sin
-func Sin2 => a.Sin
+var _ a.I1 = S{}
+var _ a.I2 = S{}

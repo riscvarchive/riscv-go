@@ -325,10 +325,15 @@ func isRuntimeDepPkg(pkg string) bool {
 }
 
 // detect too-far jumps in function s, and add trampolines if necessary
-// (currently only ARM supports trampoline insertion)
+// ARM supports trampoline insertion for internal and external linking
+// PPC64 & PPC64LE support trampoline insertion for internal linking only
 func trampoline(ctxt *Link, s *Symbol) {
 	if Thearch.Trampoline == nil {
 		return // no need or no support of trampolines on this arch
+	}
+
+	if Linkmode == LinkExternal && SysArch.Family == sys.PPC64 {
+		return
 	}
 
 	for ri := range s.R {
@@ -408,7 +413,7 @@ func relocsym(ctxt *Link, s *Symbol) {
 				Errorf(s, "unhandled relocation for %s (type %d rtype %d)", r.Sym.Name, r.Sym.Type, r.Type)
 			}
 		}
-		if r.Sym != nil && r.Sym.Type != obj.STLSBSS && !r.Sym.Attr.Reachable() {
+		if r.Sym != nil && r.Sym.Type != obj.STLSBSS && r.Type != obj.R_WEAKADDROFF && !r.Sym.Attr.Reachable() {
 			Errorf(s, "unreachable sym in relocation: %s", r.Sym.Name)
 		}
 
@@ -583,6 +588,11 @@ func relocsym(ctxt *Link, s *Symbol) {
 			}
 			o = Symaddr(r.Sym) + r.Add - int64(r.Sym.Sect.Vaddr)
 
+		case obj.R_WEAKADDROFF:
+			if !r.Sym.Attr.Reachable() {
+				continue
+			}
+			fallthrough
 		case obj.R_ADDROFF:
 			// The method offset tables using this relocation expect the offset to be relative
 			// to the start of the first text section, even if there are multiple.
@@ -594,7 +604,19 @@ func relocsym(ctxt *Link, s *Symbol) {
 			}
 
 			// r->sym can be null when CALL $(constant) is transformed from absolute PC to relative PC call.
-		case obj.R_CALL, obj.R_GOTPCREL, obj.R_PCREL:
+		case obj.R_GOTPCREL:
+			if ctxt.DynlinkingGo() && Headtype == obj.Hdarwin && r.Sym != nil && r.Sym.Type != obj.SCONST {
+				r.Done = 0
+				r.Xadd = r.Add
+				r.Xadd -= int64(r.Siz) // relative to address after the relocated chunk
+				r.Xsym = r.Sym
+
+				o = r.Xadd
+				o += int64(r.Siz)
+				break
+			}
+			fallthrough
+		case obj.R_CALL, obj.R_PCREL:
 			if Linkmode == LinkExternal && r.Sym != nil && r.Sym.Type != obj.SCONST && (r.Sym.Sect != s.Sect || r.Type == obj.R_GOTPCREL) {
 				r.Done = 0
 
@@ -731,6 +753,9 @@ func dynrelocsym(ctxt *Link, s *Symbol) {
 				continue
 			}
 			if !targ.Attr.Reachable() {
+				if r.Type == obj.R_WEAKADDROFF {
+					continue
+				}
 				Errorf(s, "dynamic relocation to unreachable symbol %s", targ.Name)
 			}
 			if r.Sym.Plt == -2 && r.Sym.Got != -2 { // make dynimport JMP table for PE object files.
@@ -1225,7 +1250,7 @@ func (p *GCProg) AddSym(s *Symbol) {
 }
 
 // dataSortKey is used to sort a slice of data symbol *Symbol pointers.
-// The sort keys are kept inline to improve cache behaviour while sorting.
+// The sort keys are kept inline to improve cache behavior while sorting.
 type dataSortKey struct {
 	size int64
 	name string
@@ -1951,6 +1976,13 @@ func dodataSect(ctxt *Link, symn obj.SymKind, syms []*Symbol) (result []*Symbol,
 			copy(syms[first+2:], syms[first+1:second])
 			syms[first+0] = rel
 			syms[first+1] = plt
+
+			// Make sure alignment doesn't introduce a gap.
+			// Setting the alignment explicitly prevents
+			// symalign from basing it on the size and
+			// getting it wrong.
+			rel.Align = int32(SysArch.RegSize)
+			plt.Align = int32(SysArch.RegSize)
 		}
 	}
 
@@ -2082,6 +2114,7 @@ func assignAddress(ctxt *Link, sect *Section, n int, sym *Symbol, va uint64) (*S
 		// Create new section, set the starting Vaddr
 		sect = addsection(&Segtext, ".text", 05)
 		sect.Vaddr = va
+		sym.Sect = sect
 
 		// Create a symbol for the start of the secondary text sections
 		ctxt.Syms.Lookup(fmt.Sprintf("runtime.text.%d", n), 0).Sect = sect

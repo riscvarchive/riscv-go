@@ -30,9 +30,9 @@ const ptrSize = 4 << (^uintptr(0) >> 63) // unsafe.Sizeof(uintptr(0)) but an ide
 // the underlying Go value can be used concurrently for the equivalent
 // direct operations.
 //
-// Using == on two Values does not compare the underlying values
-// they represent, but rather the contents of the Value structs.
 // To compare two Values, compare the results of the Interface method.
+// Using == on two Values does not compare the underlying values
+// they represent.
 type Value struct {
 	// typ holds the type of the value represented by a Value.
 	typ *rtype
@@ -538,6 +538,11 @@ func callReflect(ctxt *makeFuncImpl, frame unsafe.Pointer) {
 			off += typ.size
 		}
 	}
+
+	// runtime.getArgInfo expects to be able to find ctxt on the
+	// stack when it finds our caller, makeFuncStub. Make sure it
+	// doesn't get garbage collected.
+	runtime.KeepAlive(ctxt)
 }
 
 // methodReceiver returns information about the receiver
@@ -650,6 +655,9 @@ func callMethod(ctxt *methodValue, frame unsafe.Pointer) {
 	// though it's a heap object.
 	memclrNoHeapPointers(args, frametype.size)
 	framePool.Put(args)
+
+	// See the comment in callReflect.
+	runtime.KeepAlive(ctxt)
 }
 
 // funcName returns the name of f, for use in error messages.
@@ -755,7 +763,7 @@ func (v Value) Field(i int) Value {
 	fl := v.flag&(flagStickyRO|flagIndir|flagAddr) | flag(typ.Kind())
 	// Using an unexported field forces flagRO.
 	if !field.name.isExported() {
-		if field.name.name() == "" {
+		if field.anon() {
 			fl |= flagEmbedRO
 		} else {
 			fl |= flagStickyRO
@@ -766,7 +774,7 @@ func (v Value) Field(i int) Value {
 	// In the former case, we want v.ptr + offset.
 	// In the latter case, we must have field.offset = 0,
 	// so v.ptr + field.offset is still okay.
-	ptr := unsafe.Pointer(uintptr(v.ptr) + field.offset)
+	ptr := unsafe.Pointer(uintptr(v.ptr) + field.offset())
 	return Value{typ, ptr, fl}
 }
 

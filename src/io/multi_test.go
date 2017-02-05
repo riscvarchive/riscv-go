@@ -239,14 +239,17 @@ func TestMultiReaderFinalEOF(t *testing.T) {
 func TestMultiReaderFreesExhaustedReaders(t *testing.T) {
 	var mr Reader
 	closed := make(chan struct{})
-	{
+	// The closure ensures that we don't have a live reference to buf1
+	// on our stack after MultiReader is inlined (Issue 18819).  This
+	// is a work around for a limitation in liveness analysis.
+	func() {
 		buf1 := bytes.NewReader([]byte("foo"))
 		buf2 := bytes.NewReader([]byte("bar"))
 		mr = MultiReader(buf1, buf2)
 		runtime.SetFinalizer(buf1, func(*bytes.Reader) {
 			close(closed)
 		})
-	}
+	}()
 
 	buf := make([]byte, 4)
 	if n, err := ReadFull(mr, buf); err != nil || string(buf) != "foob" {
@@ -262,5 +265,29 @@ func TestMultiReaderFreesExhaustedReaders(t *testing.T) {
 
 	if n, err := ReadFull(mr, buf[:2]); err != nil || string(buf[:2]) != "ar" {
 		t.Fatalf(`ReadFull = %d (%q), %v; want 2, "ar", nil`, n, buf[:n], err)
+	}
+}
+
+func TestInterleavedMultiReader(t *testing.T) {
+	r1 := strings.NewReader("123")
+	r2 := strings.NewReader("45678")
+
+	mr1 := MultiReader(r1, r2)
+	mr2 := MultiReader(mr1)
+
+	buf := make([]byte, 4)
+
+	// Have mr2 use mr1's []Readers.
+	// Consume r1 (and clear it for GC to handle) and consume part of r2.
+	n, err := ReadFull(mr2, buf)
+	if got := string(buf[:n]); got != "1234" || err != nil {
+		t.Errorf(`ReadFull(mr2) = (%q, %v), want ("1234", nil)`, got, err)
+	}
+
+	// Consume the rest of r2 via mr1.
+	// This should not panic even though mr2 cleared r1.
+	n, err = ReadFull(mr1, buf)
+	if got := string(buf[:n]); got != "5678" || err != nil {
+		t.Errorf(`ReadFull(mr1) = (%q, %v), want ("5678", nil)`, got, err)
 	}
 }

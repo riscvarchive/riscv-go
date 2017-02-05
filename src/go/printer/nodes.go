@@ -733,7 +733,7 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 
 	case *ast.FuncLit:
 		p.expr(x.Type)
-		p.adjBlock(p.distanceFrom(x.Type.Pos()), blank, x.Body)
+		p.funcBody(p.distanceFrom(x.Type.Pos()), blank, x.Body)
 
 	case *ast.ParenExpr:
 		if _, hasParens := x.X.(*ast.ParenExpr); hasParens {
@@ -825,6 +825,7 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 		if x.Type != nil {
 			p.expr1(x.Type, token.HighestPrec, depth)
 		}
+		p.level++
 		p.print(x.Lbrace, token.LBRACE)
 		p.exprList(x.Lbrace, x.Elts, 1, commaTerm, x.Rbrace)
 		// do not insert extra line break following a /*-style comment
@@ -837,6 +838,7 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 			mode |= noExtraBlank
 		}
 		p.print(mode, x.Rbrace, token.RBRACE, mode)
+		p.level--
 
 	case *ast.Ellipsis:
 		p.print(token.ELLIPSIS)
@@ -1309,26 +1311,13 @@ func keepTypeColumn(specs []ast.Spec) []bool {
 		}
 	}
 
-	i0 := -1          // if i0 >= 0 we are in a run and i0 is the start of the run
-	var keepType bool // valid if we are in a run (i0 >= 0)
+	i0 := -1 // if i0 >= 0 we are in a run and i0 is the start of the run
+	var keepType bool
 	for i, s := range specs {
-		var hasValues, hasType bool
-		switch t := s.(type) {
-		case *ast.AliasSpec:
-			// like a ValueSpec with values (alias origin), but no type
-			hasValues = true
-
-		case *ast.ValueSpec:
-			hasValues = len(t.Values) > 0
-			hasType = t.Type != nil
-
-		default:
-			panic("internal error: unexpected ast.Spec")
-		}
-
-		if hasValues {
+		t := s.(*ast.ValueSpec)
+		if t.Values != nil {
 			if i0 < 0 {
-				// start of a run with values
+				// start of a run of ValueSpecs with non-nil Values
 				i0 = i
 				keepType = false
 			}
@@ -1339,7 +1328,7 @@ func keepTypeColumn(specs []ast.Spec) []bool {
 				i0 = -1
 			}
 		}
-		if hasType {
+		if t.Type != nil {
 			keepType = true
 		}
 	}
@@ -1349,25 +1338,6 @@ func keepTypeColumn(specs []ast.Spec) []bool {
 	}
 
 	return m
-}
-
-func (p *printer) aliasSpec(s *ast.AliasSpec, keepTypeCol bool) {
-	p.setComment(s.Doc)
-	p.expr(s.Name)
-	extraTabs := 3
-	if keepTypeCol {
-		p.print(vtab)
-		extraTabs--
-	}
-	p.print(vtab, token.ALIAS, blank)
-	p.expr(s.Orig)
-	extraTabs--
-	if s.Comment != nil {
-		for ; extraTabs > 0; extraTabs-- {
-			p.print(vtab)
-		}
-		p.setComment(s.Comment)
-	}
 }
 
 func (p *printer) valueSpec(s *ast.ValueSpec, keepType bool) {
@@ -1453,17 +1423,6 @@ func (p *printer) spec(spec ast.Spec, n int, doIndent bool) {
 		p.setComment(s.Comment)
 		p.print(s.EndPos)
 
-	case *ast.AliasSpec:
-		p.setComment(s.Doc)
-		p.expr(s.Name)
-		if n == 1 {
-			p.print(blank)
-		} else {
-			p.print(vtab)
-		}
-		p.print(token.ALIAS, blank)
-		p.expr(s.Orig)
-
 	case *ast.ValueSpec:
 		if n != 1 {
 			p.internalError("expected n = 1; got", n)
@@ -1487,6 +1446,9 @@ func (p *printer) spec(spec ast.Spec, n int, doIndent bool) {
 			p.print(blank)
 		} else {
 			p.print(vtab)
+		}
+		if s.Assign.IsValid() {
+			p.print(token.ASSIGN, blank)
 		}
 		p.expr(s.Type)
 		p.setComment(s.Comment)
@@ -1515,16 +1477,7 @@ func (p *printer) genDecl(d *ast.GenDecl) {
 						p.linebreak(p.lineFor(s.Pos()), 1, ignore, p.linesFrom(line) > 0)
 					}
 					p.recordLine(&line)
-					switch t := s.(type) {
-					case *ast.AliasSpec:
-						p.aliasSpec(t, keepType[i])
-
-					case *ast.ValueSpec:
-						p.valueSpec(t, keepType[i])
-
-					default:
-						p.internalError("unknown ast.Spec type: %T", t)
-					}
+					p.valueSpec(s.(*ast.ValueSpec), keepType[i])
 				}
 			} else {
 				var line int
@@ -1609,17 +1562,22 @@ func (p *printer) bodySize(b *ast.BlockStmt, maxSize int) int {
 	return bodySize
 }
 
-// adjBlock prints an "adjacent" block (e.g., a for-loop or function body) following
-// a header (e.g., a for-loop control clause or function signature) of given headerSize.
+// funcBody prints a function body following a function header of given headerSize.
 // If the header's and block's size are "small enough" and the block is "simple enough",
 // the block is printed on the current line, without line breaks, spaced from the header
 // by sep. Otherwise the block's opening "{" is printed on the current line, followed by
 // lines for the block's statements and its closing "}".
 //
-func (p *printer) adjBlock(headerSize int, sep whiteSpace, b *ast.BlockStmt) {
+func (p *printer) funcBody(headerSize int, sep whiteSpace, b *ast.BlockStmt) {
 	if b == nil {
 		return
 	}
+
+	// save/restore composite literal nesting level
+	defer func(level int) {
+		p.level = level
+	}(p.level)
+	p.level = 0
 
 	const maxSize = 100
 	if headerSize+p.bodySize(b, maxSize) <= maxSize {
@@ -1665,7 +1623,7 @@ func (p *printer) funcDecl(d *ast.FuncDecl) {
 	}
 	p.expr(d.Name)
 	p.signature(d.Type.Params, d.Type.Results)
-	p.adjBlock(p.distanceFrom(d.Pos()), vtab, d.Body)
+	p.funcBody(p.distanceFrom(d.Pos()), vtab, d.Body)
 }
 
 func (p *printer) decl(decl ast.Decl) {

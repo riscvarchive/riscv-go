@@ -338,9 +338,9 @@
 (Geq32F x y) -> (FGreaterEqual (FCMPU x y))
 (Geq64F x y) -> (FGreaterEqual (FCMPU x y))
 
-(Geq8U x y)  -> (GreaterEqual (CMPU (ZeroExt8to32 x) (ZeroExt8to32 y)))
-(Geq16U x y) -> (GreaterEqual (CMPU (ZeroExt16to32 x) (ZeroExt16to32 y)))
-(Geq32U x y) -> (GreaterEqual (CMPU x y))
+(Geq8U x y)  -> (GreaterEqual (CMPWU (ZeroExt8to32 x) (ZeroExt8to32 y)))
+(Geq16U x y) -> (GreaterEqual (CMPWU (ZeroExt16to32 x) (ZeroExt16to32 y)))
+(Geq32U x y) -> (GreaterEqual (CMPWU x y))
 (Geq64U x y) -> (GreaterEqual (CMPU x y))
 
 // Absorb pseudo-ops into blocks.
@@ -790,7 +790,7 @@
 (Trunc64to16 x) -> (MOVHreg x)
 (Trunc64to32 x) -> (MOVWreg x)
 
-(Slicemask <t> x) -> (XORconst [-1] (SRADconst <t> (ADDconst <t> x [-1]) [63]))
+(Slicemask <t> x) -> (SRADconst (NEG <t> x) [63])
 
 // Note that MOV??reg returns a 64-bit int, x is not necessarily that wide
 // This may interact with other patterns in the future. (Compare with arm64)

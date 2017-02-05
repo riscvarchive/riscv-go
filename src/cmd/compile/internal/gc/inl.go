@@ -27,7 +27,10 @@
 
 package gc
 
-import "fmt"
+import (
+	"cmd/internal/src"
+	"fmt"
+)
 
 // Get the function's package. For ordinary functions it's on the ->sym, but for imported methods
 // the ->sym can be re-used in the local package, so peel it off the receiver's type.
@@ -104,6 +107,12 @@ func caninl(fn *Node) {
 	// If marked "go:noinline", don't inline
 	if fn.Func.Pragma&Noinline != 0 {
 		reason = "marked go:noinline"
+		return
+	}
+
+	// If marked "go:cgo_unsafe_args", don't inline
+	if fn.Func.Pragma&CgoUnsafeArgs != 0 {
+		reason = "marked go:cgo_unsafe_args"
 		return
 	}
 
@@ -195,6 +204,10 @@ func ishairy(n *Node, budget *int32, reason *string) bool {
 			*budget -= fn.InlCost
 			break
 		}
+		if isIntrinsicCall(n) {
+			*budget--
+			break
+		}
 
 		if n.isMethodCalledAsFunction() {
 			if d := n.Left.Sym.Def; d != nil && d.Func.Inl.Len() != 0 {
@@ -259,7 +272,12 @@ func ishairy(n *Node, budget *int32, reason *string) bool {
 		*budget -= 2
 	}
 
-	return *budget < 0 || ishairy(n.Left, budget, reason) || ishairy(n.Right, budget, reason) ||
+	if *budget < 0 {
+		*reason = "function too complex"
+		return true
+	}
+
+	return ishairy(n.Left, budget, reason) || ishairy(n.Right, budget, reason) ||
 		ishairylist(n.List, budget, reason) || ishairylist(n.Rlist, budget, reason) ||
 		ishairylist(n.Ninit, budget, reason) || ishairylist(n.Nbody, budget, reason)
 }
@@ -781,10 +799,9 @@ func mkinlcall1(n *Node, fn *Node, isddd bool) *Node {
 			as.Right = nodnil()
 			as.Right.Type = varargtype
 		} else {
-			vararrtype := typArray(varargtype.Elem(), int64(varargcount))
-			as.Right = nod(OCOMPLIT, nil, typenod(vararrtype))
+			varslicetype := typSlice(varargtype.Elem())
+			as.Right = nod(OCOMPLIT, nil, typenod(varslicetype))
 			as.Right.List.Set(varargs)
-			as.Right = nod(OSLICE, as.Right, nil)
 		}
 
 		as = typecheck(as, Etop)
@@ -832,7 +849,7 @@ func mkinlcall1(n *Node, fn *Node, isddd bool) *Node {
 	args := as.Rlist
 	as.Rlist.Set(nil)
 
-	setlno(call, n.Lineno)
+	setlno(call, n.Pos)
 
 	as.Rlist.Set(args.Slice())
 
@@ -1009,20 +1026,20 @@ func (subst *inlsubst) node(n *Node) *Node {
 }
 
 // Plaster over linenumbers
-func setlnolist(ll Nodes, lno int32) {
+func setlnolist(ll Nodes, lno src.XPos) {
 	for _, n := range ll.Slice() {
 		setlno(n, lno)
 	}
 }
 
-func setlno(n *Node, lno int32) {
+func setlno(n *Node, lno src.XPos) {
 	if n == nil {
 		return
 	}
 
 	// don't clobber names, unless they're freshly synthesized
-	if n.Op != ONAME || n.Lineno == 0 {
-		n.Lineno = lno
+	if n.Op != ONAME || !n.Pos.IsKnown() {
+		n.Pos = lno
 	}
 
 	setlno(n.Left, lno)

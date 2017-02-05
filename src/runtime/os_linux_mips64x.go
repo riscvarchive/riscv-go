@@ -30,7 +30,7 @@ func cputicks() int64 {
 
 const (
 	_SS_DISABLE  = 2
-	_NSIG        = 65
+	_NSIG        = 129
 	_SI_USER     = 0
 	_SIG_BLOCK   = 1
 	_SIG_UNBLOCK = 2

@@ -32,6 +32,7 @@ package obj
 
 import (
 	"bufio"
+	"cmd/internal/src"
 	"cmd/internal/sys"
 	"fmt"
 )
@@ -221,8 +222,8 @@ const (
 // The Progs for a given function are arranged in a list linked through the Link field.
 //
 // Each Prog is charged to a specific source line in the debug information,
-// specified by Lineno, an index into the line history (see LineHist).
-// Every Prog has a Ctxt field that defines various context, including the current LineHist.
+// specified by Pos.Line().
+// Every Prog has a Ctxt field that defines its context.
 // Progs should be allocated using ctxt.NewProg(), not new(Prog).
 //
 // The other fields not yet mentioned are for use by the back ends and should
@@ -238,7 +239,7 @@ type Prog struct {
 	Forwd  *Prog       // for x86 back end
 	Rel    *Prog       // for x86, arm back ends
 	Pc     int64       // for back ends or assembler: virtual or actual program counter, depending on phase
-	Lineno int32       // line number of this instruction
+	Pos    src.XPos    // source position of this instruction
 	Spadj  int32       // effect of instruction on stack pointer (increment or decrement amount)
 	As     As          // assembler opcode
 	Reg    int16       // 2nd source operand
@@ -311,7 +312,7 @@ const (
 	ABaseAMD64
 	ABasePPC64
 	ABaseARM64
-	ABaseMIPS64
+	ABaseMIPS
 	ABaseS390X
 	ABaseRISCV
 
@@ -533,12 +534,17 @@ const (
 	// R_ADDRARM64 relocates an adrp, add pair to compute the address of the
 	// referenced symbol.
 	R_ADDRARM64
-	// R_ADDRMIPS (only used on mips64) resolves to the low 16 bits of an external
+	// R_ADDRMIPS (only used on mips/mips64) resolves to the low 16 bits of an external
 	// address, by encoding it into the instruction.
 	R_ADDRMIPS
 	// R_ADDROFF resolves to a 32-bit offset from the beginning of the section
 	// holding the data being relocated to the referenced symbol.
 	R_ADDROFF
+	// R_WEAKADDROFF resolves just like R_ADDROFF but is a weak relocation.
+	// A weak relocation does not make the symbol it refers to reachable,
+	// and is only honored by the linker if the symbol is in some other way
+	// reachable.
+	R_WEAKADDROFF
 	R_SIZE
 	R_CALL
 	R_CALLARM
@@ -665,7 +671,7 @@ const (
 	// TODO(mundaym): remove once variants can be serialized - see issue 14218.
 	R_PCRELDBL
 
-	// R_ADDRMIPSU (only used on mips64) resolves to the sign-adjusted "upper" 16
+	// R_ADDRMIPSU (only used on mips/mips64) resolves to the sign-adjusted "upper" 16
 	// bits (bit 16-31) of an external address, by encoding it into the instruction.
 	R_ADDRMIPSU
 	// R_ADDRMIPSTLS (only used on mips64) resolves to the low 16 bits of a TLS
@@ -736,7 +742,7 @@ type Link struct {
 	Bso           *bufio.Writer
 	Pathname      string
 	Hash          map[SymVer]*LSym
-	LineHist      LineHist
+	PosTable      src.PosTable
 	Imports       []string
 	Plists        []*Plist
 	Sym_div       *LSym

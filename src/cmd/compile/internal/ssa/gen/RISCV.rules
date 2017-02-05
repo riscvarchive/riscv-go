@@ -229,13 +229,6 @@
 (Rsh64x32 <t> x y) -> (SRA <t> x (OR <y.Type> y (ADDI <y.Type> [-1] (SLTIU <y.Type> [64] (ZeroExt32to64 y)))))
 (Rsh64x64 <t> x y) -> (SRA <t> x (OR <y.Type> y (ADDI <y.Type> [-1] (SLTIU <y.Type> [64] y))))
 
-// x LROT c -> (x << c) | (x >> (N - c)) where N is the number of bits in the type.
-// Zero extend x as needed for the right shift to avoid shifting junk in.
-(Lrot8  <t> x [c]) -> (OR (SLLI <t> [c& 7] x) (SRLI <t> (ZeroExt8to64  x) [ 8 - c& 7]))
-(Lrot16 <t> x [c]) -> (OR (SLLI <t> [c&15] x) (SRLI <t> (ZeroExt16to64 x) [16 - c&15]))
-(Lrot32 <t> x [c]) -> (OR (SLLI <t> [c&31] x) (SRLI <t> (ZeroExt32to64 x) [32 - c&31]))
-(Lrot64 <t> x [c]) -> (OR (SLLI <t> [c&63] x) (SRLI <t>                x  [64 - c&63]))
-
 (Less64  x y) -> (SLT  x y)
 (Less32  x y) -> (SLT  (SignExt32to64 x) (SignExt32to64 y))
 (Less16  x y) -> (SLT  (SignExt16to64 x) (SignExt16to64 y))

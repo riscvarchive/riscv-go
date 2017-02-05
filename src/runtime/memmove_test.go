@@ -6,6 +6,7 @@ package runtime_test
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"internal/race"
 	. "runtime"
@@ -13,6 +14,7 @@ import (
 )
 
 func TestMemmove(t *testing.T) {
+	t.Parallel()
 	size := 256
 	if testing.Short() {
 		size = 128 + 16
@@ -51,6 +53,7 @@ func TestMemmove(t *testing.T) {
 }
 
 func TestMemmoveAlias(t *testing.T) {
+	t.Parallel()
 	size := 256
 	if testing.Short() {
 		size = 128 + 16
@@ -85,6 +88,7 @@ func TestMemmoveAlias(t *testing.T) {
 }
 
 func TestMemmoveLarge0x180000(t *testing.T) {
+	t.Parallel()
 	if race.Enabled {
 		t.Skip("skipping large memmove test under race detector")
 	}
@@ -92,6 +96,7 @@ func TestMemmoveLarge0x180000(t *testing.T) {
 }
 
 func TestMemmoveOverlapLarge0x120000(t *testing.T) {
+	t.Parallel()
 	if race.Enabled {
 		t.Skip("skipping large memmove test under race detector")
 	}
@@ -443,3 +448,22 @@ func BenchmarkCopyFat1024(b *testing.B) {
 		_ = y
 	}
 }
+
+func BenchmarkIssue18740(b *testing.B) {
+	// This tests that memmove uses one 4-byte load/store to move 4 bytes.
+	// It used to do 2 2-byte load/stores, which leads to a pipeline stall
+	// when we try to read the result with one 4-byte load.
+	var buf [4]byte
+	for j := 0; j < b.N; j++ {
+		s := uint32(0)
+		for i := 0; i < 4096; i += 4 {
+			copy(buf[:], g[i:])
+			s += binary.LittleEndian.Uint32(buf[:])
+		}
+		sink = uint64(s)
+	}
+}
+
+// TODO: 2 byte and 8 byte benchmarks also.
+
+var g [4096]byte

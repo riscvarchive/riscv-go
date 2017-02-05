@@ -13,6 +13,8 @@ import (
 	"reflect"
 	"strconv"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var errNilPtr = errors.New("destination pointer is nil") // embedded in descriptive error
@@ -22,6 +24,17 @@ func describeNamedValue(nv *driver.NamedValue) string {
 		return fmt.Sprintf("$%d", nv.Ordinal)
 	}
 	return fmt.Sprintf("with name %q", nv.Name)
+}
+
+func validateNamedValueName(name string) error {
+	if len(name) == 0 {
+		return nil
+	}
+	r, _ := utf8.DecodeRuneInString(name)
+	if unicode.IsLetter(r) {
+		return nil
+	}
+	return fmt.Errorf("name %q does not begin with a letter", name)
 }
 
 // driverArgs converts arguments from callers of Stmt.Exec and
@@ -42,7 +55,10 @@ func driverArgs(ds *driverStmt, args []interface{}) ([]driver.NamedValue, error)
 			var err error
 			nv := &nvargs[n]
 			nv.Ordinal = n + 1
-			if np, ok := arg.(NamedParam); ok {
+			if np, ok := arg.(NamedArg); ok {
+				if err := validateNamedValueName(np.Name); err != nil {
+					return nil, err
+				}
 				arg = np.Value
 				nvargs[n].Name = np.Name
 			}
@@ -59,7 +75,10 @@ func driverArgs(ds *driverStmt, args []interface{}) ([]driver.NamedValue, error)
 	for n, arg := range args {
 		nv := &nvargs[n]
 		nv.Ordinal = n + 1
-		if np, ok := arg.(NamedParam); ok {
+		if np, ok := arg.(NamedArg); ok {
+			if err := validateNamedValueName(np.Name); err != nil {
+				return nil, err
+			}
 			arg = np.Value
 			nv.Name = np.Name
 		}

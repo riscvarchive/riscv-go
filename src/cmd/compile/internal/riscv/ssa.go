@@ -182,7 +182,7 @@ func largestMove(alignment int64) (obj.As, int64) {
 func ssaMarkMoves(s *gc.SSAGenState, b *ssa.Block) {}
 
 func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
-	s.SetLineno(v.Line)
+	s.SetPos(v.Pos)
 
 	switch v.Op {
 	case ssa.OpInitMem:
@@ -447,8 +447,8 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		gc.AddAux(&p.From, v)
 		p.To.Type = obj.TYPE_REG
 		p.To.Reg = riscv.REG_ZERO
-		if gc.Debug_checknil != 0 && v.Line > 1 { // v.Line == 1 in generated wrappers
-			gc.Warnl(v.Line, "generated nil check")
+		if gc.Debug_checknil != 0 && v.Pos.Line() > 1 { // v.Pos == 1 in generated wrappers
+			gc.Warnl(v.Pos, "generated nil check")
 		}
 	case ssa.OpRISCVLoweredGetClosurePtr:
 		// Closure pointer is S4 (riscv.REG_CTXT).
@@ -474,7 +474,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 }
 
 func ssaGenBlock(s *gc.SSAGenState, b, next *ssa.Block) {
-	s.SetLineno(b.Line)
+	s.SetPos(b.Pos)
 
 	switch b.Kind {
 	case ssa.BlockDefer:

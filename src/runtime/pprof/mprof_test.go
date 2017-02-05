@@ -6,8 +6,9 @@ package pprof_test
 
 import (
 	"bytes"
-	"math"
+	"fmt"
 	"reflect"
+	"regexp"
 	"runtime"
 	. "runtime/pprof"
 	"testing"
@@ -42,6 +43,17 @@ func allocatePersistent1K() {
 	}
 }
 
+// Allocate transient memory using reflect.Call.
+
+func allocateReflectTransient() {
+	memSink = make([]byte, 2<<20)
+}
+
+func allocateReflect() {
+	rv := reflect.ValueOf(allocateReflectTransient)
+	rv.Call(nil)
+}
+
 var memoryProfilerRun = 0
 
 func TestMemoryProfiler(t *testing.T) {
@@ -61,6 +73,7 @@ func TestMemoryProfiler(t *testing.T) {
 	allocateTransient1M()
 	allocateTransient2M()
 	allocatePersistent1K()
+	allocateReflect()
 	memSink = nil
 
 	runtime.GC() // materialize stats
@@ -71,48 +84,30 @@ func TestMemoryProfiler(t *testing.T) {
 
 	memoryProfilerRun++
 
-	r := bytes.NewReader(buf.Bytes())
-	p, err := Parse(r)
-	if err != nil {
-		t.Fatalf("can't parse pprof profile: %v", err)
+	tests := []string{
+		fmt.Sprintf(`%v: %v \[%v: %v\] @ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+
+#	0x[0-9,a-f]+	runtime/pprof_test\.allocatePersistent1K\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test\.go:41
+#	0x[0-9,a-f]+	runtime/pprof_test\.TestMemoryProfiler\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test\.go:75
+`, 32*memoryProfilerRun, 1024*memoryProfilerRun, 32*memoryProfilerRun, 1024*memoryProfilerRun),
+
+		fmt.Sprintf(`0: 0 \[%v: %v\] @ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+
+#	0x[0-9,a-f]+	runtime/pprof_test\.allocateTransient1M\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test.go:22
+#	0x[0-9,a-f]+	runtime/pprof_test\.TestMemoryProfiler\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test.go:73
+`, (1<<10)*memoryProfilerRun, (1<<20)*memoryProfilerRun),
+
+		fmt.Sprintf(`0: 0 \[%v: %v\] @ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+ 0x[0-9,a-f]+
+#	0x[0-9,a-f]+	runtime/pprof_test\.allocateTransient2M\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test.go:28
+#	0x[0-9,a-f]+	runtime/pprof_test\.TestMemoryProfiler\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test.go:74
+`, memoryProfilerRun, (2<<20)*memoryProfilerRun),
+
+		fmt.Sprintf(`0: 0 \[%v: %v\] @( 0x[0-9,a-f]+)+
+#	0x[0-9,a-f]+	runtime/pprof_test\.allocateReflectTransient\+0x[0-9,a-f]+	.*/runtime/pprof/mprof_test.go:49
+`, memoryProfilerRun, (2<<20)*memoryProfilerRun),
 	}
-	if len(p.Sample) < 3 {
-		t.Fatalf("few samples, got: %d", len(p.Sample))
-	}
-	testSample := make(map[int][]int64)
-	testSample[0] = scaleHeapSample((int64)(32*memoryProfilerRun), (int64)(1024*memoryProfilerRun), p.Period)
-	testSample[0] = append(testSample[0], testSample[0][0], testSample[0][1])
-	testSample[1] = scaleHeapSample((int64)((1<<10)*memoryProfilerRun), (int64)((1<<20)*memoryProfilerRun), p.Period)
-	testSample[1] = append([]int64{0, 0}, testSample[1][0], testSample[1][1])
-	testSample[2] = scaleHeapSample((int64)(memoryProfilerRun), (int64)((2<<20)*memoryProfilerRun), p.Period)
-	testSample[2] = append([]int64{0, 0}, testSample[2][0], testSample[2][1])
-	for _, value := range testSample {
-		found := false
-		for i := range p.Sample {
-			if reflect.DeepEqual(p.Sample[i].Value, value) {
-				found = true
-				break
-			}
+
+	for _, test := range tests {
+		if !regexp.MustCompile(test).Match(buf.Bytes()) {
+			t.Fatalf("The entry did not match:\n%v\n\nProfile:\n%v\n", test, buf.String())
 		}
-		if !found {
-			t.Fatalf("the entry did not match any sample:\n%v\n", value)
-		}
 	}
-}
-
-func scaleHeapSample(count, size, rate int64) []int64 {
-	if count == 0 || size == 0 {
-		return []int64{0, 0}
-	}
-
-	if rate <= 1 {
-		// if rate==1 all samples were collected so no adjustment is needed.
-		// if rate<1 treat as unknown and skip scaling.
-		return []int64{count, size}
-	}
-
-	avgSize := float64(size) / float64(count)
-	scale := 1 / (1 - math.Exp(-avgSize/float64(rate)))
-
-	return []int64{int64(float64(count) * scale), int64(float64(size) * scale)}
 }

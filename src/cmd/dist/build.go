@@ -57,6 +57,8 @@ var okgoarch = []string{
 	"amd64p32",
 	"arm",
 	"arm64",
+	"mips",
+	"mipsle",
 	"mips64",
 	"mips64le",
 	"ppc64",
@@ -470,7 +472,7 @@ var deptab = []struct {
 	prefix string   // prefix of target
 	dep    []string // dependency tweaks for targets with that prefix
 }{
-	{"cmd/go", []string{
+	{"cmd/go/internal/cfg", []string{
 		"zdefaultcc.go",
 		"zosarch.go",
 	}},
@@ -542,7 +544,7 @@ func install(dir string) {
 	path := pathf("%s/src/%s", goroot, dir)
 	name := filepath.Base(dir)
 
-	ispkg := !strings.HasPrefix(dir, "cmd/") || strings.HasPrefix(dir, "cmd/internal/") || strings.HasPrefix(dir, "cmd/asm/internal/")
+	ispkg := !strings.HasPrefix(dir, "cmd/") || strings.Contains(dir, "/internal/")
 
 	// Start final link command line.
 	// Note: code below knows that link.p[targ] is the target.
@@ -1106,6 +1108,8 @@ var cgoEnabled = map[string]bool{
 	"linux/arm64":     true,
 	"linux/ppc64":     false,
 	"linux/ppc64le":   true,
+	"linux/mips":      true,
+	"linux/mipsle":    true,
 	"linux/mips64":    true,
 	"linux/mips64le":  true,
 	"linux/riscv":     false,

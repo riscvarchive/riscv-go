@@ -632,11 +632,27 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		autoffset = 0
 	}
 
+	hasCall := false
+	for q := p; q != nil; q = q.Link {
+		if q.As == obj.ACALL || q.As == obj.ADUFFCOPY || q.As == obj.ADUFFZERO {
+			hasCall = true
+			break
+		}
+	}
+
 	var bpsize int
-	if p.Mode == 64 && ctxt.Framepointer_enabled && autoffset > 0 && p.From3.Offset&obj.NOFRAME == 0 {
-		// Make room for to save a base pointer. If autoffset == 0,
-		// this might do something special like a tail jump to
-		// another function, so in that case we omit this.
+	if p.Mode == 64 && ctxt.Framepointer_enabled &&
+		p.From3.Offset&obj.NOFRAME == 0 && // (1) below
+		!(autoffset == 0 && p.From3.Offset&obj.NOSPLIT != 0) && // (2) below
+		!(autoffset == 0 && !hasCall) { // (3) below
+		// Make room to save a base pointer.
+		// There are 2 cases we must avoid:
+		// 1) If noframe is set (which we do for functions which tail call).
+		// 2) Scary runtime internals which would be all messed up by frame pointers.
+		//    We detect these using a heuristic: frameless nosplit functions.
+		//    TODO: Maybe someday we label them all with NOFRAME and get rid of this heuristic.
+		// For performance, we also want to avoid:
+		// 3) Frameless leaf functions
 		bpsize = ctxt.Arch.PtrSize
 		autoffset += int32(bpsize)
 		p.To.Offset += int64(bpsize)
@@ -1121,7 +1137,7 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32, textarg int32) *ob
 	spfix.Spadj = -framesize
 
 	pcdata := obj.Appendp(ctxt, spfix)
-	pcdata.Lineno = ctxt.Cursym.Text.Lineno
+	pcdata.Pos = ctxt.Cursym.Text.Pos
 	pcdata.Mode = ctxt.Cursym.Text.Mode
 	pcdata.As = obj.APCDATA
 	pcdata.From.Type = obj.TYPE_CONST
@@ -1130,7 +1146,7 @@ func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int32, textarg int32) *ob
 	pcdata.To.Offset = -1 // pcdata starts at -1 at function entry
 
 	call := obj.Appendp(ctxt, pcdata)
-	call.Lineno = ctxt.Cursym.Text.Lineno
+	call.Pos = ctxt.Cursym.Text.Pos
 	call.Mode = ctxt.Cursym.Text.Mode
 	call.As = obj.ACALL
 	call.To.Type = obj.TYPE_BRANCH
@@ -1335,7 +1351,7 @@ loop:
 		}
 		q = ctxt.NewProg()
 		q.As = obj.AJMP
-		q.Lineno = p.Lineno
+		q.Pos = p.Pos
 		q.To.Type = obj.TYPE_BRANCH
 		q.To.Offset = p.Pc
 		q.Pcond = p

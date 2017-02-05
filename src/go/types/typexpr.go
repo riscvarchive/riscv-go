@@ -623,8 +623,7 @@ func (check *Checker) structType(styp *Struct, e *ast.StructType, path []*TypeNa
 	// current field typ and tag
 	var typ Type
 	var tag string
-	// anonymous != nil indicates an anonymous field.
-	add := func(field *ast.Field, ident *ast.Ident, anonymous *TypeName, pos token.Pos) {
+	add := func(field *ast.Field, ident *ast.Ident, anonymous bool, pos token.Pos) {
 		if tag != "" && tags == nil {
 			tags = make([]string, len(fields))
 		}
@@ -633,14 +632,11 @@ func (check *Checker) structType(styp *Struct, e *ast.StructType, path []*TypeNa
 		}
 
 		name := ident.Name
-		fld := NewField(pos, check.pkg, name, typ, anonymous != nil)
+		fld := NewField(pos, check.pkg, name, typ, anonymous)
 		// spec: "Within a struct, non-blank field names must be unique."
 		if name == "_" || check.declareInSet(&fset, pos, fld) {
 			fields = append(fields, fld)
 			check.recordDef(ident, fld)
-		}
-		if anonymous != nil {
-			check.recordUse(ident, anonymous)
 		}
 	}
 
@@ -650,51 +646,45 @@ func (check *Checker) structType(styp *Struct, e *ast.StructType, path []*TypeNa
 		if len(f.Names) > 0 {
 			// named fields
 			for _, name := range f.Names {
-				add(f, name, nil, name.Pos())
+				add(f, name, false, name.Pos())
 			}
 		} else {
 			// anonymous field
-			name := anonymousFieldIdent(f.Type)
+			// spec: "An embedded type must be specified as a type name T or as a pointer
+			// to a non-interface type name *T, and T itself may not be a pointer type."
 			pos := f.Type.Pos()
+			name := anonymousFieldIdent(f.Type)
+			if name == nil {
+				check.invalidAST(pos, "anonymous field type %s has no name", f.Type)
+				continue
+			}
 			t, isPtr := deref(typ)
-			switch t := t.(type) {
+			// Because we have a name, typ must be of the form T or *T, where T is the name
+			// of a (named or alias) type, and t (= deref(typ)) must be the type of T.
+			switch t := t.Underlying().(type) {
 			case *Basic:
 				if t == Typ[Invalid] {
 					// error was reported before
 					continue
 				}
+
 				// unsafe.Pointer is treated like a regular pointer
 				if t.kind == UnsafePointer {
 					check.errorf(pos, "anonymous field type cannot be unsafe.Pointer")
 					continue
 				}
-				add(f, name, Universe.Lookup(t.name).(*TypeName), pos)
 
-			case *Named:
-				// spec: "An embedded type must be specified as a type name
-				// T or as a pointer to a non-interface type name *T, and T
-				// itself may not be a pointer type."
-				switch u := t.underlying.(type) {
-				case *Basic:
-					// unsafe.Pointer is treated like a regular pointer
-					if u.kind == UnsafePointer {
-						check.errorf(pos, "anonymous field type cannot be unsafe.Pointer")
-						continue
-					}
-				case *Pointer:
-					check.errorf(pos, "anonymous field type cannot be a pointer")
+			case *Pointer:
+				check.errorf(pos, "anonymous field type cannot be a pointer")
+				continue
+
+			case *Interface:
+				if isPtr {
+					check.errorf(pos, "anonymous field type cannot be a pointer to an interface")
 					continue
-				case *Interface:
-					if isPtr {
-						check.errorf(pos, "anonymous field type cannot be a pointer to an interface")
-						continue
-					}
 				}
-				add(f, name, t.obj, pos)
-
-			default:
-				check.invalidAST(pos, "anonymous field type %s must be named", typ)
 			}
+			add(f, name, true, pos)
 		}
 	}
 
@@ -707,7 +697,10 @@ func anonymousFieldIdent(e ast.Expr) *ast.Ident {
 	case *ast.Ident:
 		return e
 	case *ast.StarExpr:
-		return anonymousFieldIdent(e.X)
+		// *T is valid, but **T is not
+		if _, ok := e.X.(*ast.StarExpr); !ok {
+			return anonymousFieldIdent(e.X)
+		}
 	case *ast.SelectorExpr:
 		return e.Sel
 	}

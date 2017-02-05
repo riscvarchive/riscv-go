@@ -82,7 +82,7 @@ func nilcheckelim(f *Func) {
 				}
 			}
 
-			// Next, process values in the block.
+			// Next, eliminate any redundant nil checks in this block.
 			i := 0
 			for _, v := range b.Values {
 				b.Values[i] = v
@@ -101,23 +101,35 @@ func nilcheckelim(f *Func) {
 						// This is a redundant implicit nil check.
 						// Logging in the style of the former compiler -- and omit line 1,
 						// which is usually in generated code.
-						if f.Config.Debug_checknil() && v.Line > 1 {
-							f.Config.Warnl(v.Line, "removed nil check")
+						if f.Config.Debug_checknil() && v.Pos.Line() > 1 {
+							f.Config.Warnl(v.Pos, "removed nil check")
 						}
 						v.reset(OpUnknown)
+						// TODO: f.freeValue(v)
 						i--
 						continue
 					}
-					// Record the fact that we know ptr is non nil, and remember to
-					// undo that information when this dominator subtree is done.
-					nonNilValues[ptr.ID] = true
-					work = append(work, bp{op: ClearPtr, ptr: ptr})
 				}
 			}
 			for j := i; j < len(b.Values); j++ {
 				b.Values[j] = nil
 			}
 			b.Values = b.Values[:i]
+
+			// Finally, find redundant nil checks for subsequent blocks.
+			// Note that we can't add these until the loop above is done, as the
+			// values in the block are not ordered in any way when this pass runs.
+			// This was the cause of issue #18725.
+			for _, v := range b.Values {
+				if v.Op != OpNilCheck {
+					continue
+				}
+				ptr := v.Args[0]
+				// Record the fact that we know ptr is non nil, and remember to
+				// undo that information when this dominator subtree is done.
+				nonNilValues[ptr.ID] = true
+				work = append(work, bp{op: ClearPtr, ptr: ptr})
+			}
 
 			// Add all dominated blocks to the work list.
 			for w := sdom[node.block.ID].child; w != nil; w = sdom[w.ID].sibling {
@@ -132,6 +144,8 @@ func nilcheckelim(f *Func) {
 }
 
 // All platforms are guaranteed to fault if we load/store to anything smaller than this address.
+//
+// This should agree with minLegalPointer in the runtime.
 const minZeroPage = 4096
 
 // nilcheckelim2 eliminates unnecessary nil checks.
@@ -147,8 +161,8 @@ func nilcheckelim2(f *Func) {
 		for i := len(b.Values) - 1; i >= 0; i-- {
 			v := b.Values[i]
 			if opcodeTable[v.Op].nilCheck && unnecessary.contains(v.Args[0].ID) {
-				if f.Config.Debug_checknil() && int(v.Line) > 1 {
-					f.Config.Warnl(v.Line, "removed nil check")
+				if f.Config.Debug_checknil() && v.Pos.Line() > 1 {
+					f.Config.Warnl(v.Pos, "removed nil check")
 				}
 				v.reset(OpUnknown)
 				continue
@@ -184,6 +198,8 @@ func nilcheckelim2(f *Func) {
 					if v.Aux != nil || off < 0 || off >= minZeroPage {
 						continue
 					}
+				case auxInt32:
+					// Mips uses this auxType for atomic add constant. It does not affect the effective address.
 				case auxInt64:
 					// ARM uses this auxType for duffcopy/duffzero/alignment info.
 					// It does not affect the effective address.

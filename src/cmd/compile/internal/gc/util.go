@@ -11,7 +11,7 @@ import (
 )
 
 func (n *Node) Line() string {
-	return Ctxt.LineHist.LineString(int(n.Lineno))
+	return linestr(n.Pos)
 }
 
 var atExitFuncs []func()
@@ -57,11 +57,19 @@ func startProfile() {
 			Fatalf("%v", err)
 		}
 		atExit(func() {
-			runtime.GC() // profile all outstanding allocations
-			if err := pprof.WriteHeapProfile(f); err != nil {
+			// Profile all outstanding allocations.
+			runtime.GC()
+			// compilebench parses the memory profile to extract memstats,
+			// which are only written in the legacy pprof format.
+			// See golang.org/issue/18641 and runtime/pprof/pprof.go:writeHeap.
+			const writeLegacyFormat = 1
+			if err := pprof.Lookup("heap").WriteTo(f, writeLegacyFormat); err != nil {
 				Fatalf("%v", err)
 			}
 		})
+	} else {
+		// Not doing memory profiling; disable it entirely.
+		runtime.MemProfileRate = 0
 	}
 	if traceprofile != "" && traceHandler != nil {
 		traceHandler(traceprofile)

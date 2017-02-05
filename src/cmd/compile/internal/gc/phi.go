@@ -6,6 +6,7 @@ package gc
 
 import (
 	"cmd/compile/internal/ssa"
+	"cmd/internal/src"
 	"container/heap"
 	"fmt"
 )
@@ -223,17 +224,18 @@ func (s *phiState) insertVarPhis(n int, var_ *Node, defs []*ssa.Block, typ ssa.T
 				fmt.Printf("  processing %s\n", b)
 			}
 
+			currentRootLevel := s.level[currentRoot.ID]
 			for _, e := range b.Succs {
 				c := e.Block()
 				// TODO: if the variable is dead at c, skip it.
-				if s.level[c.ID] > s.level[currentRoot.ID] {
+				if s.level[c.ID] > currentRootLevel {
 					// a D-edge, or an edge whose target is in currentRoot's subtree.
 					continue
 				}
 				if !hasPhi.contains(c.ID) {
 					// Add a phi to block c for variable n.
 					hasPhi.add(c.ID)
-					v := c.NewValue0I(currentRoot.Line, ssa.OpPhi, typ, int64(n)) // TODO: line number right?
+					v := c.NewValue0I(currentRoot.Pos, ssa.OpPhi, typ, int64(n)) // TODO: line number right?
 					// Note: we store the variable number in the phi's AuxInt field. Used temporarily by phi building.
 					s.s.addNamedValue(var_, v)
 					for i := 0; i < len(c.Preds); i++ {
@@ -341,7 +343,12 @@ func (s *phiState) resolveFwdRefs() {
 				if v.Op != ssa.OpPhi {
 					break // All phis will be at the end of the block during phi building.
 				}
-				v.SetArg(i, values[v.AuxInt])
+				// Only set arguments that have been resolved.
+				// For very wide CFGs, this significantly speeds up phi resolution.
+				// See golang.org/issue/8225.
+				if w := values[v.AuxInt]; w.Op != ssa.OpUnknown {
+					v.SetArg(i, w)
+				}
 			}
 		}
 
@@ -466,7 +473,7 @@ loop:
 		// Find variable value on each predecessor.
 		args = args[:0]
 		for _, e := range b.Preds {
-			args = append(args, s.lookupVarOutgoing(e.Block(), v.Type, var_, v.Line))
+			args = append(args, s.lookupVarOutgoing(e.Block(), v.Type, var_, v.Pos))
 		}
 
 		// Decide if we need a phi or not. We need a phi if there
@@ -499,7 +506,7 @@ loop:
 }
 
 // lookupVarOutgoing finds the variable's value at the end of block b.
-func (s *simplePhiState) lookupVarOutgoing(b *ssa.Block, t ssa.Type, var_ *Node, line int32) *ssa.Value {
+func (s *simplePhiState) lookupVarOutgoing(b *ssa.Block, t ssa.Type, var_ *Node, line src.XPos) *ssa.Value {
 	for {
 		if v := s.defvars[b.ID][var_]; v != nil {
 			return v

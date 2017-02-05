@@ -64,7 +64,7 @@ func addrescapes(n *Node) {
 			Curfn = Curfn.Func.Closure
 		}
 		ln := lineno
-		lineno = Curfn.Lineno
+		lineno = Curfn.Pos
 		moveToHeap(n)
 		Curfn = oldfn
 		lineno = ln
@@ -87,7 +87,7 @@ func addrescapes(n *Node) {
 // isParamStackCopy reports whether this is the on-stack copy of a
 // function parameter that moved to the heap.
 func (n *Node) isParamStackCopy() bool {
-	return n.Op == ONAME && (n.Class == PPARAM || n.Class == PPARAMOUT) && n.Name.Heapaddr != nil
+	return n.Op == ONAME && (n.Class == PPARAM || n.Class == PPARAMOUT) && n.Name.Param.Heapaddr != nil
 }
 
 // isParamHeapCopy reports whether this is the on-heap copy of
@@ -115,6 +115,11 @@ func moveToHeap(n *Node) {
 	heapaddr.Sym = lookup("&" + n.Sym.Name)
 	heapaddr.Orig.Sym = heapaddr.Sym
 
+	// Unset AutoTemp to persist the &foo variable name through SSA to
+	// liveness analysis.
+	// TODO(mdempsky/drchase): Cleaner solution?
+	heapaddr.Name.AutoTemp = false
+
 	// Parameters have a local stack copy used at function start/end
 	// in addition to the copy in the heap that may live longer than
 	// the function.
@@ -132,7 +137,7 @@ func moveToHeap(n *Node) {
 		stackcopy.Type = n.Type
 		stackcopy.Xoffset = n.Xoffset
 		stackcopy.Class = n.Class
-		stackcopy.Name.Heapaddr = heapaddr
+		stackcopy.Name.Param.Heapaddr = heapaddr
 		if n.Class == PPARAMOUT {
 			// Make sure the pointer to the heap copy is kept live throughout the function.
 			// The function could panic at any point, and then a defer could recover.
@@ -169,7 +174,7 @@ func moveToHeap(n *Node) {
 	n.Class = PAUTOHEAP
 	n.Ullman = 2
 	n.Xoffset = 0
-	n.Name.Heapaddr = heapaddr
+	n.Name.Param.Heapaddr = heapaddr
 	n.Esc = EscHeap
 	if Debug['m'] != 0 {
 		fmt.Printf("%v: moved to heap: %v\n", n.Line(), n)
@@ -192,8 +197,9 @@ func tempname(nn *Node, t *Type) {
 	}
 
 	// give each tmp a different name so that there
-	// a chance to registerizer them
-	s := lookupN("autotmp_", statuniqgen)
+	// a chance to registerizer them.
+	// Add a preceding . to avoid clash with legal names.
+	s := lookupN(".autotmp_", statuniqgen)
 	statuniqgen++
 	n := nod(ONAME, nil, nil)
 	n.Sym = s
@@ -204,6 +210,7 @@ func tempname(nn *Node, t *Type) {
 	n.Ullman = 1
 	n.Esc = EscNever
 	n.Name.Curfn = Curfn
+	n.Name.AutoTemp = true
 	Curfn.Func.Dcl = append(Curfn.Func.Dcl, n)
 
 	dowidth(t)

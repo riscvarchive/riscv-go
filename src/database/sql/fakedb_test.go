@@ -39,6 +39,9 @@ var _ = log.Printf
 // Any of these can be preceded by PANIC|<method>|, to cause the
 // named method on fakeStmt to panic.
 //
+// Any of these can be proceeded by WAIT|<duration>|, to cause the
+// named method on fakeStmt to sleep for the specified duration.
+//
 // Multiple of these can be combined when separated with a semicolon.
 //
 // When opening a fakeDriver's database, it starts empty with no
@@ -119,6 +122,7 @@ type fakeStmt struct {
 	cmd   string
 	table string
 	panic string
+	wait  time.Duration
 
 	next *fakeStmt // used for returning multiple results.
 
@@ -507,6 +511,10 @@ func (c *fakeConn) prepareInsert(stmt *fakeStmt, parts []string) (*fakeStmt, err
 var hookPrepareBadConn func() bool
 
 func (c *fakeConn) Prepare(query string) (driver.Stmt, error) {
+	panic("use PrepareContext")
+}
+
+func (c *fakeConn) PrepareContext(ctx context.Context, query string) (driver.Stmt, error) {
 	c.numPrepare++
 	if c.db == nil {
 		panic("nil c.db; conn = " + fmt.Sprintf("%#v", c))
@@ -526,13 +534,33 @@ func (c *fakeConn) Prepare(query string) (driver.Stmt, error) {
 		if firstStmt == nil {
 			firstStmt = stmt
 		}
-		if len(parts) >= 3 && parts[0] == "PANIC" {
-			stmt.panic = parts[1]
-			parts = parts[2:]
+		if len(parts) >= 3 {
+			switch parts[0] {
+			case "PANIC":
+				stmt.panic = parts[1]
+				parts = parts[2:]
+			case "WAIT":
+				wait, err := time.ParseDuration(parts[1])
+				if err != nil {
+					return nil, errf("expected section after WAIT to be a duration, got %q %v", parts[1], err)
+				}
+				parts = parts[2:]
+				stmt.wait = wait
+			}
 		}
 		cmd := parts[0]
 		stmt.cmd = cmd
 		parts = parts[1:]
+
+		if stmt.wait > 0 {
+			wait := time.NewTimer(stmt.wait)
+			select {
+			case <-wait.C:
+			case <-ctx.Done():
+				wait.Stop()
+				return nil, ctx.Err()
+			}
+		}
 
 		c.incrStat(&c.stmtsMade)
 		var err error
@@ -619,6 +647,16 @@ func (s *fakeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (d
 		return nil, err
 	}
 
+	if s.wait > 0 {
+		time.Sleep(s.wait)
+	}
+
+	select {
+	default:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
 	db := s.c.db
 	switch s.cmd {
 	case "WIPE":
@@ -675,7 +713,7 @@ func (s *fakeStmt) execInsert(args []driver.NamedValue, doInsert bool) (driver.R
 			} else {
 				// Assign value from argument placeholder name.
 				for _, a := range args {
-					if a.Name == strvalue {
+					if a.Name == strvalue[1:] {
 						val = a.Value
 						break
 					}
@@ -780,7 +818,7 @@ func (s *fakeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (
 				} else {
 					// Assign arg value from placeholder name.
 					for _, a := range args {
-						if a.Name == wcol.Placeholder {
+						if a.Name == wcol.Placeholder[1:] {
 							argValue = a.Value
 							break
 						}

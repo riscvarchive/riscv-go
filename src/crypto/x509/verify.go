@@ -102,7 +102,7 @@ func (h HostnameError) Error() string {
 
 // UnknownAuthorityError results when the certificate issuer is unknown
 type UnknownAuthorityError struct {
-	cert *Certificate
+	Cert *Certificate
 	// hintErr contains an error that may be helpful in determining why an
 	// authority wasn't found.
 	hintErr error
@@ -153,7 +153,7 @@ type VerifyOptions struct {
 	CurrentTime   time.Time // if zero, the current time is used
 	// KeyUsage specifies which Extended Key Usage values are acceptable.
 	// An empty list means ExtKeyUsageServerAuth. Key usage is considered a
-	// constraint down the chain which mirrors Windows CryptoAPI behaviour,
+	// constraint down the chain which mirrors Windows CryptoAPI behavior,
 	// but not the spec. To accept any key usage, include ExtKeyUsageAny.
 	KeyUsages []ExtKeyUsage
 }
@@ -262,7 +262,7 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
 // WARNING: this doesn't do any revocation checking.
 func (c *Certificate) Verify(opts VerifyOptions) (chains [][]*Certificate, err error) {
 	// Platform-specific verification needs the ASN.1 contents so
-	// this makes the behaviour consistent across platforms.
+	// this makes the behavior consistent across platforms.
 	if len(c.Raw) == 0 {
 		return nil, errNotParsed
 	}

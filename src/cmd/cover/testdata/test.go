@@ -10,6 +10,10 @@
 
 package main
 
+import _ "unsafe" // for go:linkname
+
+//go:linkname some_name some_name
+
 const anything = 1e9 // Just some unlikely value that means "we got here, don't care how often"
 
 func testAll() {
@@ -245,6 +249,18 @@ func testFunctionLiteral() {
 	switch b(func() {
 		check(LINE, 2)
 	}) {
+	}
+
+	x := 2
+	switch x {
+	case func() int { check(LINE, 1); return 1 }():
+		check(LINE, 0)
+		panic("2=1")
+	case func() int { check(LINE, 1); return 2 }():
+		check(LINE, 1)
+	case func() int { check(LINE, 0); return 3 }():
+		check(LINE, 0)
+		panic("2=3")
 	}
 }
 

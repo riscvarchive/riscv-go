@@ -4,7 +4,10 @@
 
 package ssa
 
-import "fmt"
+import (
+	"cmd/internal/src"
+	"fmt"
+)
 
 // writebarrier expands write barrier ops (StoreWB, MoveWB, etc.) into
 // branches and runtime calls, like
@@ -35,7 +38,7 @@ func writebarrier(f *Func) {
 	valueLoop:
 		for i, v := range b.Values {
 			switch v.Op {
-			case OpStoreWB, OpMoveWB, OpMoveWBVolatile:
+			case OpStoreWB, OpMoveWB, OpMoveWBVolatile, OpZeroWB:
 				if IsStackAddr(v.Args[0]) {
 					switch v.Op {
 					case OpStoreWB:
@@ -53,7 +56,7 @@ func writebarrier(f *Func) {
 				if wbaddr == nil {
 					// initalize global values for write barrier test and calls
 					// find SB and SP values in entry block
-					initln := f.Entry.Line
+					initln := f.Entry.Pos
 					for _, v := range f.Entry.Values {
 						if v.Op == OpSB {
 							sb = v
@@ -78,8 +81,7 @@ func writebarrier(f *Func) {
 					defer f.retSparseSet(wbs)
 				}
 
-				mem := v.Args[2]
-				line := v.Line
+				pos := v.Pos
 
 				// there may be a sequence of WB stores in the current block. find them.
 				storeWBs = storeWBs[:0]
@@ -106,14 +108,28 @@ func writebarrier(f *Func) {
 					}
 				}
 
+				// find the memory before the WB stores
+				// this memory is not a WB store but it is used in a WB store.
+				var mem *Value
+				for _, w := range storeWBs {
+					a := w.Args[len(w.Args)-1]
+					if wbs.contains(a.ID) {
+						continue
+					}
+					if mem != nil {
+						b.Fatalf("two stores live simultaneously: %s, %s", mem, a)
+					}
+					mem = a
+				}
+
 				b.Values = append(b.Values[:i], others...) // move WB ops out of this block
 
 				bThen := f.NewBlock(BlockPlain)
 				bElse := f.NewBlock(BlockPlain)
 				bEnd := f.NewBlock(b.Kind)
-				bThen.Line = line
-				bElse.Line = line
-				bEnd.Line = line
+				bThen.Pos = pos
+				bElse.Pos = pos
+				bEnd.Pos = pos
 
 				// set up control flow for end block
 				bEnd.SetControl(b.Control)
@@ -125,9 +141,9 @@ func writebarrier(f *Func) {
 
 				// set up control flow for write barrier test
 				// load word, test word, avoiding partial register write from load byte.
-				flag := b.NewValue2(line, OpLoad, f.Config.fe.TypeUInt32(), wbaddr, mem)
-				const0 := f.ConstInt32(line, f.Config.fe.TypeUInt32(), 0)
-				flag = b.NewValue2(line, OpNeq32, f.Config.fe.TypeBool(), flag, const0)
+				flag := b.NewValue2(pos, OpLoad, f.Config.fe.TypeUInt32(), wbaddr, mem)
+				const0 := f.ConstInt32(pos, f.Config.fe.TypeUInt32(), 0)
+				flag = b.NewValue2(pos, OpNeq32, f.Config.fe.TypeBool(), flag, const0)
 				b.Kind = BlockIf
 				b.SetControl(flag)
 				b.Likely = BranchUnlikely
@@ -162,13 +178,13 @@ func writebarrier(f *Func) {
 					}
 
 					// then block: emit write barrier call
-					memThen = wbcall(line, bThen, fn, typ, ptr, val, memThen, sp, sb, w.Op == OpMoveWBVolatile)
+					memThen = wbcall(pos, bThen, fn, typ, ptr, val, memThen, sp, sb, w.Op == OpMoveWBVolatile)
 
 					// else block: normal store
 					if op == OpZero {
-						memElse = bElse.NewValue2I(line, op, TypeMem, siz, ptr, memElse)
+						memElse = bElse.NewValue2I(pos, op, TypeMem, siz, ptr, memElse)
 					} else {
-						memElse = bElse.NewValue3I(line, op, TypeMem, siz, ptr, val, memElse)
+						memElse = bElse.NewValue3I(pos, op, TypeMem, siz, ptr, val, memElse)
 					}
 				}
 
@@ -177,24 +193,43 @@ func writebarrier(f *Func) {
 				// which may be used in subsequent blocks. Other memories in the
 				// sequence must be dead after this block since there can be only
 				// one memory live.
-				v = storeWBs[len(storeWBs)-1]
-				bEnd.Values = append(bEnd.Values, v)
-				v.Block = bEnd
-				v.reset(OpPhi)
-				v.Type = TypeMem
-				v.AddArg(memThen)
-				v.AddArg(memElse)
-				for _, w := range storeWBs[:len(storeWBs)-1] {
-					for _, a := range w.Args {
-						a.Uses--
+				last := storeWBs[0]
+				if len(storeWBs) > 1 {
+					// find the last store
+					last = nil
+					wbs.clear() // we reuse wbs to record WB stores that is used in another WB store
+					for _, w := range storeWBs {
+						wbs.add(w.Args[len(w.Args)-1].ID)
+					}
+					for _, w := range storeWBs {
+						if wbs.contains(w.ID) {
+							continue
+						}
+						if last != nil {
+							b.Fatalf("two stores live simultaneously: %s, %s", last, w)
+						}
+						last = w
 					}
 				}
-				for _, w := range storeWBs[:len(storeWBs)-1] {
-					f.freeValue(w)
+				bEnd.Values = append(bEnd.Values, last)
+				last.Block = bEnd
+				last.reset(OpPhi)
+				last.Type = TypeMem
+				last.AddArg(memThen)
+				last.AddArg(memElse)
+				for _, w := range storeWBs {
+					if w != last {
+						w.resetArgs()
+					}
+				}
+				for _, w := range storeWBs {
+					if w != last {
+						f.freeValue(w)
+					}
 				}
 
 				if f.Config.fe.Debug_wb() {
-					f.Config.Warnl(line, "write barrier")
+					f.Config.Warnl(pos, "write barrier")
 				}
 
 				break valueLoop
@@ -205,7 +240,7 @@ func writebarrier(f *Func) {
 
 // wbcall emits write barrier runtime call in b, returns memory.
 // if valIsVolatile, it moves val into temp space before making the call.
-func wbcall(line int32, b *Block, fn interface{}, typ interface{}, ptr, val, mem, sp, sb *Value, valIsVolatile bool) *Value {
+func wbcall(pos src.XPos, b *Block, fn interface{}, typ interface{}, ptr, val, mem, sp, sb *Value, valIsVolatile bool) *Value {
 	config := b.Func.Config
 
 	var tmp GCNode
@@ -216,10 +251,10 @@ func wbcall(line int32, b *Block, fn interface{}, typ interface{}, ptr, val, mem
 		t := val.Type.ElemType()
 		tmp = config.fe.Auto(t)
 		aux := &AutoSymbol{Typ: t, Node: tmp}
-		mem = b.NewValue1A(line, OpVarDef, TypeMem, tmp, mem)
-		tmpaddr := b.NewValue1A(line, OpAddr, t.PtrTo(), aux, sp)
+		mem = b.NewValue1A(pos, OpVarDef, TypeMem, tmp, mem)
+		tmpaddr := b.NewValue1A(pos, OpAddr, t.PtrTo(), aux, sp)
 		siz := MakeSizeAndAlign(t.Size(), t.Alignment()).Int64()
-		mem = b.NewValue3I(line, OpMove, TypeMem, siz, tmpaddr, val, mem)
+		mem = b.NewValue3I(pos, OpMove, TypeMem, siz, tmpaddr, val, mem)
 		val = tmpaddr
 	}
 
@@ -227,32 +262,32 @@ func wbcall(line int32, b *Block, fn interface{}, typ interface{}, ptr, val, mem
 	off := config.ctxt.FixedFrameSize()
 
 	if typ != nil { // for typedmemmove
-		taddr := b.NewValue1A(line, OpAddr, config.fe.TypeUintptr(), typ, sb)
+		taddr := b.NewValue1A(pos, OpAddr, config.fe.TypeUintptr(), typ, sb)
 		off = round(off, taddr.Type.Alignment())
-		arg := b.NewValue1I(line, OpOffPtr, taddr.Type.PtrTo(), off, sp)
-		mem = b.NewValue3I(line, OpStore, TypeMem, ptr.Type.Size(), arg, taddr, mem)
+		arg := b.NewValue1I(pos, OpOffPtr, taddr.Type.PtrTo(), off, sp)
+		mem = b.NewValue3I(pos, OpStore, TypeMem, ptr.Type.Size(), arg, taddr, mem)
 		off += taddr.Type.Size()
 	}
 
 	off = round(off, ptr.Type.Alignment())
-	arg := b.NewValue1I(line, OpOffPtr, ptr.Type.PtrTo(), off, sp)
-	mem = b.NewValue3I(line, OpStore, TypeMem, ptr.Type.Size(), arg, ptr, mem)
+	arg := b.NewValue1I(pos, OpOffPtr, ptr.Type.PtrTo(), off, sp)
+	mem = b.NewValue3I(pos, OpStore, TypeMem, ptr.Type.Size(), arg, ptr, mem)
 	off += ptr.Type.Size()
 
 	if val != nil {
 		off = round(off, val.Type.Alignment())
-		arg = b.NewValue1I(line, OpOffPtr, val.Type.PtrTo(), off, sp)
-		mem = b.NewValue3I(line, OpStore, TypeMem, val.Type.Size(), arg, val, mem)
+		arg = b.NewValue1I(pos, OpOffPtr, val.Type.PtrTo(), off, sp)
+		mem = b.NewValue3I(pos, OpStore, TypeMem, val.Type.Size(), arg, val, mem)
 		off += val.Type.Size()
 	}
 	off = round(off, config.PtrSize)
 
 	// issue call
-	mem = b.NewValue1A(line, OpStaticCall, TypeMem, fn, mem)
+	mem = b.NewValue1A(pos, OpStaticCall, TypeMem, fn, mem)
 	mem.AuxInt = off - config.ctxt.FixedFrameSize()
 
 	if valIsVolatile {
-		mem = b.NewValue1A(line, OpVarKill, TypeMem, tmp, mem) // mark temp dead
+		mem = b.NewValue1A(pos, OpVarKill, TypeMem, tmp, mem) // mark temp dead
 	}
 
 	return mem

@@ -601,7 +601,7 @@ func span7(ctxt *obj.Link, cursym *obj.LSym) {
 			o = oplook(ctxt, p)
 
 			/* very large branches */
-			if o.type_ == 7 && p.Pcond != nil {
+			if (o.type_ == 7 || o.type_ == 39) && p.Pcond != nil { // 7: BEQ and like, 39: CBZ and like
 				otxt := p.Pcond.Pc - c
 				if otxt <= -(1<<18)+10 || otxt >= (1<<18)-10 {
 					q := ctxt.NewProg()
@@ -696,7 +696,7 @@ func flushpool(ctxt *obj.Link, p *obj.Prog, skip int) {
 			q.To.Type = obj.TYPE_BRANCH
 			q.Pcond = p.Link
 			q.Link = ctxt.Blitrl
-			q.Lineno = p.Lineno
+			q.Pos = p.Pos
 			ctxt.Blitrl = q
 		} else if p.Pc+int64(pool.size)-int64(pool.start) < maxPCDisp {
 			return
@@ -706,7 +706,7 @@ func flushpool(ctxt *obj.Link, p *obj.Prog, skip int) {
 		// We set it to the line number of the preceding instruction so that
 		// there are no deltas to encode in the pc-line tables.
 		for q := ctxt.Blitrl; q != nil; q = q.Link {
-			q.Lineno = p.Lineno
+			q.Pos = p.Pos
 		}
 
 		ctxt.Elitrl.Link = p.Link

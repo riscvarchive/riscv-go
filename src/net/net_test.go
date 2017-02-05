@@ -457,9 +457,6 @@ func withTCPConnPair(t *testing.T, peer1, peer2 func(c *TCPConn) error) {
 // See golang.org/cl/30164 which documented this. The net/http package
 // depends on this.
 func TestReadTimeoutUnblocksRead(t *testing.T) {
-	if runtime.GOOS == "plan9" {
-		t.Skipf("not supported on %s; see golang.org/issue/17477", runtime.GOOS)
-	}
 	serverDone := make(chan struct{})
 	server := func(cs *TCPConn) error {
 		defer close(serverDone)
@@ -496,6 +493,25 @@ func TestReadTimeoutUnblocksRead(t *testing.T) {
 	// server's half to be done.
 	client := func(*TCPConn) error {
 		<-serverDone
+		return nil
+	}
+	withTCPConnPair(t, client, server)
+}
+
+// Issue 17695: verify that a blocked Read is woken up by a Close.
+func TestCloseUnblocksRead(t *testing.T) {
+	t.Parallel()
+	server := func(cs *TCPConn) error {
+		// Give the client time to get stuck in a Read:
+		time.Sleep(20 * time.Millisecond)
+		cs.Close()
+		return nil
+	}
+	client := func(ss *TCPConn) error {
+		n, err := ss.Read([]byte{0})
+		if n != 0 || err != io.EOF {
+			return fmt.Errorf("Read = %v, %v; want 0, EOF", n, err)
+		}
 		return nil
 	}
 	withTCPConnPair(t, client, server)

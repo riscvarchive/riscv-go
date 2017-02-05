@@ -138,7 +138,6 @@ func TestStdTest(t *testing.T) {
 	}
 
 	testTestDir(t, filepath.Join(runtime.GOROOT(), "test"),
-		"alias2.go",      // excluded until we can handle alias declarations
 		"cmplxdivide.go", // also needs file cmplxdivide1.go - ignore
 		"sigchld.go",     // don't work on Windows; testTestDir should consult build tags
 	)
@@ -158,6 +157,8 @@ func TestStdFixed(t *testing.T) {
 		"issue11362.go", // canonical import path check
 		"issue15002.go", // uses Mmap; testTestDir should consult build tags
 		"issue16369.go", // go/types handles this correctly - not an issue
+		"issue18459.go", // go/types doesn't check validity of //go:xxx directives
+		"issue18882.go", // go/types doesn't check validity of //go:xxx directives
 	)
 }
 

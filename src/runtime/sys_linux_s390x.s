@@ -169,8 +169,8 @@ TEXT runtime·mincore(SB),NOSPLIT|NOFRAME,$0-28
 	MOVW	R2, ret+24(FP)
 	RET
 
-// func now() (sec int64, nsec int32)
-TEXT time·now(SB),NOSPLIT,$16
+// func walltime() (sec int64, nsec int32)
+TEXT runtime·walltime(SB),NOSPLIT,$16
 	MOVW	$0, R2 // CLOCK_REALTIME
 	MOVD	$tp-16(SP), R3
 	MOVW	$SYS_clock_gettime, R1
@@ -311,8 +311,8 @@ TEXT runtime·clone(SB),NOSPLIT|NOFRAME,$0
 
 	// Copy mp, gp, fn off parent stack for use by child.
 	// Careful: Linux system call clobbers ???.
-	MOVD	mm+16(FP), R7
-	MOVD	gg+24(FP), R8
+	MOVD	mp+16(FP), R7
+	MOVD	gp+24(FP), R8
 	MOVD	fn+32(FP), R9
 
 	MOVD	R7, -8(R2)

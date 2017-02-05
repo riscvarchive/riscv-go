@@ -4,7 +4,7 @@
 
 // Package plugin implements loading and symbol resolution of Go plugins.
 //
-// Currently plugins only work on Linux and Darwin.
+// Currently plugins only work on Linux.
 //
 // A plugin is a Go main package with exported functions and variables that
 // has been built with:
@@ -18,9 +18,9 @@ package plugin
 
 // Plugin is a loaded Go plugin.
 type Plugin struct {
-	name   string
-	loaded chan struct{} // closed when loaded
-	syms   map[string]interface{}
+	pluginpath string
+	loaded     chan struct{} // closed when loaded
+	syms       map[string]interface{}
 }
 
 // Open opens a Go plugin.
@@ -51,7 +51,7 @@ func (p *Plugin) Lookup(symName string) (Symbol, error) {
 //
 //	var V int
 //
-//	func F() { fmt.Println("Hello, number %d", V) }
+//	func F() { fmt.Printf("Hello, number %d\n", V) }
 //
 // may be loaded with the Open function and then the exported package
 // symbols V and F can be accessed

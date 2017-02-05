@@ -37,6 +37,7 @@ var bootstrapDirs = []string{
 	"cmd/compile/internal/arm",
 	"cmd/compile/internal/arm64",
 	"cmd/compile/internal/gc",
+	"cmd/compile/internal/mips",
 	"cmd/compile/internal/mips64",
 	"cmd/compile/internal/ppc64",
 	"cmd/compile/internal/riscv",
@@ -55,12 +56,14 @@ var bootstrapDirs = []string{
 	"cmd/internal/obj/riscv",
 	"cmd/internal/obj/s390x",
 	"cmd/internal/obj/x86",
+	"cmd/internal/src",
 	"cmd/internal/sys",
 	"cmd/link",
 	"cmd/link/internal/amd64",
 	"cmd/link/internal/arm",
 	"cmd/link/internal/arm64",
 	"cmd/link/internal/ld",
+	"cmd/link/internal/mips",
 	"cmd/link/internal/mips64",
 	"cmd/link/internal/ppc64",
 	"cmd/link/internal/riscv",
@@ -68,6 +71,13 @@ var bootstrapDirs = []string{
 	"cmd/link/internal/x86",
 	"debug/pe",
 	"math/big",
+}
+
+// File prefixes that are ignored by go/build anyway, and cause
+// problems with editor generated temporary files (#18931).
+var ignorePrefixes = []string{
+	".",
+	"_",
 }
 
 // File suffixes that use build tags introduced since Go 1.4.
@@ -103,6 +113,11 @@ func bootstrapBuildTools() {
 		xmkdirall(dst)
 	Dir:
 		for _, name := range xreaddirfiles(src) {
+			for _, pre := range ignorePrefixes {
+				if strings.HasPrefix(name, pre) {
+					continue Dir
+				}
+			}
 			for _, suf := range ignoreSuffixes {
 				if strings.HasSuffix(name, suf) {
 					continue Dir

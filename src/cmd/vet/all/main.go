@@ -105,7 +105,7 @@ func (w whitelist) load(goos string, goarch string) {
 	// Look up whether goarch is a 32-bit or 64-bit architecture.
 	archbits, ok := nbits[goarch]
 	if !ok {
-		log.Fatal("unknown bitwidth for arch %q", goarch)
+		log.Fatalf("unknown bitwidth for arch %q", goarch)
 	}
 
 	// Look up whether goarch has a shared arch suffix,
@@ -197,10 +197,6 @@ func vetPlatforms(pp []platform) {
 }
 
 func (p platform) vet(ncpus int) {
-	if p.arch == "s390x" {
-		// TODO: reinstate when s390x gets vet support (issue 15454)
-		return
-	}
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "go run main.go -p %s\n", p)
 
@@ -269,15 +265,6 @@ NextLine:
 			}
 		}
 
-		// Temporarily ignore unrecognized printf verbs from cmd.
-		// The compiler now has several fancy verbs (CL 28339)
-		// used with types implementing fmt.Formatters,
-		// and I believe gri has plans to add many more.
-		// TODO: remove when issue 17057 is fixed.
-		if strings.HasPrefix(file, "cmd/") && strings.HasPrefix(msg, "unrecognized printf verb") {
-			continue
-		}
-
 		key := file + ": " + msg
 		if w[key] == 0 {
 			// Vet error with no match in the whitelist. Print it.
@@ -325,10 +312,13 @@ var nbits = map[string]int{
 	"amd64p32": 32,
 	"arm":      32,
 	"arm64":    64,
+	"mips":     32,
+	"mipsle":   32,
 	"mips64":   64,
 	"mips64le": 64,
 	"ppc64":    64,
 	"ppc64le":  64,
+	"s390x":    64,
 	"riscv":    64,
 }
 

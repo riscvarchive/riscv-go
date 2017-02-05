@@ -6,6 +6,7 @@ package gc
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/src"
 	"fmt"
 	"sort"
 	"strings"
@@ -113,7 +114,7 @@ func testdclstack() {
 
 // redeclare emits a diagnostic about symbol s being redeclared somewhere.
 func redeclare(s *Sym, where string) {
-	if s.Lastlineno == 0 {
+	if !s.Lastlineno.IsKnown() {
 		var tmp string
 		if s.Origpkg != nil {
 			tmp = s.Origpkg.Path
@@ -162,7 +163,7 @@ func declare(n *Node, ctxt Class) {
 		// named OLITERAL needs Name; most OLITERALs don't.
 		n.Name = new(Name)
 	}
-	n.Lineno = lineno
+	n.Pos = lineno
 	s := n.Sym
 
 	// kludgy: typecheckok means we're past parsing. Eg genwrapper may declare out of package names later.
@@ -284,49 +285,6 @@ func variter(vl []*Node, t *Node, el []*Node) []*Node {
 	return init
 }
 
-// declare constants from grammar
-// new_name_list [[type] = expr_list]
-func constiter(vl []*Node, t *Node, cl []*Node) []*Node {
-	lno := int32(0) // default is to leave line number alone in listtreecopy
-	if len(cl) == 0 {
-		if t != nil {
-			yyerror("const declaration cannot have type without expression")
-		}
-		cl = lastconst
-		t = lasttype
-		lno = vl[0].Lineno
-	} else {
-		lastconst = cl
-		lasttype = t
-	}
-	clcopy := listtreecopy(cl, lno)
-
-	var vv []*Node
-	for _, v := range vl {
-		if len(clcopy) == 0 {
-			yyerror("missing value in const declaration")
-			break
-		}
-
-		c := clcopy[0]
-		clcopy = clcopy[1:]
-
-		v.Op = OLITERAL
-		declare(v, dclcontext)
-
-		v.Name.Param.Ntype = t
-		v.Name.Defn = c
-
-		vv = append(vv, nod(ODCLCONST, v, nil))
-	}
-
-	if len(clcopy) != 0 {
-		yyerror("extra expression in const declaration")
-	}
-	iota_ += 1
-	return vv
-}
-
 // newname returns a new ONAME Node associated with symbol s.
 func newname(s *Sym) *Node {
 	if s == nil {
@@ -399,9 +357,7 @@ func oldname(s *Sym) *Node {
 		// Maybe a top-level declaration will come along later to
 		// define s. resolve will check s.Def again once all input
 		// source has been processed.
-		n = newnoname(s)
-		n.SetIota(iota_) // save current iota value in const declarations
-		return n
+		return newnoname(s)
 	}
 
 	if Curfn != nil && n.Op == ONAME && n.Name.Funcdepth > 0 && n.Name.Funcdepth != funcdepth {
@@ -467,13 +423,13 @@ func colasdefn(left []*Node, defn *Node) {
 			continue
 		}
 		if !colasname(n) {
-			yyerrorl(defn.Lineno, "non-name %v on left side of :=", n)
+			yyerrorl(defn.Pos, "non-name %v on left side of :=", n)
 			nerr++
 			continue
 		}
 
 		if n.Sym.Flags&SymUniq == 0 {
-			yyerrorl(defn.Lineno, "%v repeated on left side of :=", n.Sym)
+			yyerrorl(defn.Pos, "%v repeated on left side of :=", n.Sym)
 			n.Diag = true
 			nerr++
 			continue
@@ -493,7 +449,7 @@ func colasdefn(left []*Node, defn *Node) {
 	}
 
 	if nnew == 0 && nerr == 0 {
-		yyerrorl(defn.Lineno, "no new variables on left side of :=")
+		yyerrorl(defn.Pos, "no new variables on left side of :=")
 	}
 }
 
@@ -517,10 +473,6 @@ func funchdr(n *Node) {
 	// change the declaration context from extern to auto
 	if funcdepth == 0 && dclcontext != PEXTERN {
 		Fatalf("funchdr: dclcontext = %d", dclcontext)
-	}
-
-	if Ctxt.Flag_dynlink && importpkg == nil && n.Func.Nname != nil {
-		makefuncsym(n.Func.Nname.Sym)
 	}
 
 	dclcontext = PAUTO
@@ -685,23 +637,6 @@ func funcbody(n *Node) {
 	}
 }
 
-// new type being defined with name s.
-func typedcl0(s *Sym) *Node {
-	n := newname(s)
-	n.Op = OTYPE
-	declare(n, dclcontext)
-	return n
-}
-
-// node n, which was returned by typedcl0
-// is being declared to have uncompiled type t.
-// return the ODCLTYPE node to use.
-func typedcl1(n *Node, t *Node, local bool) *Node {
-	n.Name.Param.Ntype = t
-	n.Local = local
-	return nod(ODCLTYPE, n, nil)
-}
-
 // structs, functions, and methods.
 // they don't belong here, but where do they belong?
 func checkembeddedtype(t *Type) {
@@ -718,14 +653,14 @@ func checkembeddedtype(t *Type) {
 
 	if t.IsPtr() || t.IsUnsafePtr() {
 		yyerror("embedded type cannot be a pointer")
-	} else if t.Etype == TFORW && t.ForwardType().Embedlineno == 0 {
+	} else if t.Etype == TFORW && !t.ForwardType().Embedlineno.IsKnown() {
 		t.ForwardType().Embedlineno = lineno
 	}
 }
 
 func structfield(n *Node) *Field {
 	lno := lineno
-	lineno = n.Lineno
+	lineno = n.Pos
 
 	if n.Op != ODCLFIELD {
 		Fatalf("structfield: oops %v\n", n)
@@ -783,7 +718,7 @@ func checkdupfields(what string, ts ...*Type) {
 				continue
 			}
 			if seen[f.Sym] {
-				lineno = f.Nname.Lineno
+				lineno = f.Nname.Pos
 				yyerror("duplicate %s %s", what, f.Sym.Name)
 				continue
 			}
@@ -864,7 +799,7 @@ func tofunargsfield(fields []*Field, funarg Funarg) *Type {
 
 func interfacefield(n *Node) *Field {
 	lno := lineno
-	lineno = n.Lineno
+	lineno = n.Pos
 
 	if n.Op != ODCLFIELD {
 		Fatalf("interfacefield: oops %v\n", n)
@@ -1153,19 +1088,19 @@ bad:
 	return nil
 }
 
-func methodname(n *Node, t *Node) *Node {
+// methodname is a misnomer because this now returns a Sym, rather
+// than an ONAME.
+// TODO(mdempsky): Reconcile with methodsym.
+func methodname(s *Sym, recv *Type) *Sym {
 	star := false
-	if t.Op == OIND {
+	if recv.IsPtr() {
 		star = true
-		t = t.Left
+		recv = recv.Elem()
 	}
 
-	return methodname0(n.Sym, star, t.Sym)
-}
-
-func methodname0(s *Sym, star bool, tsym *Sym) *Node {
+	tsym := recv.Sym
 	if tsym == nil || isblanksym(s) {
-		return newfuncname(s)
+		return s
 	}
 
 	var p string
@@ -1181,14 +1116,13 @@ func methodname0(s *Sym, star bool, tsym *Sym) *Node {
 		s = Pkglookup(p, tsym.Pkg)
 	}
 
-	return newfuncname(s)
+	return s
 }
 
 // Add a method, declared as a function.
 // - msym is the method symbol
 // - t is function type (with receiver)
 func addmethod(msym *Sym, t *Type, local, nointerface bool) {
-	// get field sym
 	if msym == nil {
 		Fatalf("no method symbol")
 	}
@@ -1309,7 +1243,7 @@ func funcsym(s *Sym) *Sym {
 	s1 := Pkglookup(s.Name+"·f", s.Pkg)
 	if !Ctxt.Flag_dynlink && s1.Def == nil {
 		s1.Def = newfuncname(s1)
-		s1.Def.Func.Shortname = newname(s)
+		s1.Def.Func.Shortname = s
 		funcsyms = append(funcsyms, s1.Def)
 	}
 	s.Fsym = s1
@@ -1326,8 +1260,11 @@ func makefuncsym(s *Sym) {
 		return
 	}
 	s1 := funcsym(s)
+	if s1.Def != nil {
+		return
+	}
 	s1.Def = newfuncname(s1)
-	s1.Def.Func.Shortname = newname(s)
+	s1.Def.Func.Shortname = s
 	funcsyms = append(funcsyms, s1.Def)
 }
 
@@ -1344,7 +1281,7 @@ type nowritebarrierrecChecker struct {
 type nowritebarrierrecCall struct {
 	target *Node
 	depth  int
-	lineno int32
+	lineno src.XPos
 }
 
 func checknowritebarrierrec() {
@@ -1354,8 +1291,8 @@ func checknowritebarrierrec() {
 	visitBottomUp(xtop, func(list []*Node, recursive bool) {
 		// Functions with write barriers have depth 0.
 		for _, n := range list {
-			if n.Func.WBLineno != 0 && n.Func.Pragma&Yeswritebarrierrec == 0 {
-				c.best[n] = nowritebarrierrecCall{target: nil, depth: 0, lineno: n.Func.WBLineno}
+			if n.Func.WBPos.IsKnown() && n.Func.Pragma&Yeswritebarrierrec == 0 {
+				c.best[n] = nowritebarrierrecCall{target: nil, depth: 0, lineno: n.Func.WBPos}
 			}
 		}
 
@@ -1372,7 +1309,7 @@ func checknowritebarrierrec() {
 					// yeswritebarrierrec function.
 					continue
 				}
-				if n.Func.WBLineno == 0 {
+				if !n.Func.WBPos.IsKnown() {
 					c.curfn = n
 					c.visitcodelist(n.Nbody)
 				}
@@ -1400,7 +1337,7 @@ func checknowritebarrierrec() {
 				call = c.best[n]
 			}
 			err = fmt.Sprintf("write barrier prohibited by caller; %v%s", n.Func.Nname, err)
-			yyerrorl(n.Func.WBLineno, err)
+			yyerrorl(n.Func.WBPos, err)
 		}
 	})
 }
@@ -1446,6 +1383,6 @@ func (c *nowritebarrierrecChecker) visitcall(n *Node) {
 	if ok && fnbest.depth+1 >= best.depth {
 		return
 	}
-	c.best[c.curfn] = nowritebarrierrecCall{target: defn, depth: fnbest.depth + 1, lineno: n.Lineno}
+	c.best[c.curfn] = nowritebarrierrecCall{target: defn, depth: fnbest.depth + 1, lineno: n.Pos}
 	c.stable = false
 }

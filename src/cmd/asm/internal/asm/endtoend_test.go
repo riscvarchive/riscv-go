@@ -26,10 +26,9 @@ import (
 // result against a golden file.
 
 func testEndToEnd(t *testing.T, goarch, file string) {
-	lex.InitHist()
 	input := filepath.Join("testdata", file+".s")
 	architecture, ctxt := setArch(goarch)
-	lexer := lex.NewLexer(input, ctxt)
+	lexer := lex.NewLexer(input)
 	parser := NewParser(ctxt, architecture, lexer)
 	pList := obj.Linknewplist(ctxt)
 	var ok bool
@@ -264,10 +263,9 @@ var (
 )
 
 func testErrors(t *testing.T, goarch, file string) {
-	lex.InitHist()
 	input := filepath.Join("testdata", file+".s")
 	architecture, ctxt := setArch(goarch)
-	lexer := lex.NewLexer(input, ctxt)
+	lexer := lex.NewLexer(input)
 	parser := NewParser(ctxt, architecture, lexer)
 	pList := obj.Linknewplist(ctxt)
 	var ok bool
@@ -383,7 +381,8 @@ func TestAMD64Errors(t *testing.T) {
 	testErrors(t, "amd64", "amd64error")
 }
 
-func TestMIPS64EndToEnd(t *testing.T) {
+func TestMIPSEndToEnd(t *testing.T) {
+	testEndToEnd(t, "mips", "mips")
 	testEndToEnd(t, "mips64", "mips64")
 }
 

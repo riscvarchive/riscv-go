@@ -6,6 +6,8 @@ package ssa
 
 import (
 	"cmd/internal/obj"
+	"cmd/internal/obj/x86"
+	"cmd/internal/src"
 	"testing"
 )
 
@@ -16,7 +18,7 @@ var Deadcode = deadcode
 var Copyelim = copyelim
 
 func testConfig(t testing.TB) *Config {
-	testCtxt := &obj.Link{}
+	testCtxt := &obj.Link{Arch: &x86.Linkamd64}
 	return NewConfig("amd64", DummyFrontend{t}, testCtxt, true)
 }
 
@@ -58,20 +60,23 @@ func (d DummyFrontend) SplitInt64(s LocalSlot) (LocalSlot, LocalSlot) {
 func (d DummyFrontend) SplitStruct(s LocalSlot, i int) LocalSlot {
 	return LocalSlot{s.N, s.Type.FieldType(i), s.Off + s.Type.FieldOff(i)}
 }
-func (DummyFrontend) Line(line int32) string {
+func (d DummyFrontend) SplitArray(s LocalSlot) LocalSlot {
+	return LocalSlot{s.N, s.Type.ElemType(), s.Off}
+}
+func (DummyFrontend) Line(_ src.XPos) string {
 	return "unknown.go:0"
 }
 func (DummyFrontend) AllocFrame(f *Func) {
 }
 func (DummyFrontend) Syslook(s string) interface{} {
-	return nil
+	return DummySym(s)
 }
 
 func (d DummyFrontend) Logf(msg string, args ...interface{}) { d.t.Logf(msg, args...) }
 func (d DummyFrontend) Log() bool                            { return true }
 
-func (d DummyFrontend) Fatalf(line int32, msg string, args ...interface{}) { d.t.Fatalf(msg, args...) }
-func (d DummyFrontend) Warnl(line int32, msg string, args ...interface{})  { d.t.Logf(msg, args...) }
+func (d DummyFrontend) Fatalf(_ src.XPos, msg string, args ...interface{}) { d.t.Fatalf(msg, args...) }
+func (d DummyFrontend) Warnl(_ src.XPos, msg string, args ...interface{})  { d.t.Logf(msg, args...) }
 func (d DummyFrontend) Debug_checknil() bool                               { return false }
 func (d DummyFrontend) Debug_wb() bool                                     { return false }
 
@@ -95,3 +100,7 @@ func (d DummyFrontend) CanSSA(t Type) bool {
 	// There are no un-SSAable types in dummy land.
 	return true
 }
+
+type DummySym string
+
+func (s DummySym) String() string { return string(s) }

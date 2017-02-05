@@ -286,8 +286,8 @@ func (n *Node) jconv(s fmt.State, flag FmtFlag) {
 		fmt.Fprintf(s, " g(%d)", n.Name.Vargen)
 	}
 
-	if n.Lineno != 0 {
-		fmt.Fprintf(s, " l(%d)", n.Lineno)
+	if n.Pos.IsKnown() {
+		fmt.Fprintf(s, " l(%d)", n.Pos.Line())
 	}
 
 	if c == 0 && n.Xoffset != BADWIDTH {
@@ -1081,6 +1081,7 @@ var opprec = []int{
 	OSEND:         3,
 	OANDAND:       2,
 	OOROR:         1,
+
 	// Statements handled by stmtfmt
 	OAS:         -1,
 	OAS2:        -1,
@@ -1108,7 +1109,8 @@ var opprec = []int{
 	OSWITCH:     -1,
 	OXCASE:      -1,
 	OXFALL:      -1,
-	OEND:        0,
+
+	OEND: 0,
 }
 
 func (n *Node) exprfmt(s fmt.State, prec int) {
@@ -1337,14 +1339,15 @@ func (n *Node) exprfmt(s fmt.State, prec int) {
 		OSTRARRAYRUNE,
 		ORUNESTR:
 		if n.Type == nil || n.Type.Sym == nil {
-			fmt.Fprintf(s, "(%v)(%v)", n.Type, n.Left)
-			return
+			fmt.Fprintf(s, "(%v)", n.Type)
+		} else {
+			fmt.Fprintf(s, "%v", n.Type)
 		}
 		if n.Left != nil {
-			fmt.Fprintf(s, "%v(%v)", n.Type, n.Left)
-			return
+			fmt.Fprintf(s, "(%v)", n.Left)
+		} else {
+			fmt.Fprintf(s, "(%.v)", n.List)
 		}
-		fmt.Fprintf(s, "%v(%.v)", n.Type, n.List)
 
 	case OREAL,
 		OIMAG,

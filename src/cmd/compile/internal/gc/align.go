@@ -74,7 +74,13 @@ func widstruct(errtype *Type, t *Type, o int64, flag int) int64 {
 			lastzero = o
 		}
 		o += w
-		if o >= Thearch.MAXWIDTH {
+		maxwidth := Thearch.MAXWIDTH
+		// On 32-bit systems, reflect tables impose an additional constraint
+		// that each field start offset must fit in 31 bits.
+		if maxwidth < 1<<32 {
+			maxwidth = 1<<31 - 1
+		}
+		if o >= maxwidth {
 			yyerror("type %L too large", errtype)
 			o = 8 // small but nonzero
 		}
@@ -120,7 +126,7 @@ func dowidth(t *Type) {
 	if t.Width == -2 {
 		if !t.Broke {
 			t.Broke = true
-			yyerrorl(t.Lineno, "invalid recursive type %v", t)
+			yyerrorl(t.Pos, "invalid recursive type %v", t)
 		}
 
 		t.Width = 0
@@ -137,7 +143,7 @@ func dowidth(t *Type) {
 	defercalc++
 
 	lno := lineno
-	lineno = t.Lineno
+	lineno = t.Pos
 	t.Width = -2
 	t.Align = 0
 

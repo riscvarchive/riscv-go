@@ -5,6 +5,7 @@
 package runtime
 
 import (
+	"runtime/internal/atomic"
 	"runtime/internal/sys"
 	"unsafe"
 )
@@ -201,6 +202,9 @@ type moduledata struct {
 
 	ptab []ptabEntry
 
+	pluginpath string
+	pkghashes  []modulehash
+
 	modulename   string
 	modulehashes []modulehash
 
@@ -211,18 +215,97 @@ type moduledata struct {
 	next *moduledata
 }
 
+// A modulehash is used to compare the ABI of a new module or a
+// package in a new module with the loaded program.
+//
 // For each shared library a module links against, the linker creates an entry in the
 // moduledata.modulehashes slice containing the name of the module, the abi hash seen
 // at link time and a pointer to the runtime abi hash. These are checked in
 // moduledataverify1 below.
+//
+// For each loaded plugin, the the pkghashes slice has a modulehash of the
+// newly loaded package that can be used to check the plugin's version of
+// a package against any previously loaded version of the package.
+// This is done in plugin.lastmoduleinit.
 type modulehash struct {
 	modulename   string
 	linktimehash string
 	runtimehash  *string
 }
 
+// pinnedTypemaps are the map[typeOff]*_type from the moduledata objects.
+//
+// These typemap objects are allocated at run time on the heap, but the
+// only direct reference to them is in the moduledata, created by the
+// linker and marked SNOPTRDATA so it is ignored by the GC.
+//
+// To make sure the map isn't collected, we keep a second reference here.
+var pinnedTypemaps []map[typeOff]*_type
+
 var firstmoduledata moduledata  // linker symbol
 var lastmoduledatap *moduledata // linker symbol
+var modulesSlice unsafe.Pointer // see activeModules
+
+// activeModules returns a slice of active modules.
+//
+// A module is active once its gcdatamask and gcbssmask have been
+// assembled and it is usable by the GC.
+func activeModules() []*moduledata {
+	p := (*[]*moduledata)(atomic.Loadp(unsafe.Pointer(&modulesSlice)))
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+// modulesinit creates the active modules slice out of all loaded modules.
+//
+// When a module is first loaded by the dynamic linker, an .init_array
+// function (written by cmd/link) is invoked to call addmoduledata,
+// appending to the module to the linked list that starts with
+// firstmoduledata.
+//
+// There are two times this can happen in the lifecycle of a Go
+// program. First, if compiled with -linkshared, a number of modules
+// built with -buildmode=shared can be loaded at program initialization.
+// Second, a Go program can load a module while running that was built
+// with -buildmode=plugin.
+//
+// After loading, this function is called which initializes the
+// moduledata so it is usable by the GC and creates a new activeModules
+// list.
+//
+// Only one goroutine may call modulesinit at a time.
+func modulesinit() {
+	modules := new([]*moduledata)
+	for md := &firstmoduledata; md != nil; md = md.next {
+		*modules = append(*modules, md)
+		if md.gcdatamask == (bitvector{}) {
+			md.gcdatamask = progToPointerMask((*byte)(unsafe.Pointer(md.gcdata)), md.edata-md.data)
+			md.gcbssmask = progToPointerMask((*byte)(unsafe.Pointer(md.gcbss)), md.ebss-md.bss)
+		}
+	}
+
+	// Modules appear in the moduledata linked list in the order they are
+	// loaded by the dynamic loader, with one exception: the
+	// firstmoduledata itself the module that contains the runtime. This
+	// is not always the first module (when using -buildmode=shared, it
+	// is typically libstd.so, the second module). The order matters for
+	// typelinksinit, so we swap the first module with whatever module
+	// contains the main function.
+	//
+	// See Issue #18729.
+	mainText := funcPC(main_main)
+	for i, md := range *modules {
+		if md.text <= mainText && mainText <= md.etext {
+			(*modules)[0] = md
+			(*modules)[i] = &firstmoduledata
+			break
+		}
+	}
+
+	atomicstorep(unsafe.Pointer(&modulesSlice), unsafe.Pointer(modules))
+}
 
 type functab struct {
 	entry   uintptr
@@ -378,11 +461,18 @@ func findfunc(pc uintptr) *_func {
 
 	ffb := (*findfuncbucket)(add(unsafe.Pointer(datap.findfunctab), b*unsafe.Sizeof(findfuncbucket{})))
 	idx := ffb.idx + uint32(ffb.subbuckets[i])
+
+	// If the idx is beyond the end of the ftab, set it to the end of the table and search backward.
+	// This situation can occur if multiple text sections are generated to handle large text sections
+	// and the linker has inserted jump tables between them.
+
+	if idx >= uint32(len(datap.ftab)) {
+		idx = uint32(len(datap.ftab) - 1)
+	}
 	if pc < datap.ftab[idx].entry {
 
-		// If there are multiple text sections then the buckets for the secondary
-		// text sections will be off because the addresses in those text sections
-		// were relocated to higher addresses.  Search back to find it.
+		// With multiple text sections, the idx might reference a function address that
+		// is higher than the pc being searched, so search backward until the matching address is found.
 
 		for datap.ftab[idx].entry > pc && idx > 0 {
 			idx--
@@ -595,7 +685,7 @@ func readvarint(p []byte) (newp []byte, val uint32) {
 type stackmap struct {
 	n        int32   // number of bitmaps
 	nbit     int32   // number of bits in each bitmap
-	bytedata [1]byte // bitmaps, each starting on a 32-bit boundary
+	bytedata [1]byte // bitmaps, each starting on a byte boundary
 }
 
 //go:nowritebarrier

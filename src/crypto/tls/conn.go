@@ -37,7 +37,7 @@ type Conn struct {
 	vers          uint16  // TLS version
 	haveVers      bool    // version has been negotiated
 	config        *Config // configuration passed to constructor
-	// handshakeComplete is true if the connection is currently transfering
+	// handshakeComplete is true if the connection is currently transferring
 	// application data (i.e. is not currently processing a handshake).
 	handshakeComplete bool
 	// handshakes counts the number of handshakes performed on the
@@ -996,7 +996,7 @@ func (c *Conn) readHandshake() (interface{}, error) {
 		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 	}
 
-	// The handshake message unmarshallers
+	// The handshake message unmarshalers
 	// expect to be able to keep references to data,
 	// so pass in a fresh copy that won't be overwritten.
 	data = append([]byte(nil), data...)

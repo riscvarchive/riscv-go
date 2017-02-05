@@ -90,7 +90,7 @@ import (
 //   * An anonymous struct field is handled as if the fields of its
 //      value were part of the outer struct.
 //
-//   * A struct field with tag "-" is never unmarshalled into.
+//   * A struct field with tag "-" is never unmarshaled into.
 //
 // Unmarshal maps an XML element to a string or []byte by saving the
 // concatenation of that element's character data in the string or
@@ -142,7 +142,7 @@ func (d *Decoder) DecodeElement(v interface{}, start *StartElement) error {
 	return d.unmarshal(val.Elem(), start)
 }
 
-// An UnmarshalError represents an error in the unmarshalling process.
+// An UnmarshalError represents an error in the unmarshaling process.
 type UnmarshalError string
 
 func (e UnmarshalError) Error() string { return string(e) }
@@ -582,7 +582,9 @@ Loop:
 	case reflect.String:
 		t.SetString(string(saveXMLData))
 	case reflect.Slice:
-		t.Set(reflect.ValueOf(saveXMLData))
+		if t.Type().Elem().Kind() == reflect.Uint8 {
+			t.Set(reflect.ValueOf(saveXMLData))
+		}
 	}
 
 	return nil

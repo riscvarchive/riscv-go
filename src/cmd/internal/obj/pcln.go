@@ -6,9 +6,8 @@ package obj
 
 import "log"
 
-func addvarint(ctxt *Link, d *Pcdata, val uint32) {
-	var v uint32
-	for v = val; v >= 0x80; v >>= 7 {
+func addvarint(d *Pcdata, v uint32) {
+	for ; v >= 0x80; v >>= 7 {
 		d.P = append(d.P, uint8(v|0x80))
 	}
 	d.P = append(d.P, uint8(v))
@@ -98,7 +97,7 @@ func funcpctab(ctxt *Link, dst *Pcdata, func_ *LSym, desc string, valfunc func(*
 		}
 
 		if started != 0 {
-			addvarint(ctxt, dst, uint32((p.Pc-pc)/int64(ctxt.Arch.MinLC)))
+			addvarint(dst, uint32((p.Pc-pc)/int64(ctxt.Arch.MinLC)))
 			pc = p.Pc
 		}
 
@@ -108,7 +107,7 @@ func funcpctab(ctxt *Link, dst *Pcdata, func_ *LSym, desc string, valfunc func(*
 		} else {
 			delta <<= 1
 		}
-		addvarint(ctxt, dst, delta)
+		addvarint(dst, delta)
 		oldval = val
 		started = 1
 		val = valfunc(ctxt, func_, val, p, 1, arg)
@@ -118,8 +117,8 @@ func funcpctab(ctxt *Link, dst *Pcdata, func_ *LSym, desc string, valfunc func(*
 		if ctxt.Debugpcln != 0 {
 			ctxt.Logf("%6x done\n", uint64(func_.Text.Pc+func_.Size))
 		}
-		addvarint(ctxt, dst, uint32((func_.Size-pc)/int64(ctxt.Arch.MinLC)))
-		addvarint(ctxt, dst, 0) // terminator
+		addvarint(dst, uint32((func_.Size-pc)/int64(ctxt.Arch.MinLC)))
+		addvarint(dst, 0) // terminator
 	}
 
 	if ctxt.Debugpcln != 0 {
@@ -135,13 +134,13 @@ func funcpctab(ctxt *Link, dst *Pcdata, func_ *LSym, desc string, valfunc func(*
 
 // pctofileline computes either the file number (arg == 0)
 // or the line number (arg == 1) to use at p.
-// Because p->lineno applies to p, phase == 0 (before p)
+// Because p.Pos applies to p, phase == 0 (before p)
 // takes care of the update.
 func pctofileline(ctxt *Link, sym *LSym, oldval int32, p *Prog, phase int32, arg interface{}) int32 {
-	if p.As == ATEXT || p.As == ANOP || p.As == AUSEFIELD || p.Lineno == 0 || phase == 1 {
+	if p.As == ATEXT || p.As == ANOP || p.As == AUSEFIELD || p.Pos.Line() == 0 || phase == 1 {
 		return oldval
 	}
-	f, l := linkgetline(ctxt, p.Lineno)
+	f, l := linkgetlineFromPos(ctxt, p.Pos)
 	if f == nil {
 		//	print("getline failed for %s %v\n", ctxt->cursym->name, p);
 		return oldval

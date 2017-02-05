@@ -4,7 +4,10 @@
 
 package gc
 
-import "strings"
+import (
+	"cmd/internal/src"
+	"strings"
+)
 
 // Ctype describes the constant kind of an "ideal" (untyped) constant.
 type Ctype int8
@@ -455,12 +458,10 @@ func toint(v Val) Val {
 
 	case *Mpcplx:
 		i := new(Mpint)
-		if i.SetFloat(&u.Real) < 0 {
+		if i.SetFloat(&u.Real) < 0 || u.Imag.CmpFloat64(0) != 0 {
 			yyerror("constant %v%vi truncated to integer", fconv(&u.Real, FmtSharp), fconv(&u.Imag, FmtSharp|FmtSign))
 		}
-		if u.Imag.CmpFloat64(0) != 0 {
-			yyerror("constant %v%vi truncated to real", fconv(&u.Real, FmtSharp), fconv(&u.Imag, FmtSharp|FmtSign))
-		}
+
 		v.U = i
 	}
 
@@ -676,7 +677,7 @@ func evconst(n *Node) {
 
 	nr := n.Right
 	var rv Val
-	var lno int32
+	var lno src.XPos
 	var wr EType
 	var v Val
 	var norig *Node

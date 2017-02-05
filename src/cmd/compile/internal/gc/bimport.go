@@ -86,10 +86,10 @@ func Import(in *bufio.Reader) {
 
 	// read version specific flags - extend as necessary
 	switch p.version {
-	// case 4:
+	// case 5:
 	// 	...
 	//	fallthrough
-	case 3, 2, 1:
+	case 4, 3, 2, 1:
 		p.debugFormat = p.rawStringln(p.rawByte()) == "debug"
 		p.trackAllTypes = p.bool()
 		p.posInfoFormat = p.bool()
@@ -217,7 +217,9 @@ func Import(in *bufio.Reader) {
 	typecheckok = tcok
 	resumecheckwidth()
 
-	testdclstack() // debugging only
+	if debug_dclstack != 0 {
+		testdclstack()
+	}
 }
 
 func formatErrorf(format string, args ...interface{}) {
@@ -307,35 +309,32 @@ func idealType(typ *Type) *Type {
 }
 
 func (p *importer) obj(tag int) {
-	var alias *Sym
-	if tag == aliasTag {
-		p.pos()
-		alias = importpkg.Lookup(p.string())
-		alias.Flags |= SymAlias
-		tag = p.tagOrIndex()
-	}
-
-	var sym *Sym
 	switch tag {
 	case constTag:
 		p.pos()
-		sym = p.qualifiedName()
+		sym := p.qualifiedName()
 		typ := p.typ()
 		val := p.value(typ)
 		importconst(sym, idealType(typ), nodlit(val))
 
+	case aliasTag:
+		p.pos()
+		sym := p.qualifiedName()
+		typ := p.typ()
+		importalias(sym, typ)
+
 	case typeTag:
-		sym = p.typ().Sym
+		p.typ()
 
 	case varTag:
 		p.pos()
-		sym = p.qualifiedName()
+		sym := p.qualifiedName()
 		typ := p.typ()
 		importvar(sym, typ)
 
 	case funcTag:
 		p.pos()
-		sym = p.qualifiedName()
+		sym := p.qualifiedName()
 		params := p.paramList()
 		result := p.paramList()
 
@@ -365,11 +364,6 @@ func (p *importer) obj(tag int) {
 
 	default:
 		formatErrorf("unexpected object (tag = %d)", tag)
-	}
-
-	if alias != nil {
-		alias.Def = sym.Def
-		importsym(alias, sym.Def.Op)
 	}
 }
 
@@ -439,16 +433,13 @@ func (p *importer) typ() *Type {
 	var t *Type
 	switch i {
 	case namedTag:
-		// parser.go:hidden_importsym
 		p.pos()
 		tsym := p.qualifiedName()
 
-		// parser.go:hidden_pkgtype
 		t = pkgtype(tsym)
 		p.typList = append(p.typList, t)
 
 		// read underlying type
-		// parser.go:hidden_type
 		t0 := p.typ()
 		p.importtype(t, t0)
 
@@ -464,8 +455,6 @@ func (p *importer) typ() *Type {
 
 		// read associated methods
 		for i := p.int(); i > 0; i-- {
-			// parser.go:hidden_fndcl
-
 			p.pos()
 			sym := p.fieldSym()
 
@@ -479,14 +468,7 @@ func (p *importer) typ() *Type {
 			result := p.paramList()
 			nointerface := p.bool()
 
-			base := recv[0].Type
-			star := false
-			if base.IsPtr() {
-				base = base.Elem()
-				star = true
-			}
-
-			n := methodname0(sym, star, base.Sym)
+			n := newfuncname(methodname(sym, recv[0].Type))
 			n.Type = functypefield(recv[0], params, result)
 			checkwidth(n.Type)
 			addmethod(sym, n.Type, false, nointerface)
@@ -577,7 +559,6 @@ func (p *importer) qualifiedName() *Sym {
 	return pkg.Lookup(name)
 }
 
-// parser.go:hidden_structdcl_list
 func (p *importer) fieldList() (fields []*Field) {
 	if n := p.int(); n > 0 {
 		fields = make([]*Field, n)
@@ -588,21 +569,23 @@ func (p *importer) fieldList() (fields []*Field) {
 	return
 }
 
-// parser.go:hidden_structdcl
 func (p *importer) field() *Field {
 	p.pos()
-	sym := p.fieldName()
+	sym, alias := p.fieldName()
 	typ := p.typ()
 	note := p.string()
 
 	f := newField()
 	if sym.Name == "" {
-		// anonymous field - typ must be T or *T and T must be a type name
+		// anonymous field: typ must be T or *T and T must be a type name
 		s := typ.Sym
 		if s == nil && typ.IsPtr() {
 			s = typ.Elem().Sym // deref
 		}
 		sym = sym.Pkg.Lookup(s.Name)
+		f.Embedded = 1
+	} else if alias {
+		// anonymous field: we have an explicit name because it's a type alias
 		f.Embedded = 1
 	}
 
@@ -614,7 +597,6 @@ func (p *importer) field() *Field {
 	return f
 }
 
-// parser.go:hidden_interfacedcl_list
 func (p *importer) methodList() (methods []*Field) {
 	if n := p.int(); n > 0 {
 		methods = make([]*Field, n)
@@ -625,10 +607,9 @@ func (p *importer) methodList() (methods []*Field) {
 	return
 }
 
-// parser.go:hidden_interfacedcl
 func (p *importer) method() *Field {
 	p.pos()
-	sym := p.fieldName()
+	sym := p.methodName()
 	params := p.paramList()
 	result := p.paramList()
 
@@ -639,25 +620,49 @@ func (p *importer) method() *Field {
 	return f
 }
 
-// parser.go:sym,hidden_importsym
-func (p *importer) fieldName() *Sym {
+func (p *importer) fieldName() (*Sym, bool) {
 	name := p.string()
 	if p.version == 0 && name == "_" {
-		// version 0 didn't export a package for _ fields
+		// version 0 didn't export a package for _ field names
+		// but used the builtin package instead
+		return builtinpkg.Lookup(name), false
+	}
+	pkg := localpkg
+	alias := false
+	switch name {
+	case "":
+		// 1) field name matches base type name and is exported: nothing to do
+	case "?":
+		// 2) field name matches base type name and is not exported: need package
+		name = ""
+		pkg = p.pkg()
+	case "@":
+		// 3) field name doesn't match base type name (alias name): need name and possibly package
+		name = p.string()
+		alias = true
+		fallthrough
+	default:
+		if !exportname(name) {
+			pkg = p.pkg()
+		}
+	}
+	return pkg.Lookup(name), alias
+}
+
+func (p *importer) methodName() *Sym {
+	name := p.string()
+	if p.version == 0 && name == "_" {
+		// version 0 didn't export a package for _ method names
 		// but used the builtin package instead
 		return builtinpkg.Lookup(name)
 	}
 	pkg := localpkg
-	if name != "" && !exportname(name) {
-		if name == "?" {
-			name = ""
-		}
+	if !exportname(name) {
 		pkg = p.pkg()
 	}
 	return pkg.Lookup(name)
 }
 
-// parser.go:ohidden_funarg_list
 func (p *importer) paramList() []*Field {
 	i := p.int()
 	if i == 0 {
@@ -677,7 +682,6 @@ func (p *importer) paramList() []*Field {
 	return fs
 }
 
-// parser.go:hidden_funarg
 func (p *importer) param(named bool) *Field {
 	f := newField()
 	f.Type = p.typ()

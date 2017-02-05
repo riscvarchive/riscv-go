@@ -104,7 +104,7 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 func appendpp(p *obj.Prog, as obj.As, from obj.Addr, from3 *obj.Addr, to obj.Addr, reg int16) *obj.Prog {
 	q := gc.Ctxt.NewProg()
 	q.As = as
-	q.Lineno = p.Lineno
+	q.Pos = p.Pos
 	q.From = from
 	q.From3 = from3
 	q.To = to
