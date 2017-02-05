@@ -46,6 +46,16 @@ If this exits without error, all is well!
 Note that these tests currently use the special builtin `riscvexit` to exit,
 until we can build the standard library and use os.Exit.
 
+### QEMU
+
+Spike plus pk support only a small subset of Linux syscalls and will not be
+capable of supporting the full Go runtime.
+
+The [RISC-V QEMU port](https://github.com/riscv/riscv-qemu) supports a much
+wider set of syscalls with its "User Mode Simulation". See [Method
+2](https://github.com/riscv/riscv-qemu#method-2a-fedora-24-userland-with-user-mode-simulation-recommended)
+in the QEMU README for instructions.
+
 ### Contributing
 
 All contributors must sign the upstream [Contributor License
