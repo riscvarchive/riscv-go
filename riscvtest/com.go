@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	x := new(uint64)
 	*x = 0x0102030405060708
@@ -8,7 +10,7 @@ func main() {
 	*x = ^*x
 	*y = 0
 	if *x != 0xfefdfcfbfaf9f8f7 {
-		riscvexit(1)
+		os.Exit(1)
 	}
-	riscvexit(0)
+	os.Exit(0)
 }

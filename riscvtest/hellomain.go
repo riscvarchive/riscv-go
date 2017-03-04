@@ -1,6 +1,8 @@
 package main
 
+import "os"
+
 func main() {
 	rc := 42
-	riscvexit(rc)
+	os.Exit(rc)
 }

@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	a := new(int)
 	*a = 19
@@ -7,5 +9,5 @@ func main() {
 	*b = 7
 	c := new(int)
 	*c = *a - *b
-	riscvexit(*c)
+	os.Exit(*c)
 }

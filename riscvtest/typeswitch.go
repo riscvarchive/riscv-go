@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 type Color interface{}
 
 type Blue int
@@ -14,10 +16,10 @@ func main() {
 
 	switch c := c.(type) {
 	case Blue:
-		riscvexit(int(c))
+		os.Exit(int(c))
 	case Red:
-		riscvexit(1)
+		os.Exit(1)
 	default:
-		riscvexit(2)
+		os.Exit(2)
 	}
 }

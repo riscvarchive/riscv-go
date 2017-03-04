@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	y := new(int)
 
@@ -31,7 +33,7 @@ func main() {
 	*y = 1
 	*b64 >>= *s8 // now 1 << 59
 	if *b64 != 1<<59 {
-		riscvexit(2)
+		os.Exit(2)
 	}
 
 	*y = 1
@@ -43,7 +45,7 @@ func main() {
 	*y = 1
 	*b32 >>= *s8 // now 1 << 27
 	if *b32 != 1<<27 {
-		riscvexit(3)
+		os.Exit(3)
 	}
 
 	*y = 1
@@ -55,7 +57,7 @@ func main() {
 	*y = 1
 	*b16 >>= *s8 // now 1 << 11
 	if *b16 != 1<<11 {
-		riscvexit(4)
+		os.Exit(4)
 	}
 
 	*y = 1
@@ -67,7 +69,7 @@ func main() {
 	*y = 1
 	*b8 >>= *s8 // now 1 << 3
 	if *b8 != 1<<3 {
-		riscvexit(5)
+		os.Exit(5)
 	}
 
 	// Large shift sanity test
@@ -76,7 +78,7 @@ func main() {
 	*y = 1
 	*b8 >>= *s8
 	if *b8 != 0 {
-		riscvexit(6)
+		os.Exit(6)
 	}
 
 	*b16 = 1 << 15
@@ -84,7 +86,7 @@ func main() {
 	*y = 1
 	*b16 >>= *s16
 	if *b16 != 0 {
-		riscvexit(7)
+		os.Exit(7)
 	}
 
 	*b32 = 1 << 31
@@ -92,7 +94,7 @@ func main() {
 	*y = 1
 	*b32 >>= *s32
 	if *b32 != 0 {
-		riscvexit(8)
+		os.Exit(8)
 	}
 
 	*b64 = 1 << 63
@@ -100,8 +102,8 @@ func main() {
 	*y = 1
 	*b64 >>= *s64
 	if *b64 != 0 {
-		riscvexit(9)
+		os.Exit(9)
 	}
 
-	riscvexit(0)
+	os.Exit(0)
 }

@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	x := new(int)
 	*x = -100
@@ -46,7 +48,7 @@ func main() {
 	}
 	*y = 1
 	if ok != 8 {
-		riscvexit(1)
+		os.Exit(1)
 	}
 
 	ok = 0
@@ -83,16 +85,16 @@ func main() {
 		ok++
 	}
 	if ok != 8 {
-		riscvexit(2)
+		os.Exit(2)
 	}
 
 	*y = 1
 	switch {
 	case *x == 99:
-		riscvexit(3)
+		os.Exit(3)
 	case *u == 99:
-		riscvexit(4)
+		os.Exit(4)
 	}
 
-	riscvexit(0)
+	os.Exit(0)
 }

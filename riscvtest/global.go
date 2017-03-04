@@ -1,22 +1,24 @@
 package main
 
+import "os"
+
 var a int
 
 //go:noinline
 func checkA() {
 	if a != 42 {
-		riscvexit(2)
+		os.Exit(2)
 	}
 }
 
 func main() {
 	if a != 0 {
-		riscvexit(1)
+		os.Exit(1)
 	}
 
 	a = 42
 
 	checkA()
 
-	riscvexit(0)
+	os.Exit(0)
 }

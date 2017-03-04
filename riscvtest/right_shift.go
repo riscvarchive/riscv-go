@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	b64 := new(int64)
 	b32 := new(int32)
@@ -30,7 +32,7 @@ func main() {
 	*y = 1
 	*b64 >>= *s8 // now -1
 	if *b64 != -1 {
-		riscvexit(2)
+		os.Exit(2)
 	}
 
 	*y = 1
@@ -42,7 +44,7 @@ func main() {
 	*y = 1
 	*b32 >>= *s8 // now -1
 	if *b32 != -1 {
-		riscvexit(3)
+		os.Exit(3)
 	}
 
 	*y = 1
@@ -54,7 +56,7 @@ func main() {
 	*y = 1
 	*b16 >>= *s8 // now -1
 	if *b16 != -1 {
-		riscvexit(4)
+		os.Exit(4)
 	}
 
 	*y = 1
@@ -66,7 +68,7 @@ func main() {
 	*y = 1
 	*b8 >>= *s8 // now -1
 	if *b8 != -1 {
-		riscvexit(5)
+		os.Exit(5)
 	}
 
 	// Large shift sanity test
@@ -75,7 +77,7 @@ func main() {
 	*y = 1
 	*b8 >>= *s8
 	if *b8 != -1 {
-		riscvexit(6)
+		os.Exit(6)
 	}
 
 	*b8 = 1 << 6
@@ -83,7 +85,7 @@ func main() {
 	*y = 1
 	*b8 >>= *s8
 	if *b8 != 0 {
-		riscvexit(7)
+		os.Exit(7)
 	}
 
 	*b16 = -1 << 15
@@ -91,7 +93,7 @@ func main() {
 	*y = 1
 	*b16 >>= *s16
 	if *b16 != -1 {
-		riscvexit(8)
+		os.Exit(8)
 	}
 
 	*b16 = 1 << 14
@@ -99,7 +101,7 @@ func main() {
 	*y = 1
 	*b16 >>= *s16
 	if *b16 != 0 {
-		riscvexit(9)
+		os.Exit(9)
 	}
 
 	*b32 = -1 << 31
@@ -107,7 +109,7 @@ func main() {
 	*y = 1
 	*b32 >>= *s32
 	if *b32 != -1 {
-		riscvexit(10)
+		os.Exit(10)
 	}
 
 	*b32 = 1 << 30
@@ -115,7 +117,7 @@ func main() {
 	*y = 1
 	*b32 >>= *s32
 	if *b32 != 0 {
-		riscvexit(11)
+		os.Exit(11)
 	}
 
 	*b64 = -1 << 63
@@ -123,7 +125,7 @@ func main() {
 	*y = 1
 	*b64 >>= *s64
 	if *b64 != -1 {
-		riscvexit(12)
+		os.Exit(12)
 	}
 
 	*b64 = 1 << 62
@@ -131,8 +133,8 @@ func main() {
 	*y = 1
 	*b64 >>= *s64
 	if *b64 != 0 {
-		riscvexit(13)
+		os.Exit(13)
 	}
 
-	riscvexit(0)
+	os.Exit(0)
 }

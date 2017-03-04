@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func cputicks() int64
 
 func main() {
@@ -8,5 +10,5 @@ func main() {
 	*x = 2
 	*x = 3
 	*x = 4
-	riscvexit(int(cputicks()) + *x)
+	os.Exit(int(cputicks()) + *x)
 }

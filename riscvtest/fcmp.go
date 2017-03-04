@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	x := new(float32)
 	*x = 100.0
@@ -43,13 +45,13 @@ func main() {
 	}
 	*z = 1
 	if ok != 8 {
-		riscvexit(1)
+		os.Exit(1)
 	}
 
 	*z = 1
 	if *x != 100 {
-		riscvexit(2)
+		os.Exit(2)
 	}
 
-	riscvexit(0)
+	os.Exit(0)
 }

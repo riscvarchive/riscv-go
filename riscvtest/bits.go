@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	x := new(int)
 	*x = 0x10000000
@@ -17,7 +19,7 @@ func main() {
 
 	*y = 1
 	if *x != 0 {
-		riscvexit(1)
+		os.Exit(1)
 	}
-	riscvexit(0)
+	os.Exit(0)
 }

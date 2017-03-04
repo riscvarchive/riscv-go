@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	a := new(float64)
 	*a = 3
@@ -10,5 +12,5 @@ func main() {
 	c := new(float64)
 	*c = float64(*b)
 
-	riscvexit(int(*c))
+	os.Exit(int(*c))
 }

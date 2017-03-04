@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func main() {
 	x := new(int)
 	*x = 0
@@ -13,15 +15,15 @@ func main() {
 	*x = 0 // distract compiler
 
 	if !*z {
-		riscvexit(1)
+		os.Exit(1)
 	}
 
 	*z = x == nil
 	*x = 0
 
 	if *z {
-		riscvexit(2)
+		os.Exit(2)
 	}
 
-	riscvexit(0)
+	os.Exit(0)
 }

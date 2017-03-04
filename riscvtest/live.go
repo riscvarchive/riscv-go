@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 // Adapted from errors/errors.go
 //
 // New fails liveness analysis at build time if Addrs are not optimized away.
@@ -20,5 +22,5 @@ func (e *errorString) Error() string {
 
 func main() {
 	New("foo")
-	riscvexit(0)
+	os.Exit(0)
 }

@@ -1,5 +1,7 @@
 package main
 
+import "os"
+
 func ReturnZero() int
 
 func returnZero() int {
@@ -7,5 +9,5 @@ func returnZero() int {
 }
 
 func main() {
-	riscvexit(ReturnZero())
+	os.Exit(ReturnZero())
 }

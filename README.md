@@ -38,13 +38,11 @@ Our basic tests are in the `riscvtest` directory:
 
 ```sh
 $ cd ../riscvtest
+$ GOARCH=riscv GOOS=linux go install os
 $ go run run.go
 ```
 
 If this exits without error, all is well!
-
-Note that these tests currently use the special builtin `riscvexit` to exit,
-until we can build the standard library and use os.Exit.
 
 ### QEMU
 
