@@ -48,13 +48,20 @@ var tests = [...]struct {
 	{name: "jmp", dir: true},
 }
 
-func main() {
-	var failed bool
+func runriscv(exe string) *exec.Cmd {
+	qemu, err := exec.LookPath("qemu-riscv64")
+	if err == nil {
+		return exec.Command(qemu, exe)
+	}
 	spike, err := exec.LookPath("spike")
 	if err != nil {
 		log.Fatal(err)
 	}
+	return exec.Command(spike, "pk", exe)
+}
 
+func main() {
+	var failed bool
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("unable to get working directory: %v", err)
@@ -82,8 +89,7 @@ func main() {
 		}
 
 		// run
-		cmd = exec.Command(spike, "pk", "tmp")
-		out, err = cmd.CombinedOutput()
+		out, err = runriscv("tmp").CombinedOutput()
 		if err == nil {
 			if test.want == 0 {
 				continue
@@ -100,6 +106,9 @@ func main() {
 		}
 		ws := ee.ProcessState.Sys().(syscall.WaitStatus)
 		rc := ws.ExitStatus()
+		if rc < 0 {
+			rc = 255 // Harmonize fault exits between qemu and spike
+		}
 		if rc != test.want {
 			fmt.Printf("rc(%q)=%d, want %d\n", test.name, rc, test.want)
 			failed = true
