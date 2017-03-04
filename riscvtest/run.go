@@ -71,7 +71,7 @@ func main() {
 	defer os.Remove(tmp)
 	for _, test := range tests {
 		// build
-		cmd := exec.Command("go", "build", "-o", tmp)
+		cmd := exec.Command("go", "build", "-ldflags", "-E main.main", "-o", tmp)
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=riscv")
 		if test.dir {
 			// Build everything in directory.
