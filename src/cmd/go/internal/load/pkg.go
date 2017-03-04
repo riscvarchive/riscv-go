@@ -184,6 +184,7 @@ func (p *Package) copyBuild(pp *build.Package) {
 	p.CgoCFLAGS = pp.CgoCFLAGS
 	p.CgoCPPFLAGS = pp.CgoCPPFLAGS
 	p.CgoCXXFLAGS = pp.CgoCXXFLAGS
+	p.CgoFFLAGS = pp.CgoFFLAGS
 	p.CgoLDFLAGS = pp.CgoLDFLAGS
 	p.CgoPkgConfig = pp.CgoPkgConfig
 	// We modify p.Imports in place, so make copy now.
@@ -793,7 +794,6 @@ var GoTools = map[string]targetDir{
 	"cmd/cgo":       ToTool,
 	"cmd/cover":     ToTool,
 	"cmd/dist":      ToTool,
-	"cmd/disas":     ToTool,
 	"cmd/doc":       ToTool,
 	"cmd/fix":       ToTool,
 	"cmd/link":      ToTool,
@@ -944,8 +944,7 @@ func (p *Package) load(stk *ImportStack, bp *build.Package, err error) *Package 
 
 	// Everything depends on runtime, except runtime, its internal
 	// subpackages, and unsafe.
-	// FIXME: Remove riscv clause once we can compile the runtime.
-	if cfg.Goarch != "riscv" && (!p.Standard || (p.ImportPath != "runtime" && !strings.HasPrefix(p.ImportPath, "runtime/internal/") && p.ImportPath != "unsafe")) {
+	if !p.Standard || (p.ImportPath != "runtime" && !strings.HasPrefix(p.ImportPath, "runtime/internal/") && p.ImportPath != "unsafe") {
 		ImportPaths = append(ImportPaths, "runtime")
 		// When race detection enabled everything depends on runtime/race.
 		// Exclude certain packages to avoid circular dependencies.

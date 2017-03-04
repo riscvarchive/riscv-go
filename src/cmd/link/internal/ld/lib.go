@@ -312,19 +312,6 @@ func libinit(ctxt *Link) {
 	}
 }
 
-func Exitf(format string, a ...interface{}) {
-	fmt.Fprintf(os.Stderr, os.Args[0]+": "+format+"\n", a...)
-	if *flagK {
-		return
-	}
-
-	if coutbuf.f != nil {
-		coutbuf.f.Close()
-		mayberemoveoutfile()
-	}
-	Exit(2)
-}
-
 func errorexit() {
 	if coutbuf.f != nil {
 		if nerrors != 0 {
@@ -336,7 +323,7 @@ func errorexit() {
 		}
 	}
 
-	if nerrors != 0 && !*flagK {
+	if nerrors != 0 {
 		if coutbuf.f != nil {
 			mayberemoveoutfile()
 		}
@@ -409,10 +396,7 @@ func (ctxt *Link) loadlib() {
 		Adduint8(ctxt, s, 1)
 	}
 
-	if SysArch.Family != sys.RISCV {
-		// FIXME: restore this call when we are ready to link in the runtime.
-		loadinternal(ctxt, "runtime")
-	}
+	loadinternal(ctxt, "runtime")
 	if SysArch.Family == sys.ARM {
 		loadinternal(ctxt, "math")
 	}
@@ -2022,12 +2006,6 @@ func genasmsym(ctxt *Link, put func(*Link, *Symbol, string, SymbolType, int64, *
 }
 
 func Symaddr(s *Symbol) int64 {
-	// FIXME: we need this s == nil check temporarily for risc-v
-	// because we don't emit an algarray, because we don't link with the runtime.
-	// Once we link with the runtime, fix that and remove this check.
-	if s == nil {
-		return 0
-	}
 	if !s.Attr.Reachable() {
 		Errorf(s, "unreachable symbol in symaddr")
 	}

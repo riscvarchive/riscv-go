@@ -79,6 +79,16 @@ func Exit(code int) {
 	os.Exit(code)
 }
 
+// Exitf logs an error message then calls Exit(2).
+func Exitf(format string, a ...interface{}) {
+	fmt.Fprintf(os.Stderr, os.Args[0]+": "+format+"\n", a...)
+	if coutbuf.f != nil {
+		coutbuf.f.Close()
+		mayberemoveoutfile()
+	}
+	Exit(2)
+}
+
 // Errorf logs an error message.
 //
 // If more than 20 errors have been printed, exit with an error.

@@ -7,7 +7,6 @@ package gc
 import (
 	"cmd/internal/gcprog"
 	"cmd/internal/obj"
-	"cmd/internal/sys"
 	"fmt"
 	"os"
 	"sort"
@@ -825,8 +824,7 @@ func dcommontype(s *Sym, ot int, t *Type) int {
 	}
 
 	sizeofAlg := 2 * Widthptr
-	// FIXME: remove risc-v check when we can link in the runtime.
-	if dcommontype_algarray == nil && Thearch.LinkArch.Family != sys.RISCV {
+	if dcommontype_algarray == nil {
 		dcommontype_algarray = Pkglookup("algarray", Runtimepkg)
 	}
 	dowidth(t)
@@ -1143,9 +1141,7 @@ func dtypesym(t *Type) *Sym {
 		dupok = obj.DUPOK
 	}
 
-	// FIXME: we currently re-emit basic type symbols every time,
-	// since we don't yet link in the runtime. Unwind this when we do.
-	if (myimportpath == "runtime" || Thearch.LinkArch.Family == sys.RISCV) && (tbase == Types[tbase.Etype] || tbase == bytetype || tbase == runetype || tbase == errortype) { // int, float, etc
+	if myimportpath == "runtime" && (tbase == Types[tbase.Etype] || tbase == bytetype || tbase == runetype || tbase == errortype) { // int, float, etc
 		goto ok
 	}
 

@@ -80,7 +80,6 @@ var (
 	flagF           = flag.Bool("f", false, "ignore version mismatch")
 	flagG           = flag.Bool("g", false, "disable go package data checks")
 	flagH           = flag.Bool("h", false, "halt on error")
-	flagK           = flag.Bool("K", false, "keep going on error and keep final output")
 	flagN           = flag.Bool("n", false, "dump symbol table")
 	FlagS           = flag.Bool("s", false, "disable symbol table")
 	flagU           = flag.Bool("u", false, "reject unsafe packages")
@@ -126,17 +125,6 @@ func Main() {
 	obj.Flagparse(usage)
 
 	startProfile()
-
-	// temporarily disable symbol table on risc-v,
-	// because we can't/don't build the runtime yet.
-	if SysArch.Family == sys.RISCV {
-		// FIXME: restore default flags when RISC-V has an _rt0 function and can link the runtime
-		*FlagS = !*FlagS // invert symbol table flag
-		if *flagEntrySymbol == "" {
-			*flagEntrySymbol = "main.main"
-		}
-	}
-
 	if Buildmode == BuildmodeUnset {
 		Buildmode = BuildmodeExe
 	}
@@ -202,9 +190,7 @@ func Main() {
 	if Headtype == obj.Hdarwin {
 		ctxt.domacho()
 	}
-	if SysArch.Family != sys.RISCV {
-		ctxt.dostkcheck()
-	}
+	ctxt.dostkcheck()
 	if Headtype == obj.Hwindows || Headtype == obj.Hwindowsgui {
 		ctxt.dope()
 	}
@@ -212,14 +198,10 @@ func Main() {
 	Thearch.Gentext(ctxt) // trampolines, call stubs, etc.
 	ctxt.textbuildid()
 	ctxt.textaddress()
-	if SysArch.Family != sys.RISCV {
-		// FIXME(prattmic): These steps need runtime symbols, which
-		// we can't yet generate for RISCV.
-		ctxt.pclntab()
-		ctxt.findfunctab()
-		ctxt.typelink()
-		ctxt.symtab()
-	}
+	ctxt.pclntab()
+	ctxt.findfunctab()
+	ctxt.typelink()
+	ctxt.symtab()
 	ctxt.dodata()
 	ctxt.address()
 	ctxt.reloc()
