@@ -449,9 +449,6 @@ var genericOps = []opData{
 	{name: "AtomicCompareAndSwap64", argLength: 4, typ: "(Bool,Mem)"}, // if *arg0==arg1, then set *arg0=arg2.  Returns true iff store happens and new memory.
 	{name: "AtomicAnd8", argLength: 3, typ: "Mem"},                    // *arg0 &= arg1.  arg2=memory.  Returns memory.
 	{name: "AtomicOr8", argLength: 3, typ: "Mem"},                     // *arg0 |= arg1.  arg2=memory.  Returns memory.
-
-	// riscv bootstrapping
-	{name: "ExitProc", argLength: 2, typ: "Mem"}, // risc-v bootstrapping only: insert process exit syscall, auxint=return code, arg0=memory
 }
 
 //     kind           control    successors       implicit exit

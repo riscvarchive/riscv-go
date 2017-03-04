@@ -51,7 +51,6 @@ var builtinFuncs = [...]struct {
 	{"complex", OCOMPLEX},
 	{"copy", OCOPY},
 	{"delete", ODELETE},
-	{"riscvexit", ORISCVEXIT},
 	{"imag", OIMAG},
 	{"len", OLEN},
 	{"make", OMAKE},

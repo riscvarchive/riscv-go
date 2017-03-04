@@ -439,7 +439,6 @@ const (
 	OSLICE3ARR // Left[List[0] : List[1] : List[2]] (Left is array)
 	ORECOVER   // recover()
 	ORECV      // <-Left
-	ORISCVEXIT // exit(int exitcode), bootstrapping, riscv only
 	ORUNESTR   // Type(Left) (Type is string, Left is rune)
 	OSELRECV   // Left = <-Right.Left: (appears as .Left of OCASE; Right.Op == ORECV)
 	OSELRECV2  // List = <-Right.Left: (apperas as .Left of OCASE; count(List) == 2, Right.Op == ORECV)

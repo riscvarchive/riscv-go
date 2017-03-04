@@ -430,6 +430,3 @@
 (DeferCall   [argwid]               mem) -> (CALLdefer   [argwid]               mem)
 (GoCall      [argwid]               mem) -> (CALLgo      [argwid]               mem)
 (InterCall   [argwid] entry         mem) -> (CALLinter   [argwid] entry         mem)
-
-// Bootstrapping
-(ExitProc rc mem) -> (LoweredExitProc rc mem)

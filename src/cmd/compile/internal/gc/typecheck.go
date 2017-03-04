@@ -1884,24 +1884,6 @@ OpSwitch:
 
 		break OpSwitch
 
-	case ORISCVEXIT:
-		ok |= Etop
-		if n.List.Len() != 1 {
-			yyerror("wrong number of args to riscvexit")
-			break OpSwitch
-		}
-		rc := n.List.First()
-		rc = typecheck(rc, Erv)
-
-		if t := rc.Type; !isInt[t.Etype] && t.Etype != TIDEAL {
-			yyerror("non-integer argument to exit: %v", t)
-			break OpSwitch
-		}
-		rc = defaultlit(rc, Types[TINT])
-
-		n.List.Slice()[0] = rc
-		break OpSwitch
-
 	case OPANIC:
 		ok |= Etop
 		if !onearg(n, "panic") {

@@ -72,10 +72,10 @@ func init() {
 	var (
 		gpstore = regInfo{inputs: []regMask{gpspsbMask, gpspMask, 0}} // SB in first input so we can load from a global, but not in second to avoid using SB as a temporary register
 		gp01    = regInfo{outputs: []regMask{gpMask}}
-		gp11   = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{gpMask}}
-		gp21   = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{gpMask}}
-		gpload = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
-		gp11sb = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
+		gp11    = regInfo{inputs: []regMask{gpMask}, outputs: []regMask{gpMask}}
+		gp21    = regInfo{inputs: []regMask{gpMask, gpMask}, outputs: []regMask{gpMask}}
+		gpload  = regInfo{inputs: []regMask{gpspsbMask, 0}, outputs: []regMask{gpMask}}
+		gp11sb  = regInfo{inputs: []regMask{gpspsbMask}, outputs: []regMask{gpMask}}
 
 		fp11    = regInfo{inputs: []regMask{fpMask}, outputs: []regMask{fpMask}}
 		fp21    = regInfo{inputs: []regMask{fpMask, fpMask}, outputs: []regMask{fpMask}}
@@ -221,9 +221,8 @@ func init() {
 		},
 
 		// Lowering pass-throughs
-		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}},                                                         // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
-		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},                                                                  // scheduler ensures only at beginning of entry block
-		{name: "LoweredExitProc", argLength: 2, typ: "Mem", reg: regInfo{inputs: []regMask{gpMask, 0}, clobbers: regNamed["A0"] | regNamed["A7"]}}, // arg0=mem, auxint=return code
+		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}}, // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},          // scheduler ensures only at beginning of entry block
 
 		// F extension.
 		{name: "FADDS", argLength: 2, reg: fp21, asm: "FADDS", commutative: true, typ: "Float32"},  // arg0 + arg1
@@ -267,7 +266,7 @@ func init() {
 	}
 
 	RISCVblocks := []blockData{
-		{name: "BNE"},  // Control != 0 (take a register)
+		{name: "BNE"}, // Control != 0 (take a register)
 	}
 
 	archs = append(archs, arch{

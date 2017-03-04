@@ -453,21 +453,6 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 	case ssa.OpRISCVLoweredGetClosurePtr:
 		// Closure pointer is S4 (riscv.REG_CTXT).
 		gc.CheckLoweredGetClosurePtr(v)
-	case ssa.OpRISCVLoweredExitProc:
-		// MOV rc, A0
-		p := gc.Prog(riscv.AMOV)
-		p.From.Type = obj.TYPE_REG
-		p.From.Reg = v.Args[0].Reg()
-		p.To.Type = obj.TYPE_REG
-		p.To.Reg = riscv.REG_A0
-		// MOV $SYS_EXIT_GROUP, A7
-		p = gc.Prog(riscv.AMOV)
-		p.From.Type = obj.TYPE_CONST
-		p.From.Offset = 94 // SYS_EXIT_GROUP
-		p.To.Type = obj.TYPE_REG
-		p.To.Reg = riscv.REG_A7
-		// SCALL
-		p = gc.Prog(riscv.AECALL)
 	default:
 		v.Fatalf("Unhandled op %v", v.Op)
 	}

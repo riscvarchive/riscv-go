@@ -1427,7 +1427,6 @@ const (
 	OpRISCVLoweredMove
 	OpRISCVLoweredNilCheck
 	OpRISCVLoweredGetClosurePtr
-	OpRISCVLoweredExitProc
 	OpRISCVFADDS
 	OpRISCVFSUBS
 	OpRISCVFMULS
@@ -1986,7 +1985,6 @@ const (
 	OpAtomicCompareAndSwap64
 	OpAtomicAnd8
 	OpAtomicOr8
-	OpExitProc
 )
 
 var opcodeTable = [...]opInfo{
@@ -17832,16 +17830,6 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:   "LoweredExitProc",
-		argLen: 2,
-		reg: regInfo{
-			inputs: []inputInfo{
-				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
-			},
-			clobbers: 66048, // A0 A7
-		},
-	},
-	{
 		name:        "FADDS",
 		argLen:      2,
 		commutative: true,
@@ -22855,11 +22843,6 @@ var opcodeTable = [...]opInfo{
 	{
 		name:    "AtomicOr8",
 		argLen:  3,
-		generic: true,
-	},
-	{
-		name:    "ExitProc",
-		argLen:  2,
 		generic: true,
 	},
 }
