@@ -279,6 +279,11 @@ func mallocinit() {
 		// allocation at 0x40 << 32 because when using 4k pages with 3-level
 		// translation buffers, the user address space is limited to 39 bits
 		// On darwin/arm64, the address space is even smaller.
+		//
+		// Linux on riscv64 provides a 38-bit address space to user processes
+		// (the full address space is 39-bit on minimal conforming implementations,
+		// but the kernel takes half of that); the default shared library base is
+		// 0x20_0000_0000 so don't conflict with that either.
 		arenaSize := round(_MaxMem, _PageSize)
 		bitmapSize = arenaSize / (sys.PtrSize * 8 / 2)
 		spansSize = arenaSize / _PageSize * sys.PtrSize
@@ -289,6 +294,8 @@ func mallocinit() {
 				p = uintptr(i)<<40 | uintptrMask&(0x0013<<28)
 			case GOARCH == "arm64":
 				p = uintptr(i)<<40 | uintptrMask&(0x0040<<32)
+			case GOARCH == "riscv":
+				p = uintptr(i)<<40 | uintptrMask&(0x0021<<32)
 			default:
 				p = uintptr(i)<<40 | uintptrMask&(0x00c0<<32)
 			}
