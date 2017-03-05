@@ -283,7 +283,10 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	case AJALR:
 		lowerjalr(p)
 
-	case AECALL, ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+	case obj.AUNDEF, AECALL, ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+		if p.As == obj.AUNDEF {
+			p.As = AEBREAK
+		}
 		// SCALL is the old name for ECALL.
 		if p.As == ASCALL {
 			p.As = AECALL
@@ -1334,7 +1337,8 @@ var encodingForAs = [...]encoding{
 	ABGEU & obj.AMask: sbEncoding,
 
 	// 2.9: Environment Call and Breakpoints
-	AECALL & obj.AMask: iIEncoding,
+	AECALL & obj.AMask:  iIEncoding,
+	AEBREAK & obj.AMask: iIEncoding,
 
 	// 4.2: Integer Computational Instructions
 	AADDI & obj.AMask:  iIEncoding,
@@ -1454,7 +1458,6 @@ var encodingForAs = [...]encoding{
 	obj.AFUNCDATA: pseudoOpEncoding,
 	obj.APCDATA:   pseudoOpEncoding,
 	obj.ATEXT:     pseudoOpEncoding,
-	obj.AUNDEF:    pseudoOpEncoding,
 	obj.ANOP:      pseudoOpEncoding,
 }
 
