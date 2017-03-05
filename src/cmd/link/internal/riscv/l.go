@@ -60,6 +60,7 @@ package riscv
 
 const (
 	MaxAlign  = 32 // max data alignment
+	MinAlign  = 1
 	FuncAlign = 8
 )
 

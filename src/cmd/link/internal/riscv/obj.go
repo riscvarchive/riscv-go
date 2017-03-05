@@ -45,6 +45,7 @@ func linkarchinit() {
 
 	ld.Thearch.Funcalign = FuncAlign
 	ld.Thearch.Maxalign = MaxAlign
+	ld.Thearch.Minalign = MinAlign
 	ld.Thearch.Dwarfregsp = DWARFREGSP
 	ld.Thearch.Dwarfreglr = DWARFREGLR
 
