@@ -7,12 +7,12 @@ package sys
 const (
 	ArchFamily    = RISCV
 	BigEndian     = 0
-	CacheLineSize = 64 // TODO(prattmic)
+	CacheLineSize = 64   // TODO(prattmic)
 	PhysPageSize  = 4096 // TODO(prattmic)
 	PCQuantum     = 4
 	Int64Align    = 8
-	HugePageSize  = 0
-	MinFrameSize  = 0
+	HugePageSize  = 1 << 21
+	MinFrameSize  = 8
 )
 
 type Uintreg uint64
