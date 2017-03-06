@@ -377,7 +377,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 
 		//	mov	ZERO, (Rarg0)
 		//	ADD	$sz, Rarg0
-		//	BNE	Rarg1, Rarg0, -2(PC)
+		//	BGEU	Rarg1, Rarg0, -2(PC)
 
 		p := gc.Prog(mov)
 		p.From.Type = obj.TYPE_REG
@@ -391,11 +391,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p2.To.Type = obj.TYPE_REG
 		p2.To.Reg = v.Args[0].Reg()
 
-		p3 := gc.Prog(riscv.ABNE)
+		p3 := gc.Prog(riscv.ABGEU)
 		p3.To.Type = obj.TYPE_BRANCH
-		p3.Reg = v.Args[1].Reg()
+		p3.Reg = v.Args[0].Reg()
 		p3.From.Type = obj.TYPE_REG
-		p3.From.Reg = v.Args[0].Reg()
+		p3.From.Reg = v.Args[1].Reg()
 		gc.Patch(p3, p)
 
 	case ssa.OpRISCVLoweredMove:
@@ -405,7 +405,7 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		//	mov	T2, (Rarg0)
 		//	ADD	$sz, Rarg0
 		//	ADD	$sz, Rarg1
-		//	BNE	Rarg2, Rarg0, -4(PC)
+		//	BGEU	Rarg2, Rarg0, -4(PC)
 
 		p := gc.Prog(mov)
 		p.From.Type = obj.TYPE_MEM
@@ -431,11 +431,11 @@ func ssaGenValue(s *gc.SSAGenState, v *ssa.Value) {
 		p4.To.Type = obj.TYPE_REG
 		p4.To.Reg = v.Args[1].Reg()
 
-		p5 := gc.Prog(riscv.ABNE)
+		p5 := gc.Prog(riscv.ABGEU)
 		p5.To.Type = obj.TYPE_BRANCH
-		p5.Reg = v.Args[2].Reg()
+		p5.Reg = v.Args[1].Reg()
 		p5.From.Type = obj.TYPE_REG
-		p5.From.Reg = v.Args[1].Reg()
+		p5.From.Reg = v.Args[2].Reg()
 		gc.Patch(p5, p)
 
 	case ssa.OpRISCVLoweredNilCheck:
