@@ -23,13 +23,13 @@ $ ./make.bash
 Compile and run in qemu-riscv64 (which is expected to be in PATH):
 
 ```sh
-$ GOARCH=riscv GOOS=linux go run -ldflags '-E main.main' ../riscvtest/add.go
+$ GOARCH=riscv GOOS=linux go run ../riscvtest/add.go
 ```
 
 Build:
 
 ```sh
-$ GOARCH=riscv GOOS=linux go build -ldflags '-E main.main' ../riscvtest/add.go
+$ GOARCH=riscv GOOS=linux go build ../riscvtest/add.go
 ```
 
 Test:
@@ -38,7 +38,6 @@ Our basic tests are in the `riscvtest` directory:
 
 ```sh
 $ cd ../riscvtest
-$ GOARCH=riscv GOOS=linux go install os
 $ go run run.go
 ```
 
