@@ -690,6 +690,10 @@ func traceback1(pc, sp, lr uintptr, gp *g, flags uint) {
 	// If that means we print nothing at all, repeat forcing all frames printed.
 	n = gentraceback(pc, sp, lr, gp, 0, nil, _TracebackMaxFrames, nil, nil, flags)
 	if n == 0 && (flags&_TraceRuntimeFrames) == 0 {
+		// pc = sp = ^0 means to check the goroutine; preserve that signal
+		if pc != ^uintptr(0) {
+			pc = gp.syscallpc
+		}
 		n = gentraceback(pc, sp, lr, gp, 0, nil, _TracebackMaxFrames, nil, nil, flags|_TraceRuntimeFrames)
 	}
 	if n == _TracebackMaxFrames {
