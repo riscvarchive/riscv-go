@@ -68,7 +68,7 @@ const (
 	_StackSystem = sys.GoosWindows*512*sys.PtrSize + sys.GoosPlan9*512 + sys.GoosDarwin*sys.GoarchArm*1024
 
 	// The minimum size of stack used by Go code
-	_StackMin = 2048
+	_StackMin = 2048 + 131072*sys.GoarchRiscv // TODO(sorear): fixed 128 KiB stacks until morestack is implemented
 
 	// The minimum stack size to allocate.
 	// The hackery here rounds FixedStack0 up to a power of 2.

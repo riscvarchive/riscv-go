@@ -413,6 +413,10 @@ func printpanics(p *_panic) {
 // The implementation of the predeclared function panic.
 func gopanic(e interface{}) {
 	gp := getg()
+	if GOARCH == "riscv" {
+		str, _ := e.(string)
+		throw(str) // FIXME reflectcall not yet implemented
+	}
 	if gp.m.curg != gp {
 		print("panic: ")
 		printany(e)
