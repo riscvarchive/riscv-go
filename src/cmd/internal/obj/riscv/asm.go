@@ -401,7 +401,7 @@ func loadImmIntoRegTmp(ctxt *obj.Link, p *obj.Prog, low, high int64) *obj.Prog {
 	p.Spadj = 0 // needed if TO is SP
 	p = obj.Appendp(ctxt, p)
 
-	p.As = AADDI
+	p.As = AADDIW
 	p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: low}
 	p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
 	p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
@@ -612,7 +612,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: high}
 					p = obj.Appendp(ctxt, p)
 				}
-				p.As = AADDI
+				p.As = AADDIW
 				p.To = to
 				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: low}
 				p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
@@ -1338,6 +1338,7 @@ var encodingForAs = [...]encoding{
 
 	// 4.2: Integer Computational Instructions
 	AADDI & obj.AMask:  iIEncoding,
+	AADDIW & obj.AMask: iIEncoding,
 	ASLTI & obj.AMask:  iIEncoding,
 	ASLTIU & obj.AMask: iIEncoding,
 	AANDI & obj.AMask:  iIEncoding,
