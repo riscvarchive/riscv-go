@@ -474,6 +474,86 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		prologue.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
 	}
 
+	if cursym.Text.From3.Offset&obj.WRAPPER != 0 {
+		// if(g->panic != nil && g->panic->argp == FP) g->panic->argp = bottom-of-frame
+		//
+		//   MOV g_panic(g), A1
+		//   BNE A1, ZERO, adjust
+		// end:
+		//   NOP
+		// ...rest of function..
+		// adjust:
+		//   MOV panic_argp(A1), A2
+		//   ADD $(autosize+FIXED_FRAME), X2, A3
+		//   BNE A2, A3, end
+		//   ADD $FIXED_FRAME, X2, A2
+		//   MOV A2, panic_argp(A1)
+		//   JMP end
+		//
+		// The NOP is needed to give the jumps somewhere to land.
+		// It is a liblink NOP, not an mips NOP: it encodes to 0 instruction bytes.
+
+		ldpanic := obj.Appendp(ctxt, prologue)
+
+		ldpanic.As = AMOV
+		ldpanic.From = obj.Addr{Type: obj.TYPE_MEM, Reg: REGG, Offset: 4 * int64(ctxt.Arch.PtrSize)} // G.panic
+		ldpanic.From3 = &obj.Addr{}
+		ldpanic.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A1}
+
+		bneadj := obj.Appendp(ctxt, ldpanic)
+		bneadj.As = ABNE
+		bneadj.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A1}
+		bneadj.Reg = REG_ZERO
+		bneadj.To.Type = obj.TYPE_BRANCH
+
+		endadj := obj.Appendp(ctxt, bneadj)
+		endadj.As = obj.ANOP
+
+		last := endadj
+		for last.Link != nil {
+			last = last.Link
+		}
+
+		getargp := obj.Appendp(ctxt, last)
+		getargp.As = AMOV
+		getargp.From = obj.Addr{Type: obj.TYPE_MEM, Reg: REG_A1, Offset: 0} // Panic.argp
+		getargp.From3 = &obj.Addr{}
+		getargp.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A2}
+
+		bneadj.Pcond = getargp
+
+		calcargp := obj.Appendp(ctxt, getargp)
+		calcargp.As = AADDI
+		calcargp.From = obj.Addr{Type: obj.TYPE_CONST, Offset: stacksize + ctxt.FixedFrameSize()}
+		calcargp.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_SP}
+		calcargp.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A3}
+
+		testargp := obj.Appendp(ctxt, calcargp)
+		testargp.As = ABNE
+		testargp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A2}
+		testargp.Reg = REG_A3
+		testargp.To.Type = obj.TYPE_BRANCH
+		testargp.Pcond = endadj
+
+		adjargp := obj.Appendp(ctxt, testargp)
+		adjargp.As = AADDI
+		adjargp.From = obj.Addr{Type: obj.TYPE_CONST, Offset: int64(ctxt.Arch.PtrSize)}
+		adjargp.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_X2}
+		adjargp.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A2}
+
+		setargp := obj.Appendp(ctxt, adjargp)
+		setargp.As = AMOV
+		setargp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_A2}
+		setargp.From3 = &obj.Addr{}
+		setargp.To = obj.Addr{Type: obj.TYPE_MEM, Reg: REG_A1, Offset: 0} // Panic.argp
+
+		godone := obj.Appendp(ctxt, setargp)
+		godone.As = AJAL
+		godone.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+		godone.To.Type = obj.TYPE_BRANCH
+		godone.Pcond = endadj
+	}
+
 	// Update stack-based offsets.
 	for p := cursym.Text; p != nil; p = p.Link {
 		stackOffset(&p.From, stacksize)
