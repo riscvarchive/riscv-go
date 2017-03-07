@@ -17740,6 +17740,7 @@ var opcodeTable = [...]opInfo{
 		name:    "CALLstatic",
 		auxType: auxSymOff,
 		argLen:  1,
+		call:    true,
 		reg: regInfo{
 			clobbers: 9223372035781033980, // GP g T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 FT0 FT1 FT2 FT3 FT4 FT5 FT6 FT7 FS0 FS1 FA0 FA1 FA2 FA3 FA4 FA5 FA6 FA7 FS2 FS3 FS4 FS5 FS6 FS7 FS8 FS9 FS10 FS11 FT8 FT9 FT10 FT11
 		},
@@ -17748,6 +17749,7 @@ var opcodeTable = [...]opInfo{
 		name:    "CALLclosure",
 		auxType: auxInt64,
 		argLen:  3,
+		call:    true,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 524288},     // CTXT
@@ -17760,6 +17762,7 @@ var opcodeTable = [...]opInfo{
 		name:    "CALLdefer",
 		auxType: auxInt64,
 		argLen:  1,
+		call:    true,
 		reg: regInfo{
 			clobbers: 9223372035781033980, // GP g T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 FT0 FT1 FT2 FT3 FT4 FT5 FT6 FT7 FS0 FS1 FA0 FA1 FA2 FA3 FA4 FA5 FA6 FA7 FS2 FS3 FS4 FS5 FS6 FS7 FS8 FS9 FS10 FS11 FT8 FT9 FT10 FT11
 		},
@@ -17768,6 +17771,7 @@ var opcodeTable = [...]opInfo{
 		name:    "CALLgo",
 		auxType: auxInt64,
 		argLen:  1,
+		call:    true,
 		reg: regInfo{
 			clobbers: 9223372035781033980, // GP g T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 FT0 FT1 FT2 FT3 FT4 FT5 FT6 FT7 FS0 FS1 FA0 FA1 FA2 FA3 FA4 FA5 FA6 FA7 FS2 FS3 FS4 FS5 FS6 FS7 FS8 FS9 FS10 FS11 FT8 FT9 FT10 FT11
 		},
@@ -17776,6 +17780,7 @@ var opcodeTable = [...]opInfo{
 		name:    "CALLinter",
 		auxType: auxInt64,
 		argLen:  2,
+		call:    true,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 1073741812}, // GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
