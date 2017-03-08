@@ -117,7 +117,7 @@ TEXT ·AddUint64(SB),NOSPLIT,$0-24
 	MOV	delta+8(FP), A1
 	WORD	$0x04b5352f	// amoadd.d.aq a0,a1,(a0)
 	ADD	A0, A1
-	MOVW	A1, new+16(FP)
+	MOV	A1, new+16(FP)
 	RET
 
 TEXT ·AddUintptr(SB),NOSPLIT,$0-24
