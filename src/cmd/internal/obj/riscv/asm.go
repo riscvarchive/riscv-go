@@ -1038,25 +1038,30 @@ func regi(a obj.Addr) uint32 { return reg(a, REG_X0, REG_X31) }
 // regf extracts the float register from an Addr.
 func regf(a obj.Addr) uint32 { return reg(a, REG_F0, REG_F31) }
 
-func wantReg(p *obj.Prog, pos string, a obj.Addr, descr string, min int16, max int16) {
+func wantReg(p *obj.Prog, pos string, a *obj.Addr, descr string, min int16, max int16) {
+	if a == nil {
+		p.Ctxt.Diag("%v\texpected register in %s position but got nothing",
+			p, pos)
+		return
+	}
 	if a.Type != obj.TYPE_REG {
 		p.Ctxt.Diag("%v\texpected register in %s position but got %s",
-			p, pos, p.Ctxt.Dconv(&a))
+			p, pos, p.Ctxt.Dconv(a))
 		return
 	}
 	if a.Reg < min || max < a.Reg {
 		p.Ctxt.Diag("%v\texpected %s register in %s position but got non-%s register %s",
-			p, descr, pos, descr, p.Ctxt.Dconv(&a))
+			p, descr, pos, descr, p.Ctxt.Dconv(a))
 	}
 }
 
 // wantIntReg checks that a contains an integer register.
-func wantIntReg(p *obj.Prog, pos string, a obj.Addr) {
+func wantIntReg(p *obj.Prog, pos string, a *obj.Addr) {
 	wantReg(p, pos, a, "integer", REG_X0, REG_X31)
 }
 
 // wantFloatReg checks that a contains a floating-point register.
-func wantFloatReg(p *obj.Prog, pos string, a obj.Addr) {
+func wantFloatReg(p *obj.Prog, pos string, a *obj.Addr) {
 	wantReg(p, pos, a, "float", REG_F0, REG_F31)
 }
 
@@ -1096,36 +1101,36 @@ func wantEvenJumpOffset(p *obj.Prog) {
 }
 
 func validateRIII(p *obj.Prog) {
-	wantIntReg(p, "from", p.From)
-	wantIntReg(p, "from3", *p.From3)
-	wantIntReg(p, "to", p.To)
+	wantIntReg(p, "from", &p.From)
+	wantIntReg(p, "from3", p.From3)
+	wantIntReg(p, "to", &p.To)
 }
 
 func validateRFFF(p *obj.Prog) {
-	wantFloatReg(p, "from", p.From)
-	wantFloatReg(p, "from3", *p.From3)
-	wantFloatReg(p, "to", p.To)
+	wantFloatReg(p, "from", &p.From)
+	wantFloatReg(p, "from3", p.From3)
+	wantFloatReg(p, "to", &p.To)
 }
 
 func validateRFFI(p *obj.Prog) {
-	wantFloatReg(p, "from", p.From)
-	wantFloatReg(p, "from3", *p.From3)
-	wantIntReg(p, "to", p.To)
+	wantFloatReg(p, "from", &p.From)
+	wantFloatReg(p, "from3", p.From3)
+	wantIntReg(p, "to", &p.To)
 }
 
 func validateRFI(p *obj.Prog) {
-	wantFloatReg(p, "from", p.From)
-	wantIntReg(p, "to", p.To)
+	wantFloatReg(p, "from", &p.From)
+	wantIntReg(p, "to", &p.To)
 }
 
 func validateRIF(p *obj.Prog) {
-	wantIntReg(p, "from", p.From)
-	wantFloatReg(p, "to", p.To)
+	wantIntReg(p, "from", &p.From)
+	wantFloatReg(p, "to", &p.To)
 }
 
 func validateRFF(p *obj.Prog) {
-	wantFloatReg(p, "from", p.From)
-	wantFloatReg(p, "to", p.To)
+	wantFloatReg(p, "from", &p.From)
+	wantFloatReg(p, "to", &p.To)
 }
 
 func encodeR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
@@ -1166,14 +1171,14 @@ func encodeRFF(p *obj.Prog) uint32 {
 
 func validateII(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
-	wantIntReg(p, "from3", *p.From3)
-	wantIntReg(p, "to", p.To)
+	wantIntReg(p, "from3", p.From3)
+	wantIntReg(p, "to", &p.To)
 }
 
 func validateIF(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
-	wantIntReg(p, "from3", *p.From3)
-	wantFloatReg(p, "to", p.To)
+	wantIntReg(p, "from3", p.From3)
+	wantFloatReg(p, "to", &p.To)
 }
 
 func encodeI(p *obj.Prog, rd uint32) uint32 {
@@ -1197,14 +1202,14 @@ func encodeIF(p *obj.Prog) uint32 {
 
 func validateSI(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
-	wantIntReg(p, "from3", *p.From3)
-	wantIntReg(p, "to", p.To)
+	wantIntReg(p, "from3", p.From3)
+	wantIntReg(p, "to", &p.To)
 }
 
 func validateSF(p *obj.Prog) {
 	wantImm(p, "from", p.From, 12)
-	wantFloatReg(p, "from3", *p.From3)
-	wantIntReg(p, "to", p.To)
+	wantFloatReg(p, "from3", p.From3)
+	wantIntReg(p, "to", &p.To)
 }
 
 func EncodeSImmediate(imm int64) (int64, error) {
@@ -1244,7 +1249,7 @@ func validateSB(p *obj.Prog) {
 	wantEvenJumpOffset(p)
 	wantImm(p, "to", p.To, 13)
 	// TODO: validate that the register from p.Reg is in range
-	wantIntReg(p, "from", p.From)
+	wantIntReg(p, "from", &p.From)
 }
 
 func encodeSB(p *obj.Prog) uint32 {
@@ -1267,7 +1272,7 @@ func encodeSB(p *obj.Prog) uint32 {
 
 func validateU(p *obj.Prog) {
 	wantImm(p, "from", p.From, 20)
-	wantIntReg(p, "to", p.To)
+	wantIntReg(p, "to", &p.To)
 }
 
 func encodeU(p *obj.Prog) uint32 {
@@ -1305,7 +1310,7 @@ func validateUJ(p *obj.Prog) {
 	// We implicitly drop the least significant bit in encodeUJ.
 	wantEvenJumpOffset(p)
 	wantImm(p, "to", p.To, 21)
-	wantIntReg(p, "from", p.From)
+	wantIntReg(p, "from", &p.From)
 }
 
 // encodeUJImmediate encodes a UJ-type immediate. imm must fit in 21-bits.
