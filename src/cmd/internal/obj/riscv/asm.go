@@ -335,6 +335,9 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 		// This instruction expects a zero (i.e., float register 0) to
 		// be the second input operand.
 		p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_F0}
+	case AFCVTWS, AFCVTLS, AFCVTWUS, AFCVTLUS, AFCVTWD, AFCVTLD, AFCVTWUD, AFCVTLUD:
+		// Set the rounding mode in funct3 to round to zero
+		p.Scond = 1
 	}
 }
 
@@ -1176,7 +1179,9 @@ func encodeR(p *obj.Prog, rs1 uint32, rs2 uint32, rd uint32) uint32 {
 		panic("encodeR: instruction uses rs2, but rs2 was nonzero")
 	}
 
-	return i.funct7<<25 | i.rs2<<20 | rs2<<20 | rs1<<15 | i.funct3<<12 | rd<<7 | i.opcode
+	// Using Scond for the floating-point rounding mode override
+	// TODO(sorear) is there a more appropriate way to handle opcode extension bits like this?
+	return i.funct7<<25 | i.rs2<<20 | rs2<<20 | rs1<<15 | i.funct3<<12 | uint32(p.Scond)<<12 | rd<<7 | i.opcode
 }
 
 func encodeRIII(p *obj.Prog) uint32 {
