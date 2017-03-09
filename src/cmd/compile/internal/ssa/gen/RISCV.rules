@@ -392,6 +392,7 @@
 (Not  x)   -> (XORI [1] x)
 
 // TODO: Special handling for SP offsets, like ARM
+(OffPtr [off] ptr:(SP)) -> (MOVaddr [off] ptr)
 (OffPtr [off] ptr) -> (ADDI [off] ptr)
 
 (Const8 [val]) -> (MOVBconst [val])

@@ -110,7 +110,7 @@ func init() {
 		{name: "REMW", argLength: 2, reg: gp21, asm: "REMW", typ: "Int32"},
 		{name: "REMUW", argLength: 2, reg: gp21, asm: "REMUW", typ: "UInt32"},
 
-		{name: "MOVaddr", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff"}, // arg0 + auxint + offset encoded in aux
+		{name: "MOVaddr", argLength: 1, reg: gp11sb, asm: "MOV", aux: "SymOff", rematerializeable: true}, // arg0 + auxint + offset encoded in aux
 		// auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
 
 		{name: "MOVBconst", reg: gp01, asm: "MOV", typ: "UInt8", aux: "Int8", rematerializeable: true},    // 8 low bits of auxint

@@ -3455,6 +3455,20 @@ func rewriteValueRISCV_OpNot(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpOffPtr(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
+	// match: (OffPtr [off] ptr:(SP))
+	// cond:
+	// result: (MOVaddr [off] ptr)
+	for {
+		off := v.AuxInt
+		ptr := v.Args[0]
+		if ptr.Op != OpSP {
+			break
+		}
+		v.reset(OpRISCVMOVaddr)
+		v.AuxInt = off
+		v.AddArg(ptr)
+		return true
+	}
 	// match: (OffPtr [off] ptr)
 	// cond:
 	// result: (ADDI [off] ptr)

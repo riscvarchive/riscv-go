@@ -736,6 +736,12 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					p.From3.Type = obj.TYPE_REG
 					p.From.Type = obj.TYPE_CONST
 					p.From3.Reg = REG_SP
+				case obj.NAME_NONE:
+					p.As = AADDI
+					p.From3.Type = obj.TYPE_REG
+					p.From3.Reg = p.From.Reg
+					p.From.Type = obj.TYPE_CONST
+					p.From.Reg = 0
 				default:
 					ctxt.Diag("progedit: bad addr MOV from name %v at %v", p.From.Name, p)
 				}
