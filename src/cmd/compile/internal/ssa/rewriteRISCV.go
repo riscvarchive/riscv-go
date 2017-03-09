@@ -1236,16 +1236,15 @@ func rewriteValueRISCV_OpDiv8u(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpEq16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Eq16  <t> x y)
+	// match: (Eq16  x y)
 	// cond:
-	// result: (SEQZ (ZeroExt16to64 (SUB <t> x y)))
+	// result: (SEQZ (ZeroExt16to64 (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSEQZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt16to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -1256,16 +1255,15 @@ func rewriteValueRISCV_OpEq16(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpEq32(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Eq32  <t> x y)
+	// match: (Eq32  x y)
 	// cond:
-	// result: (SEQZ (ZeroExt32to64 (SUB <t> x y)))
+	// result: (SEQZ (ZeroExt32to64 (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSEQZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt32to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -1291,15 +1289,14 @@ func rewriteValueRISCV_OpEq32F(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpEq64(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Eq64  <t> x y)
+	// match: (Eq64  x y)
 	// cond:
-	// result: (SEQZ (SUB <t> x y))
+	// result: (SEQZ (SUB <x.Type> x y))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSEQZ)
-		v0 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v0 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v0.AddArg(x)
 		v0.AddArg(y)
 		v.AddArg(v0)
@@ -1324,16 +1321,15 @@ func rewriteValueRISCV_OpEq64F(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpEq8(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Eq8   <t> x y)
+	// match: (Eq8   x y)
 	// cond:
-	// result: (SEQZ (ZeroExt8to64  (SUB <t> x y)))
+	// result: (SEQZ (ZeroExt8to64  (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSEQZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt8to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -1359,15 +1355,14 @@ func rewriteValueRISCV_OpEqB(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpEqPtr(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (EqPtr <t> x y)
+	// match: (EqPtr x y)
 	// cond:
-	// result: (SEQZ (SUB <t> x y))
+	// result: (SEQZ (SUB <x.Type> x y))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSEQZ)
-		v0 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v0 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v0.AddArg(x)
 		v0.AddArg(y)
 		v.AddArg(v0)
@@ -3283,16 +3278,15 @@ func rewriteValueRISCV_OpNeg8(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Neq16  <t> x y)
+	// match: (Neq16  x y)
 	// cond:
-	// result: (SNEZ (ZeroExt16to64 (SUB <t> x y)))
+	// result: (SNEZ (ZeroExt16to64 (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSNEZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt16to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -3303,16 +3297,15 @@ func rewriteValueRISCV_OpNeq16(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpNeq32(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Neq32  <t> x y)
+	// match: (Neq32  x y)
 	// cond:
-	// result: (SNEZ (ZeroExt32to64 (SUB <t> x y)))
+	// result: (SNEZ (ZeroExt32to64 (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSNEZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt32to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -3338,15 +3331,14 @@ func rewriteValueRISCV_OpNeq32F(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpNeq64(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Neq64  <t> x y)
+	// match: (Neq64  x y)
 	// cond:
-	// result: (SNEZ (SUB <t> x y))
+	// result: (SNEZ (SUB <x.Type> x y))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSNEZ)
-		v0 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v0 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v0.AddArg(x)
 		v0.AddArg(y)
 		v.AddArg(v0)
@@ -3371,16 +3363,15 @@ func rewriteValueRISCV_OpNeq64F(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpNeq8(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (Neq8   <t> x y)
+	// match: (Neq8   x y)
 	// cond:
-	// result: (SNEZ (ZeroExt8to64  (SUB <t> x y)))
+	// result: (SNEZ (ZeroExt8to64  (SUB <x.Type> x y)))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSNEZ)
 		v0 := b.NewValue0(v.Pos, OpZeroExt8to64, config.fe.TypeUInt64())
-		v1 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v1 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v1.AddArg(x)
 		v1.AddArg(y)
 		v0.AddArg(v1)
@@ -3406,15 +3397,14 @@ func rewriteValueRISCV_OpNeqB(v *Value, config *Config) bool {
 func rewriteValueRISCV_OpNeqPtr(v *Value, config *Config) bool {
 	b := v.Block
 	_ = b
-	// match: (NeqPtr <t> x y)
+	// match: (NeqPtr x y)
 	// cond:
-	// result: (SNEZ (SUB <t> x y))
+	// result: (SNEZ (SUB <x.Type> x y))
 	for {
-		t := v.Type
 		x := v.Args[0]
 		y := v.Args[1]
 		v.reset(OpRISCVSNEZ)
-		v0 := b.NewValue0(v.Pos, OpRISCVSUB, t)
+		v0 := b.NewValue0(v.Pos, OpRISCVSUB, x.Type)
 		v0.AddArg(x)
 		v0.AddArg(y)
 		v.AddArg(v0)
