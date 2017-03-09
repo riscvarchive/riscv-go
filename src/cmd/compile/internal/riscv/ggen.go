@@ -71,8 +71,13 @@ func zerorange(p *obj.Prog, frame int64, lo int64, hi int64) *obj.Prog {
 	// 	MOVB	ZERO, (T0)
 	// 	ADD	$1, T0
 	//	BNE	T0, T1, loop
+
+	// lo is an offset relative to the frame pointer, which we can't use from this function,
+	// but adding the true frame size makes it into an offset from the stack pointer.  frame
+	// is the local variable size, get the true frame pointer by adding the size of the saved
+	// return address.
 	p = appendpp(p, riscv.AADD,
-		obj.Addr{Type: obj.TYPE_CONST, Offset: frame + lo},
+		obj.Addr{Type: obj.TYPE_CONST, Offset: int64(gc.Widthptr) + frame + lo},
 		&obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_SP},
 		obj.Addr{Type: obj.TYPE_REG, Reg: riscv.REG_T0},
 		0)
