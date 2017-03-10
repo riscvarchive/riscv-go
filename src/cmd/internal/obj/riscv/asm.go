@@ -1305,6 +1305,13 @@ func encodeSB(p *obj.Prog) uint32 {
 }
 
 func validateU(p *obj.Prog) {
+	if p.As == AAUIPC && p.Mark&(NEED_PCREL_ITYPE_RELOC|NEED_PCREL_STYPE_RELOC) != 0 {
+		// TODO(sorear): Hack.  The Offset is being used here to temporarily
+		// store the relocation addend, not as an actual offset to assemble,
+		// so it's OK for it to be out of range.  Is there a more valid way
+		// to represent this state?
+		return
+	}
 	wantImm(p, "from", p.From, 20)
 	wantIntReg(p, "to", &p.To)
 }
@@ -1644,6 +1651,7 @@ func assemble(ctxt *obj.Link, cursym *obj.LSym) {
 			rel.Siz = 8
 			rel.Sym = p.From.Sym
 			rel.Add = p.From.Offset
+			p.From.Offset = 0 // relocation offset can be larger than the maximum size of an auipc, so don't accidentally assemble it
 			rel.Type = t
 		}
 
