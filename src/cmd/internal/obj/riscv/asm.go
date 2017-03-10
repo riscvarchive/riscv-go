@@ -913,41 +913,60 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 		}
 	}
 
-	// Expand each long branch into a short branch and a jump.  This is a
-	// fairly inefficient algorithm in theory, but it's only pathological
-	// when there are a large quantity of long branches, which is unusual.
-	setpcs(cursym.Text, 0)
-	for p := cursym.Text; p != nil; {
-		switch p.As {
-		case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
-			if p.To.Type != obj.TYPE_BRANCH {
-				panic("assemble: instruction with branch-like opcode lacks destination")
-				p = p.Link
-				continue
-			}
-			offset := p.Pcond.Pc - p.Pc
-			if offset < -4096 || 4096 <= offset {
-				// Branch is long.  Replace it with a jump.
-				jmp := obj.Appendp(ctxt, p)
-				jmp.As = AJAL
-				jmp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
-				jmp.To = obj.Addr{Type: obj.TYPE_BRANCH}
-				jmp.Pcond = p.Pcond
+	// Compute instruction addresses.  Once we do that, we need to check for
+	// overextended jumps and branches.  Within each iteration, Pc differences
+	// are always lower bounds (since the program gets monotonically longer,
+	// a fixed point will be reached).  No attempt to handle functions > 2GiB.
+	for {
+		rescan := false
+		setpcs(cursym.Text, 0)
+		for p := cursym.Text; p != nil; p = p.Link {
+			switch p.As {
+			case ABEQ, ABNE, ABLT, ABGE, ABLTU, ABGEU:
+				if p.To.Type != obj.TYPE_BRANCH {
+					panic("assemble: instruction with branch-like opcode lacks destination")
+				}
+				offset := p.Pcond.Pc - p.Pc
+				if offset < -4096 || 4096 <= offset {
+					// Branch is long.  Replace it with a jump.
+					jmp := obj.Appendp(ctxt, p)
+					jmp.As = AJAL
+					jmp.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+					jmp.To = obj.Addr{Type: obj.TYPE_BRANCH}
+					jmp.Pcond = p.Pcond
 
-				p.As = InvertBranch(p.As)
-				p.Pcond = jmp.Link
-				// All future PCs are now invalid, so recompute
-				// them.
-				setpcs(jmp, p.Pc+4)
-				// We may have made previous branches too long,
-				// so recheck them.
-				p = cursym.Text
-			} else {
-				// Branch is short.  No big deal.
-				p = p.Link
+					p.As = InvertBranch(p.As)
+					p.Pcond = jmp.Link
+					// We may have made previous branches too long,
+					// so recheck them.
+					rescan = true
+				}
+			case AJAL:
+				if p.Pcond == nil {
+					panic("intersymbol jumps should be expressed as AUIPC+JALR")
+				}
+				offset := p.Pcond.Pc - p.Pc
+				if offset < -(1<<20) || (1<<20) <= offset {
+					// Replace with 2-instruction sequence
+					jmp := obj.Appendp(ctxt, p)
+					jmp.As = AJALR
+					jmp.From = obj.Addr{Type: obj.TYPE_CONST, Offset: 0}
+					jmp.To = p.From
+					jmp.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+					// Assuming TMP is not live across J instructions, since it's reserved by SSA that should be OK
+
+					p.As = AAUIPC
+					p.From = obj.Addr{Type: obj.TYPE_BRANCH} // not generally valid, fixed up in the next loop
+					p.From3 = &obj.Addr{}
+					p.To = obj.Addr{Type: obj.TYPE_REG, Reg: REG_TMP}
+
+					rescan = true
+				}
 			}
-		default:
-			p = p.Link
+		}
+
+		if !rescan {
+			break
 		}
 	}
 
@@ -963,6 +982,15 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 				p.To.Offset = p.Pcond.Pc - p.Pc
 			case obj.TYPE_MEM:
 				panic("unhandled type")
+			}
+		case AAUIPC:
+			if p.From.Type == obj.TYPE_BRANCH {
+				low, high, err := Split32BitImmediate(p.Pcond.Pc - p.Pc)
+				if err != nil {
+					ctxt.Diag("%v: jump displacement %d too large", p, p.Pcond.Pc-p.Pc)
+				}
+				p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: high}
+				p.Link.From.Offset = low
 			}
 		}
 	}
