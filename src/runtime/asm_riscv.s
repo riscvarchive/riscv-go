@@ -360,9 +360,23 @@ TEXT runtime·gosave(SB), NOSPLIT, $-8-8
 TEXT ·asmcgocall(SB),NOSPLIT,$0-12
 	WORD $0
 
+// redirects to memhash(p, h, size) using the size
+// stored in the closure.
+
 // func memhash_varlen(p unsafe.Pointer, h uintptr) uintptr
 TEXT runtime·memhash_varlen(SB),NOSPLIT,$40-24
-	WORD $0
+	GO_ARGS
+	NO_LOCAL_POINTERS
+	MOV	p+0(FP), A1
+	MOV	h+8(FP), A2
+	MOV	8(CTXT), A3
+	MOV	A1, 8(X2)
+	MOV	A2, 16(X2)
+	MOV	A3, 24(X2)
+	CALL	runtime·memhash(SB)
+	MOV	32(X2), A1
+	MOV	A1, ret+16(FP)
+	RET
 
 // func asminit()
 TEXT runtime·asminit(SB),NOSPLIT,$-8-0
