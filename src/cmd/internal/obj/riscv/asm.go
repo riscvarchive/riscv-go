@@ -380,7 +380,7 @@ func containsCall(sym *obj.LSym) bool {
 		case obj.ACALL:
 			return true
 		case AJAL, AJALR:
-			if p.From.Type == obj.TYPE_REG && p.From.Reg == REG_RA {
+			if p.To.Type == obj.TYPE_REG && p.To.Reg == REG_RA {
 				return true
 			}
 		}
