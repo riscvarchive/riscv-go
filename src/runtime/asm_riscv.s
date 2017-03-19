@@ -560,11 +560,34 @@ notfound:
 	MOV	A1, ret+24(FP)
 	RET
 
+// TODO: share code with memequal?
 // func Equal(a, b []byte) bool
-TEXT bytes·Equal(SB),NOSPLIT,$0-25
-	WORD $0
+TEXT bytes·Equal(SB),NOSPLIT,$0-49
+	MOV	a_len+8(FP), A3
+	MOV	b_len+32(FP), A4
+	BNE	A3, A4, noteq		// unequal lengths are not equal
 
-// func stackBarrier()
+	MOV	a+0(FP), A1
+	MOV	b+24(FP), A2
+	ADD	A1, A3		// end
+
+loop:
+	BEQ	A1, A3, equal		// reached the end
+	MOVBU	(A1), A6
+	ADD	$1, A1
+	MOVBU	(A2), A7
+	ADD	$1, A2
+	BEQ	A6, A7, loop
+
+noteq:
+	MOVB	ZERO, ret+48(FP)
+	RET
+
+equal:
+	MOV	$1, A1
+	MOVB	A1, ret+48(FP)
+	RET
+
 TEXT runtime·stackBarrier(SB),NOSPLIT,$0
 	WORD $0
 
