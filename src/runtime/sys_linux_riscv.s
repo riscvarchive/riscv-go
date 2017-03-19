@@ -9,21 +9,42 @@
 #include "textflag.h"
 #include "go_asm.h"
 
+#define AT_FDCWD -100
+
 #define SYS_clock_gettime	113
 #define SYS_clone		220
+#define SYS_close		57
+#define SYS_connect		203
+#define SYS_epoll_create1	20
+#define SYS_epoll_ctl		21
+#define SYS_epoll_pwait		22
+#define SYS_exit		93
 #define SYS_exit_group		94
+#define SYS_faccessat		48
+#define SYS_fcntl		25
 #define SYS_futex		98
+#define SYS_getpid		172
+#define SYS_getrlimit		163
 #define SYS_gettid		178
+#define SYS_gettimeofday	169
+#define SYS_kill		129
 #define SYS_madvise		233
 #define SYS_mincore		232
 #define SYS_mmap		222
 #define SYS_munmap		215
 #define SYS_nanosleep		101
+#define SYS_openat		56
+#define SYS_pselect6		72
+#define SYS_read		63
 #define SYS_rt_sigaction	134
 #define SYS_rt_sigprocmask	135
+#define SYS_rt_sigreturn	139
 #define SYS_sched_getaffinity	123
 #define SYS_sched_yield		124
+#define SYS_setitimer		103
 #define SYS_sigaltstack		132
+#define SYS_socket		198
+#define SYS_tkill		130
 #define SYS_write		64
 
 #define ERR_ABORT \
@@ -71,11 +92,22 @@ TEXT runtime·exit(SB),NOSPLIT,$-8-4
 
 // func open(name *byte, mode, perm int32) int32
 TEXT runtime·open(SB),NOSPLIT,$-8-20
-	WORD $0
+	MOV	$AT_FDCWD, A0
+	MOV	name+0(FP), A1
+	MOVW	mode+8(FP), A2
+	MOVW	perm+12(FP), A3
+	MOV	$SYS_openat, A7
+	ECALL
+	ERR_RETURN_M1(ret+16)
+	RET
 
 // func closefd(fd int32) int32
 TEXT runtime·closefd(SB),NOSPLIT,$-8-12
-	WORD $0
+	MOVW	fd+0(FP), A0
+	MOV	$SYS_close, A7
+	ECALL
+	ERR_RETURN_M1(ret+8)
+	RET
 
 // func write(fd uintptr, p unsafe.Pointer, n int32) int32
 TEXT runtime·write(SB),NOSPLIT,$-8-28
@@ -89,11 +121,22 @@ TEXT runtime·write(SB),NOSPLIT,$-8-28
 
 // func read(fd int32, p unsafe.Pointer, n int32) int32
 TEXT runtime·read(SB),NOSPLIT,$-8-28
-	WORD $0
+	MOVW	fd+0(FP), A0
+	MOV	p+8(FP), A1
+	MOVW	n+16(FP), A2
+	MOV	$SYS_read, A7
+	ECALL
+	ERR_RETURN_M1(ret+24)
+	RET
 
 // func getrlimit(kind int32, limit unsafe.Pointer) int32
 TEXT runtime·getrlimit(SB),NOSPLIT,$-8-20
-	WORD $0
+	MOVW	kind+0(FP), A0
+	MOV	limit+8(FP), A1
+	MOV	$SYS_getrlimit, A7
+	ECALL
+	MOVW	A0, ret+16(FP)
+	RET
 
 // func usleep(usec uint32)
 TEXT runtime·usleep(SB),NOSPLIT,$24-4
@@ -120,15 +163,32 @@ TEXT runtime·gettid(SB),NOSPLIT,$0-4
 
 // func raise(sig uint32)
 TEXT runtime·raise(SB),NOSPLIT,$-8
-	WORD $0
+	MOV	$SYS_gettid, A7
+	ECALL
+	// MOVW	A0, A0	// arg 1 tid
+	MOVW	sig+0(FP), A1	// arg 2
+	MOV	$SYS_tkill, A7
+	ECALL
+	RET
 
 // func raiseproc(sig uint32)
 TEXT runtime·raiseproc(SB),NOSPLIT,$-8
-	WORD $0
+	MOV	$SYS_getpid, A7
+	ECALL
+	// MOVW	A0, A0		// arg 1 pid
+	MOVW	sig+0(FP), A1	// arg 2
+	MOV	$SYS_kill, A7
+	ECALL
+	RET
 
 // func setitimer(mode int32, new, old *itimerval)
 TEXT runtime·setitimer(SB),NOSPLIT,$-8-24
-	WORD $0
+	MOVW	mode+0(FP), A0
+	MOV	new+8(FP), A1
+	MOV	old+16(FP), A2
+	MOV	$SYS_setitimer, A7
+	ECALL
+	RET
 
 // func mincore(addr unsafe.Pointer, n uintptr, dst *byte) int32
 TEXT runtime·mincore(SB),NOSPLIT,$-8-28
@@ -192,7 +252,12 @@ TEXT runtime·rt_sigaction(SB),NOSPLIT,$-8-36
 
 // func sigfwd(fn uintptr, sig uint32, info *siginfo, ctx unsafe.Pointer)
 TEXT runtime·sigfwd(SB),NOSPLIT,$0-32
-	WORD $0
+	MOVW	sig+8(FP), A0
+	MOV	info+16(FP), A1
+	MOV	ctx+24(FP), A2
+	MOV	fn+0(FP), T1
+	JALR	RA, T1
+	RET
 
 // func sigtramp(ureg, note unsafe.Pointer)
 TEXT runtime·sigtramp(SB),NOSPLIT,$24
@@ -212,7 +277,8 @@ TEXT runtime·sigtramp(SB),NOSPLIT,$24
 
 // func cgoSigtramp()
 TEXT runtime·cgoSigtramp(SB),NOSPLIT,$0
-	WORD $0
+	MOV	$runtime·sigtramp(SB), T1
+	JALR	ZERO, T1
 
 // func mmap(addr unsafe.Pointer, n uintptr, prot, flags, fd int32, off uint32) unsafe.Pointer
 TEXT runtime·mmap(SB),NOSPLIT,$-8
@@ -238,7 +304,13 @@ TEXT runtime·munmap(SB),NOSPLIT,$-8
 
 // func madvise(addr unsafe.Pointer, n uintptr, flags int32) {}
 TEXT runtime·madvise(SB),NOSPLIT,$-8
-	WORD $0
+	MOV	addr+0(FP), A0
+	MOV	n+8(FP), A1
+	MOVW	flags+16(FP), A2
+	MOV	$SYS_madvise, A7
+	ECALL
+	// ignore failure - maybe pages are locked
+	RET
 
 // func futex(addr unsafe.Pointer, op int32, val uint32, ts, addr2 unsafe.Pointer, val3 uint32) int32
 TEXT runtime·futex(SB),NOSPLIT,$-8
@@ -334,20 +406,48 @@ TEXT runtime·sched_getaffinity(SB),NOSPLIT,$-8
 
 // func epollcreate(size int32) int32
 TEXT runtime·epollcreate(SB),NOSPLIT,$-8
-	WORD $0
+	MOV	$0, A0
+	MOV	$SYS_epoll_create1, A7
+	ECALL
+	MOVW	A0, ret+8(FP)
+	RET
 
 // func epollcreate1(flags int32) int32
 TEXT runtime·epollcreate1(SB),NOSPLIT,$-8
-	WORD $0
+	MOVW	flags+0(FP), A0
+	MOV	$SYS_epoll_create1, A7
+	ECALL
+	MOVW	A0, ret+8(FP)
+	RET
 
 // func epollctl(epfd, op, fd int32, ev *epollevent) int32
 TEXT runtime·epollctl(SB),NOSPLIT,$-8
-	WORD $0
+	MOVW	epfd+0(FP), A0
+	MOVW	op+4(FP), A1
+	MOVW	fd+8(FP), A2
+	MOV	ev+16(FP), A3
+	MOV	$SYS_epoll_ctl, A7
+	ECALL
+	MOVW	A0, ret+24(FP)
+	RET
 
 // func epollwait(epfd int32, ev *epollevent, nev, timeout int32) int32
 TEXT runtime·epollwait(SB),NOSPLIT,$-8
-	WORD $0
+	MOVW	epfd+0(FP), A0
+	MOV	ev+8(FP), A1
+	MOVW	nev+16(FP), A2
+	MOVW	timeout+20(FP), A3
+	MOV	$0, A4
+	MOV	$SYS_epoll_pwait, A7
+	ECALL
+	MOVW	A0, ret+24(FP)
+	RET
 
 // func closeonexec(int32)                                   {}
 TEXT runtime·closeonexec(SB),NOSPLIT,$-8
-	WORD $0
+	MOVW	fd+0(FP), A0  // fd
+	MOV	$2, A1	// F_SETFD
+	MOV	$1, A2	// FD_CLOEXEC
+	MOV	$SYS_fcntl, A7
+	ECALL
+	RET
