@@ -385,7 +385,17 @@ TEXT reflect·call(SB),NOSPLIT,$0-20
 
 // func setcallerpc(argp unsafe.Pointer, pc uintptr)
 TEXT runtime·setcallerpc(SB),NOSPLIT,$8-16
-	WORD $0
+	MOV	pc+8(FP), A1
+	MOV	16(X2), A2
+	MOV	runtime·stackBarrierPC(SB), A3
+	BEQ	A2, A3, setbar
+	MOV	A1, 16(X2)		// set LR in caller
+	RET
+setbar:
+	// Set the stack barrier return PC.
+	MOV	A1, 8(X2)
+	CALL	runtime·setNextBarrierPC(SB)
+	RET
 
 // func IndexByte(s []byte, c byte) int
 TEXT bytes·IndexByte(SB),NOSPLIT,$0-40
