@@ -4,11 +4,9 @@
 
 #include "textflag.h"
 
-TEXT _rt0_riscv_linux(SB),NOSPLIT,$0
-	MOV	0(X2), A0	// argc
-	ADD	$8, X2, A1	// argv
-	JMP	main(SB)
+#define FENCE WORD $0x0ff0000f
 
-TEXT main(SB),NOSPLIT,$0
-	MOV	$runtime·rt0_go(SB), T0
-	JALR	ZERO, T0
+// func publicationBarrier()
+TEXT ·publicationBarrier(SB),NOSPLIT,$-8-0
+	FENCE
+	RET
