@@ -253,8 +253,20 @@ nilctxt:
 	JALR	ZERO, T0
 
 // func jmpdefer(fv *funcval, argp uintptr)
-TEXT runtime·jmpdefer(SB),NOSPLIT,$0-8
-	WORD $0
+// called from deferreturn
+// 1. grab stored return address from the caller's frame
+// 2. sub 12 bytes to get back to JAL deferreturn
+// 3. JMP to fn
+// TODO(sorear): There are shorter jump sequences.  This function will need to be updated when we use them.
+TEXT runtime·jmpdefer(SB), NOFRAME|NOSPLIT, $0-16 // FIXME NOFRAME might be an asm bug
+	MOV	0(X2), RA
+	ADD	$-12, RA
+
+	MOV	fv+0(FP), CTXT
+	MOV	argp+8(FP), X2
+	ADD	$-8, X2
+	MOV	0(CTXT), T0
+	JALR	ZERO, T0
 
 // func procyield(cycles uint32)
 TEXT runtime·procyield(SB),NOSPLIT,$0-0
