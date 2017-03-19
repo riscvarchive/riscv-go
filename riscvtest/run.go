@@ -32,7 +32,7 @@ var tests = [...]struct {
 	{name: "bits"},
 	{name: "ext"},
 	{name: "bool"},
-	{name: "nilcheck", want: 255}, // intentionally faults
+	{name: "nilcheck", want: -1}, // intentionally faults
 	{name: "com"},
 	{name: "left_shift"},
 	{name: "right_shift"},
@@ -50,14 +50,10 @@ var tests = [...]struct {
 
 func runriscv(exe string) *exec.Cmd {
 	qemu, err := exec.LookPath("qemu-riscv64")
-	if err == nil {
-		return exec.Command(qemu, exe)
-	}
-	spike, err := exec.LookPath("spike")
 	if err != nil {
 		log.Fatal(err)
 	}
-	return exec.Command(spike, "pk", exe)
+	return exec.Command(qemu, exe)
 }
 
 func main() {
@@ -67,11 +63,19 @@ func main() {
 		log.Fatalf("unable to get working directory: %v", err)
 	}
 
+	cmd := exec.Command("go", "install", "os")
+	cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=riscv")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("runtime precompilation failed:\n%s\n", out)
+		os.Exit(1)
+	}
+
 	tmp := filepath.Join(cwd, "tmp")
 	defer os.Remove(tmp)
 	for _, test := range tests {
 		// build
-		cmd := exec.Command("go", "build", "-ldflags", "-E main.main", "-o", tmp)
+		cmd := exec.Command("go", "build", "-o", tmp)
 		cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=riscv")
 		if test.dir {
 			// Build everything in directory.
@@ -106,10 +110,7 @@ func main() {
 		}
 		ws := ee.ProcessState.Sys().(syscall.WaitStatus)
 		rc := ws.ExitStatus()
-		if rc < 0 {
-			rc = 255 // Harmonize fault exits between qemu and spike
-		}
-		if rc != test.want {
+		if test.want >= 0 && rc != test.want {
 			fmt.Printf("rc(%q)=%d, want %d\n", test.name, rc, test.want)
 			failed = true
 			continue
