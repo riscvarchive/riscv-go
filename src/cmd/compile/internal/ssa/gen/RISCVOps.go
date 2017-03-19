@@ -120,19 +120,19 @@ func init() {
 		{name: "MOVSconst", reg: gp01, asm: "MOV", typ: "Float32", aux: "Int32", rematerializeable: true}, // auxint as float
 
 		// Loads: load <size> bits from arg0+auxint+aux and extend to 64 bits; arg1=mem
-		{name: "MOVBload", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff", typ: "Int8"},     //  8 bits, sign extend
-		{name: "MOVHload", argLength: 2, reg: gpload, asm: "MOVH", aux: "SymOff", typ: "Int16"},    // 16 bits, sign extend
-		{name: "MOVWload", argLength: 2, reg: gpload, asm: "MOVW", aux: "SymOff", typ: "Int32"},    // 32 bits, sign extend
-		{name: "MOVDload", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff", typ: "Int64"},     // 64 bits
-		{name: "MOVBUload", argLength: 2, reg: gpload, asm: "MOVBU", aux: "SymOff", typ: "UInt8"},  //  8 bits, zero extend
-		{name: "MOVHUload", argLength: 2, reg: gpload, asm: "MOVHU", aux: "SymOff", typ: "UInt16"}, // 16 bits, zero extend
-		{name: "MOVWUload", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff", typ: "UInt32"}, // 32 bits, zero extend
+		{name: "MOVBload", argLength: 2, reg: gpload, asm: "MOVB", aux: "SymOff", typ: "Int8", faultOnNilArg0: true},     //  8 bits, sign extend
+		{name: "MOVHload", argLength: 2, reg: gpload, asm: "MOVH", aux: "SymOff", typ: "Int16", faultOnNilArg0: true},    // 16 bits, sign extend
+		{name: "MOVWload", argLength: 2, reg: gpload, asm: "MOVW", aux: "SymOff", typ: "Int32", faultOnNilArg0: true},    // 32 bits, sign extend
+		{name: "MOVDload", argLength: 2, reg: gpload, asm: "MOV", aux: "SymOff", typ: "Int64", faultOnNilArg0: true},     // 64 bits
+		{name: "MOVBUload", argLength: 2, reg: gpload, asm: "MOVBU", aux: "SymOff", typ: "UInt8", faultOnNilArg0: true},  //  8 bits, zero extend
+		{name: "MOVHUload", argLength: 2, reg: gpload, asm: "MOVHU", aux: "SymOff", typ: "UInt16", faultOnNilArg0: true}, // 16 bits, zero extend
+		{name: "MOVWUload", argLength: 2, reg: gpload, asm: "MOVWU", aux: "SymOff", typ: "UInt32", faultOnNilArg0: true}, // 32 bits, zero extend
 
 		// Stores: store <size> lowest bits in arg1 to arg0+auxint+aux; arg2=mem
-		{name: "MOVBstore", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem"}, //  8 bits
-		{name: "MOVHstore", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem"}, // 16 bits
-		{name: "MOVWstore", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem"}, // 32 bits
-		{name: "MOVDstore", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem"},  // 64 bits
+		{name: "MOVBstore", argLength: 3, reg: gpstore, asm: "MOVB", aux: "SymOff", typ: "Mem", faultOnNilArg0: true}, //  8 bits
+		{name: "MOVHstore", argLength: 3, reg: gpstore, asm: "MOVH", aux: "SymOff", typ: "Mem", faultOnNilArg0: true}, // 16 bits
+		{name: "MOVWstore", argLength: 3, reg: gpstore, asm: "MOVW", aux: "SymOff", typ: "Mem", faultOnNilArg0: true}, // 32 bits
+		{name: "MOVDstore", argLength: 3, reg: gpstore, asm: "MOV", aux: "SymOff", typ: "Mem", faultOnNilArg0: true},  // 64 bits
 
 		// Shift ops
 		{name: "SLL", argLength: 2, reg: gp21, asm: "SLL"},                 // arg0 << aux1
@@ -221,48 +221,48 @@ func init() {
 		},
 
 		// Lowering pass-throughs
-		{name: "LoweredNilCheck", argLength: 2, reg: regInfo{inputs: []regMask{gpspMask}}}, // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
-		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},          // scheduler ensures only at beginning of entry block
+		{name: "LoweredNilCheck", argLength: 2, faultOnNilArg0: true, nilCheck: true, reg: regInfo{inputs: []regMask{gpspMask}}}, // arg0=ptr,arg1=mem, returns void.  Faults if ptr is nil.
+		{name: "LoweredGetClosurePtr", reg: regInfo{outputs: []regMask{regCtxt}}},                                                // scheduler ensures only at beginning of entry block
 
 		// F extension.
-		{name: "FADDS", argLength: 2, reg: fp21, asm: "FADDS", commutative: true, typ: "Float32"},  // arg0 + arg1
-		{name: "FSUBS", argLength: 2, reg: fp21, asm: "FSUBS", commutative: false, typ: "Float32"}, // arg0 - arg1
-		{name: "FMULS", argLength: 2, reg: fp21, asm: "FMULS", commutative: true, typ: "Float32"},  // arg0 * arg1
-		{name: "FDIVS", argLength: 2, reg: fp21, asm: "FDIVS", commutative: false, typ: "Float32"}, // arg0 / arg1
-		{name: "FSQRTS", argLength: 1, reg: fp11, asm: "FSQRTS", typ: "Float32"},                   // sqrt(arg0)
-		{name: "FNEGS", argLength: 1, reg: fp11, asm: "FNEGS", typ: "Float32"},                     // -arg0
-		{name: "FMVSX", argLength: 1, reg: gpfp, asm: "FMVSX", typ: "Float32"},                     // reinterpret arg0 as float
-		{name: "FCVTSW", argLength: 1, reg: gpfp, asm: "FCVTSW", typ: "Float32"},                   // float32(arg0)
-		{name: "FCVTSL", argLength: 1, reg: gpfp, asm: "FCVTSL", typ: "Float32"},                   // float32(arg0)
-		{name: "FCVTWS", argLength: 1, reg: fpgp, asm: "FCVTWS", typ: "Int32"},                     // int32(arg0)
-		{name: "FCVTLS", argLength: 1, reg: fpgp, asm: "FCVTLS", typ: "Int64"},                     // int64(arg0)
-		{name: "FMOVWload", argLength: 2, reg: fpload, asm: "MOVF", aux: "SymOff", typ: "Float32"}, // load float32 from arg0+auxint+aux
-		{name: "FMOVWstore", argLength: 3, reg: fpstore, asm: "MOVF", aux: "SymOff", typ: "Mem"},   // store float32 to arg0+auxint+aux
-		{name: "FEQS", argLength: 2, reg: fp2gp, asm: "FEQS", commutative: true},                   // arg0 == arg1
-		{name: "FNES", argLength: 2, reg: fp2gp, asm: "FNES", commutative: true},                   // arg0 != arg1
-		{name: "FLTS", argLength: 2, reg: fp2gp, asm: "FLTS"},                                      // arg0 < arg1
-		{name: "FLES", argLength: 2, reg: fp2gp, asm: "FLES"},                                      // arg0 <= arg1
+		{name: "FADDS", argLength: 2, reg: fp21, asm: "FADDS", commutative: true, typ: "Float32"},                        // arg0 + arg1
+		{name: "FSUBS", argLength: 2, reg: fp21, asm: "FSUBS", commutative: false, typ: "Float32"},                       // arg0 - arg1
+		{name: "FMULS", argLength: 2, reg: fp21, asm: "FMULS", commutative: true, typ: "Float32"},                        // arg0 * arg1
+		{name: "FDIVS", argLength: 2, reg: fp21, asm: "FDIVS", commutative: false, typ: "Float32"},                       // arg0 / arg1
+		{name: "FSQRTS", argLength: 1, reg: fp11, asm: "FSQRTS", typ: "Float32"},                                         // sqrt(arg0)
+		{name: "FNEGS", argLength: 1, reg: fp11, asm: "FNEGS", typ: "Float32"},                                           // -arg0
+		{name: "FMVSX", argLength: 1, reg: gpfp, asm: "FMVSX", typ: "Float32"},                                           // reinterpret arg0 as float
+		{name: "FCVTSW", argLength: 1, reg: gpfp, asm: "FCVTSW", typ: "Float32"},                                         // float32(arg0)
+		{name: "FCVTSL", argLength: 1, reg: gpfp, asm: "FCVTSL", typ: "Float32"},                                         // float32(arg0)
+		{name: "FCVTWS", argLength: 1, reg: fpgp, asm: "FCVTWS", typ: "Int32"},                                           // int32(arg0)
+		{name: "FCVTLS", argLength: 1, reg: fpgp, asm: "FCVTLS", typ: "Int64"},                                           // int64(arg0)
+		{name: "FMOVWload", argLength: 2, reg: fpload, asm: "MOVF", aux: "SymOff", typ: "Float32", faultOnNilArg0: true}, // load float32 from arg0+auxint+aux
+		{name: "FMOVWstore", argLength: 3, reg: fpstore, asm: "MOVF", aux: "SymOff", typ: "Mem", faultOnNilArg0: true},   // store float32 to arg0+auxint+aux
+		{name: "FEQS", argLength: 2, reg: fp2gp, asm: "FEQS", commutative: true},                                         // arg0 == arg1
+		{name: "FNES", argLength: 2, reg: fp2gp, asm: "FNES", commutative: true},                                         // arg0 != arg1
+		{name: "FLTS", argLength: 2, reg: fp2gp, asm: "FLTS"},                                                            // arg0 < arg1
+		{name: "FLES", argLength: 2, reg: fp2gp, asm: "FLES"},                                                            // arg0 <= arg1
 
 		// D extension.
-		{name: "FADDD", argLength: 2, reg: fp21, asm: "FADDD", commutative: true, typ: "Float64"},  // arg0 + arg1
-		{name: "FSUBD", argLength: 2, reg: fp21, asm: "FSUBD", commutative: false, typ: "Float64"}, // arg0 - arg1
-		{name: "FMULD", argLength: 2, reg: fp21, asm: "FMULD", commutative: true, typ: "Float64"},  // arg0 * arg1
-		{name: "FDIVD", argLength: 2, reg: fp21, asm: "FDIVD", commutative: false, typ: "Float64"}, // arg0 / arg1
-		{name: "FSQRTD", argLength: 1, reg: fp11, asm: "FSQRTD", typ: "Float64"},                   // sqrt(arg0)
-		{name: "FNEGD", argLength: 1, reg: fp11, asm: "FNEGD", typ: "Float64"},                     // -arg0
-		{name: "FMVDX", argLength: 1, reg: gpfp, asm: "FMVDX", typ: "Float64"},                     // reinterpret arg0 as float
-		{name: "FCVTDW", argLength: 1, reg: gpfp, asm: "FCVTDW", typ: "Float64"},                   // float64(arg0)
-		{name: "FCVTDL", argLength: 1, reg: gpfp, asm: "FCVTDL", typ: "Float64"},                   // float64(arg0)
-		{name: "FCVTWD", argLength: 1, reg: fpgp, asm: "FCVTWD", typ: "Int32"},                     // int32(arg0)
-		{name: "FCVTLD", argLength: 1, reg: fpgp, asm: "FCVTLD", typ: "Int64"},                     // int64(arg0)
-		{name: "FCVTDS", argLength: 1, reg: fp11, asm: "FCVTDS", typ: "Float64"},                   // float64(arg0)
-		{name: "FCVTSD", argLength: 1, reg: fp11, asm: "FCVTSD", typ: "Float32"},                   // float32(arg0)
-		{name: "FMOVDload", argLength: 2, reg: fpload, asm: "MOVD", aux: "SymOff", typ: "Float64"}, // load float64 from arg0+auxint+aux
-		{name: "FMOVDstore", argLength: 3, reg: fpstore, asm: "MOVD", aux: "SymOff", typ: "Mem"},   // store float6 to arg0+auxint+aux
-		{name: "FEQD", argLength: 2, reg: fp2gp, asm: "FEQD", commutative: true},                   // arg0 == arg1
-		{name: "FNED", argLength: 2, reg: fp2gp, asm: "FNED", commutative: true},                   // arg0 != arg1
-		{name: "FLTD", argLength: 2, reg: fp2gp, asm: "FLTD"},                                      // arg0 < arg1
-		{name: "FLED", argLength: 2, reg: fp2gp, asm: "FLED"},                                      // arg0 <= arg1
+		{name: "FADDD", argLength: 2, reg: fp21, asm: "FADDD", commutative: true, typ: "Float64"},                        // arg0 + arg1
+		{name: "FSUBD", argLength: 2, reg: fp21, asm: "FSUBD", commutative: false, typ: "Float64"},                       // arg0 - arg1
+		{name: "FMULD", argLength: 2, reg: fp21, asm: "FMULD", commutative: true, typ: "Float64"},                        // arg0 * arg1
+		{name: "FDIVD", argLength: 2, reg: fp21, asm: "FDIVD", commutative: false, typ: "Float64"},                       // arg0 / arg1
+		{name: "FSQRTD", argLength: 1, reg: fp11, asm: "FSQRTD", typ: "Float64"},                                         // sqrt(arg0)
+		{name: "FNEGD", argLength: 1, reg: fp11, asm: "FNEGD", typ: "Float64"},                                           // -arg0
+		{name: "FMVDX", argLength: 1, reg: gpfp, asm: "FMVDX", typ: "Float64"},                                           // reinterpret arg0 as float
+		{name: "FCVTDW", argLength: 1, reg: gpfp, asm: "FCVTDW", typ: "Float64"},                                         // float64(arg0)
+		{name: "FCVTDL", argLength: 1, reg: gpfp, asm: "FCVTDL", typ: "Float64"},                                         // float64(arg0)
+		{name: "FCVTWD", argLength: 1, reg: fpgp, asm: "FCVTWD", typ: "Int32"},                                           // int32(arg0)
+		{name: "FCVTLD", argLength: 1, reg: fpgp, asm: "FCVTLD", typ: "Int64"},                                           // int64(arg0)
+		{name: "FCVTDS", argLength: 1, reg: fp11, asm: "FCVTDS", typ: "Float64"},                                         // float64(arg0)
+		{name: "FCVTSD", argLength: 1, reg: fp11, asm: "FCVTSD", typ: "Float32"},                                         // float32(arg0)
+		{name: "FMOVDload", argLength: 2, reg: fpload, asm: "MOVD", aux: "SymOff", typ: "Float64", faultOnNilArg0: true}, // load float64 from arg0+auxint+aux
+		{name: "FMOVDstore", argLength: 3, reg: fpstore, asm: "MOVD", aux: "SymOff", typ: "Mem", faultOnNilArg0: true},   // store float6 to arg0+auxint+aux
+		{name: "FEQD", argLength: 2, reg: fp2gp, asm: "FEQD", commutative: true},                                         // arg0 == arg1
+		{name: "FNED", argLength: 2, reg: fp2gp, asm: "FNED", commutative: true},                                         // arg0 != arg1
+		{name: "FLTD", argLength: 2, reg: fp2gp, asm: "FLTD"},                                                            // arg0 < arg1
+		{name: "FLED", argLength: 2, reg: fp2gp, asm: "FLED"},                                                            // arg0 <= arg1
 	}
 
 	RISCVblocks := []blockData{

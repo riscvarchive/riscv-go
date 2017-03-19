@@ -3566,6 +3566,19 @@ func rewriteValueRISCV_OpRISCVADDI(v *Value, config *Config) bool {
 		v.AddArg(x)
 		return true
 	}
+	// match: (ADDI [0]  x)
+	// cond:
+	// result: x
+	for {
+		if v.AuxInt != 0 {
+			break
+		}
+		x := v.Args[0]
+		v.reset(OpCopy)
+		v.Type = x.Type
+		v.AddArg(x)
+		return true
+	}
 	return false
 }
 func rewriteValueRISCV_OpRISCVMOVBUload(v *Value, config *Config) bool {

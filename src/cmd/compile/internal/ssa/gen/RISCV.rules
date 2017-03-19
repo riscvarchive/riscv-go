@@ -430,3 +430,6 @@
 (DeferCall   [argwid]               mem) -> (CALLdefer   [argwid]               mem)
 (GoCall      [argwid]               mem) -> (CALLgo      [argwid]               mem)
 (InterCall   [argwid] entry         mem) -> (CALLinter   [argwid] entry         mem)
+
+// remove redundant *const ops
+(ADDI [0]  x) -> x

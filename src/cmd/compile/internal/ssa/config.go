@@ -273,6 +273,7 @@ func NewConfig(arch string, fe Frontend, ctxt *obj.Link, optimize bool) *Config 
 	case "riscv":
 		c.IntSize = 8
 		c.PtrSize = 8
+		c.RegSize = 8
 		c.lowerBlock = rewriteBlockRISCV
 		c.lowerValue = rewriteValueRISCV
 		c.registers = registersRISCV[:]

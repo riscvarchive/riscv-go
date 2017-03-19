@@ -17325,10 +17325,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVBload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVB,
+		name:           "MOVBload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVB,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17339,10 +17340,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVHload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVH,
+		name:           "MOVHload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVH,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17353,10 +17355,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVWload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVW,
+		name:           "MOVWload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVW,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17367,10 +17370,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVDload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOV,
+		name:           "MOVDload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17381,10 +17385,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVBUload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVBU,
+		name:           "MOVBUload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVBU,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17395,10 +17400,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVHUload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVHU,
+		name:           "MOVHUload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVHU,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17409,10 +17415,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVWUload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVWU,
+		name:           "MOVWUload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVWU,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17423,10 +17430,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVBstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOVB,
+		name:           "MOVBstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVB,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 1073741814},          // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
@@ -17435,10 +17443,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVHstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOVH,
+		name:           "MOVHstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVH,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 1073741814},          // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
@@ -17447,10 +17456,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVWstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOVW,
+		name:           "MOVWstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVW,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 1073741814},          // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
@@ -17459,10 +17469,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "MOVDstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOV,
+		name:           "MOVDstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOV,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{1, 1073741814},          // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
@@ -17817,8 +17828,10 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:   "LoweredNilCheck",
-		argLen: 2,
+		name:           "LoweredNilCheck",
+		argLen:         2,
+		nilCheck:       true,
+		faultOnNilArg0: true,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 1073741814}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5
@@ -17984,10 +17997,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FMOVWload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVF,
+		name:           "FMOVWload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVF,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -17998,10 +18012,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FMOVWstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOVF,
+		name:           "FMOVWstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVF,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -18243,10 +18258,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FMOVDload",
-		auxType: auxSymOff,
-		argLen:  2,
-		asm:     riscv.AMOVD,
+		name:           "FMOVDload",
+		auxType:        auxSymOff,
+		argLen:         2,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVD,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
@@ -18257,10 +18273,11 @@ var opcodeTable = [...]opInfo{
 		},
 	},
 	{
-		name:    "FMOVDstore",
-		auxType: auxSymOff,
-		argLen:  3,
-		asm:     riscv.AMOVD,
+		name:           "FMOVDstore",
+		auxType:        auxSymOff,
+		argLen:         3,
+		faultOnNilArg0: true,
+		asm:            riscv.AMOVD,
 		reg: regInfo{
 			inputs: []inputInfo{
 				{0, 9223372037928517622}, // SP GP T0 T1 T2 S0 S1 A0 A1 A2 A3 A4 A5 A6 A7 S2 S3 CTXT S5 S6 S7 S8 S9 S10 S11 T3 T4 T5 SB
