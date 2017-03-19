@@ -338,6 +338,30 @@
 (MOVDstore [off1] {sym1} (MOVaddr [off2] {sym2} base) val mem) && is32Bit(off1+off2) && canMergeSym(sym1, sym2) ->
 	(MOVDstore [off1+off2] {mergeSym(sym1,sym2)} base val mem)
 
+(MOVBUload [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVBUload [off1+off2] {sym} base mem)
+(MOVBload  [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVBload  [off1+off2] {sym} base mem)
+(MOVHUload [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVHUload [off1+off2] {sym} base mem)
+(MOVHload  [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVHload  [off1+off2] {sym} base mem)
+(MOVWUload [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVWUload [off1+off2] {sym} base mem)
+(MOVWload  [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVWload  [off1+off2] {sym} base mem)
+(MOVDload  [off1] {sym} (ADDI [off2] base) mem) && is32Bit(off1+off2) ->
+	(MOVDload  [off1+off2] {sym} base mem)
+
+(MOVBstore [off1] {sym} (ADDI [off2] base) val mem) && is32Bit(off1+off2) ->
+	(MOVBstore [off1+off2] {sym} base val mem)
+(MOVHstore [off1] {sym} (ADDI [off2] base) val mem) && is32Bit(off1+off2) ->
+	(MOVHstore [off1+off2] {sym} base val mem)
+(MOVWstore [off1] {sym} (ADDI [off2] base) val mem) && is32Bit(off1+off2) ->
+	(MOVWstore [off1+off2] {sym} base val mem)
+(MOVDstore [off1] {sym} (ADDI [off2] base) val mem) && is32Bit(off1+off2) ->
+	(MOVDstore [off1+off2] {sym} base val mem)
+
 // Similarly, fold ADDI into MOVaddr to avoid confusing live variable analysis
 // with OffPtr -> ADDI.
 (ADDI [c] (MOVaddr [d] {s} x)) && is32Bit(c+d) -> (MOVaddr [c+d] {s} x)
@@ -381,7 +405,7 @@
 	(LoweredMove [SizeAndAlign(s).Align()]
 		dst
 		src
-		(ADD <src.Type> src (MOVDconst [SizeAndAlign(s).Size()-moveSize(SizeAndAlign(s).Align(), config)]))
+		(ADDI <src.Type> [SizeAndAlign(s).Size()-moveSize(SizeAndAlign(s).Align(), config)] src)
 		mem)
 
 // Boolean ops; 0=false, 1=true
