@@ -218,8 +218,48 @@ TEXT runtime·return0(SB), NOSPLIT, $0
 	RET
 
 // func memequal(a, b unsafe.Pointer, size uintptr) bool
-TEXT runtime·memequal(SB),NOSPLIT,$0-13
-	WORD $0
+TEXT runtime·memequal(SB),NOSPLIT,$-8-25
+	MOV	a+0(FP), A1
+	MOV	b+8(FP), A2
+	BEQ	A1, A2, eq
+	MOV	size+16(FP), A3
+	ADD	A1, A3, A4
+loop:
+	BNE	A1, A4, test
+	MOV	$1, A1
+	MOVB	A1, ret+24(FP)
+	RET
+test:
+	MOVBU	(A1), A6
+	ADD	$1, A1
+	MOVBU	(A2), A7
+	ADD	$1, A2
+	BEQ	A6, A7, loop
+
+	MOVB	ZERO, ret+24(FP)
+	RET
+eq:
+	MOV	$1, A1
+	MOVB	A1, ret+24(FP)
+	RET
+
+// func memequal_varlen(a, b unsafe.Pointer) bool
+TEXT runtime·memequal_varlen(SB),NOSPLIT,$40-17
+	MOV	a+0(FP), A1
+	MOV	b+8(FP), A2
+	BEQ	A1, A2, eq
+	MOV	8(CTXT), A3    // compiler stores size at offset 8 in the closure
+	MOV	A1, 8(X2)
+	MOV	A2, 16(X2)
+	MOV	A3, 24(X2)
+	CALL	runtime·memequal(SB)
+	MOVBU	32(X2), A1
+	MOVB	A1, ret+16(FP)
+	RET
+eq:
+	MOV	$1, A1
+	MOVB	A1, ret+16(FP)
+	RET
 
 // restore state from Gobuf; longjmp
 
@@ -323,10 +363,6 @@ TEXT ·asmcgocall(SB),NOSPLIT,$0-12
 TEXT runtime·memhash_varlen(SB),NOSPLIT,$40-24
 	WORD $0
 
-// func memequal_varlen(a, b unsafe.Pointer) bool
-TEXT runtime·memequal_varlen(SB),NOSPLIT,$40-17
-	WORD $0
-
 // func asminit()
 TEXT runtime·asminit(SB),NOSPLIT,$-8-0
 	RET
@@ -347,24 +383,60 @@ TEXT runtime·goexit(SB),NOSPLIT,$-8-0
 TEXT reflect·call(SB),NOSPLIT,$0-20
 	WORD $0
 
-// func cmpstring(s1, s2 string) int
-TEXT runtime·cmpstring(SB),NOSPLIT,$-4-40
-	WORD $0
-
 // func setcallerpc(argp unsafe.Pointer, pc uintptr)
 TEXT runtime·setcallerpc(SB),NOSPLIT,$8-16
 	WORD $0
 
 // func IndexByte(s []byte, c byte) int
 TEXT bytes·IndexByte(SB),NOSPLIT,$0-40
-	WORD $0
+	MOV	s+0(FP), A1
+	MOV	s_len+8(FP), A2
+	MOVBU	c+24(FP), A3	// byte to find
+	MOV	A1, A4		// store base for later
+	ADD	A1, A2		// end
+	ADD	$-1, A1
+
+loop:
+	ADD	$1, A1
+	BEQ	A1, A2, notfound
+	MOVBU	(A1), A5
+	BNE	A3, A5, loop
+
+	SUB	A4, A1		// remove base
+	MOV	A1, ret+32(FP)
+	RET
+
+notfound:
+	MOV	$-1, A1
+	MOV	A1, ret+32(FP)
+	RET
 
 // func IndexByte(s string, c byte) int
 TEXT strings·IndexByte(SB),NOSPLIT,$0-32
-	WORD $0
+	MOV	p+0(FP), A1
+	MOV	b_len+8(FP), A2
+	MOVBU	c+16(FP), A3	// byte to find
+	MOV	A1, A4		// store base for later
+	ADD	A1, A2		// end
+	ADD	$-1, A1
+
+loop:
+	ADD	$1, A1
+	BEQ	A1, A2, notfound
+	MOVBU	(A1), A5
+	BNE	A3, A5, loop
+
+	SUB	A4, A1		// remove base
+	MOV	A1, ret+24(FP)
+	RET
+
+notfound:
+	MOV	$-1, A1
+	MOV	A1, ret+24(FP)
+	RET
 
 // func Equal(a, b []byte) bool
-TEXT bytes·Equal(SB),NOSPLIT,$0-49
+TEXT bytes·Equal(SB),NOSPLIT,$0-25
 	WORD $0
 
 // func stackBarrier()
