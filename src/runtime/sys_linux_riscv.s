@@ -195,8 +195,20 @@ TEXT runtime·sigfwd(SB),NOSPLIT,$0-32
 	WORD $0
 
 // func sigtramp(ureg, note unsafe.Pointer)
-TEXT runtime·sigtramp(SB),NOSPLIT,$64
-	WORD $0
+TEXT runtime·sigtramp(SB),NOSPLIT,$24
+	// this might be called in external code context,
+	// where g is not set.
+	// first save R0, because runtime·load_g will clobber it
+	MOVW	A0, 8(X2)
+	MOVBU	runtime·iscgo(SB), A0
+	BEQ	A0, ZERO, 2(PC)
+	CALL	runtime·load_g(SB)
+
+	MOV	A1, 16(X2)
+	MOV	A2, 24(X2)
+	MOV	$runtime·sigtrampgo(SB), A0
+	JALR	RA, A0
+	RET
 
 // func cgoSigtramp()
 TEXT runtime·cgoSigtramp(SB),NOSPLIT,$0

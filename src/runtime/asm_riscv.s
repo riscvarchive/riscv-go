@@ -324,10 +324,15 @@ TEXT ·reflectcall(SB),NOSPLIT,$-4-20
 	WORD $0
 
 // func goexit(neverCallThisFunction)
+// The top-most function running on a goroutine
+// returns to goexit+PCQuantum.
 TEXT runtime·goexit(SB),NOSPLIT,$-8-0
-	WORD $0
+	MOV	ZERO, ZERO	// NOP
+	CALL	runtime·goexit1(SB)	// does not return
+	// traceback from goexit1 must hit code range of goexit
+	MOV	ZERO, ZERO	// NOP
 
-TEXT reflect·call(SB), NOSPLIT, $0-0
+TEXT reflect·call(SB),NOSPLIT,$0-20
 	WORD $0
 
 // func cmpstring(s1, s2 string) int
@@ -368,6 +373,13 @@ TEXT runtime·prefetcht2(SB),NOSPLIT,$0-8
 	RET
 
 TEXT runtime·prefetchnta(SB),NOSPLIT,$0-8
+	RET
+
+// void setg(G*); set g. for use by needm.
+TEXT runtime·setg(SB), NOSPLIT, $0-8
+	MOV	gg+0(FP), g
+	// This only happens if iscgo, so jump straight to save_g
+	CALL	runtime·save_g(SB)
 	RET
 
 TEXT ·checkASM(SB),NOSPLIT,$0-1
