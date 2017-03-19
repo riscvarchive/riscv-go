@@ -5,6 +5,7 @@
 // +build riscv
 
 #include "go_asm.h"
+#include "funcdata.h"
 #include "textflag.h"
 
 // func rt0_go()
@@ -367,9 +368,126 @@ TEXT runtime·memhash_varlen(SB),NOSPLIT,$40-24
 TEXT runtime·asminit(SB),NOSPLIT,$-8-0
 	RET
 
+// reflectcall: call a function with the given argument list
+// func call(argtype *_type, f *FuncVal, arg *byte, argsize, retoffset uint32).
+// we don't have variable-sized frames, so we use a small number
+// of constant-sized-frame functions to encode a few bits of size in the pc.
+// Caution: ugly multiline assembly macros in your future!
+
+#define DISPATCH(NAME,MAXSIZE)	\
+	MOV	$MAXSIZE, T1	\
+	BLTU	T1, T0, 3(PC)	\
+	MOV	$NAME(SB), T2;	\
+	JALR	ZERO, T2
+// Note: can't just "BR NAME(SB)" - bad inlining results.
+
+// func call(argtype *rtype, fn, arg unsafe.Pointer, n uint32, retoffset uint32)
+TEXT reflect·call(SB), NOSPLIT, $0-0
+	JMP	·reflectcall(SB)
+
 // func reflectcall(argtype *_type, fn, arg unsafe.Pointer, argsize uint32, retoffset uint32)
-TEXT ·reflectcall(SB),NOSPLIT,$-4-20
-	WORD $0
+TEXT ·reflectcall(SB), NOSPLIT, $-8-32
+	MOVWU argsize+24(FP), T0
+	DISPATCH(runtime·call32, 32)
+	DISPATCH(runtime·call64, 64)
+	DISPATCH(runtime·call128, 128)
+	DISPATCH(runtime·call256, 256)
+	DISPATCH(runtime·call512, 512)
+	DISPATCH(runtime·call1024, 1024)
+	DISPATCH(runtime·call2048, 2048)
+	DISPATCH(runtime·call4096, 4096)
+	DISPATCH(runtime·call8192, 8192)
+	DISPATCH(runtime·call16384, 16384)
+	DISPATCH(runtime·call32768, 32768)
+	DISPATCH(runtime·call65536, 65536)
+	DISPATCH(runtime·call131072, 131072)
+	DISPATCH(runtime·call262144, 262144)
+	DISPATCH(runtime·call524288, 524288)
+	DISPATCH(runtime·call1048576, 1048576)
+	DISPATCH(runtime·call2097152, 2097152)
+	DISPATCH(runtime·call4194304, 4194304)
+	DISPATCH(runtime·call8388608, 8388608)
+	DISPATCH(runtime·call16777216, 16777216)
+	DISPATCH(runtime·call33554432, 33554432)
+	DISPATCH(runtime·call67108864, 67108864)
+	DISPATCH(runtime·call134217728, 134217728)
+	DISPATCH(runtime·call268435456, 268435456)
+	DISPATCH(runtime·call536870912, 536870912)
+	DISPATCH(runtime·call1073741824, 1073741824)
+	MOV	$runtime·badreflectcall(SB), T2
+	JALR	ZERO, T2
+
+#define CALLFN(NAME,MAXSIZE)			\
+TEXT NAME(SB), WRAPPER, $MAXSIZE-24;		\
+	NO_LOCAL_POINTERS;			\
+	/* copy arguments to stack */		\
+	MOV	arg+16(FP), A1;			\
+	MOVWU	argsize+24(FP), A2;		\
+	MOV	X2, A3;				\
+	ADD	$8, A3;				\
+	ADD	A3, A2;				\
+	BEQ	A3, A2, 6(PC);			\
+	MOVBU	(A1), A4;			\
+	ADD	$1, A1;				\
+	MOVB	A4, (A3);			\
+	ADD	$1, A3;				\
+	JMP	-5(PC);				\
+	/* call function */			\
+	MOV	f+8(FP), CTXT;			\
+	MOV	(CTXT), A4;			\
+	PCDATA  $PCDATA_StackMapIndex, $0;	\
+	JALR	RA, A4;				\
+	/* copy return values back */		\
+	MOV	argtype+0(FP), A5;		\
+	MOV	arg+16(FP), A1;			\
+	MOVWU	n+24(FP), A2;			\
+	MOVWU	retoffset+28(FP), A4;		\
+	ADD	$8, X2, A3;			\
+	ADD	A4, A3; 			\
+	ADD	A4, A1;				\
+	SUB	A4, A2;				\
+	CALL	callRet<>(SB);			\
+	RET
+
+// callRet copies return values back at the end of call*. This is a
+// separate function so it can allocate stack space for the arguments
+// to reflectcallmove. It does not follow the Go ABI; it expects its
+// arguments in registers.
+TEXT callRet<>(SB), NOSPLIT, $32-0
+	MOV	A5, 8(X2)
+	MOV	A1, 16(X2)
+	MOV	A3, 24(X2)
+	MOV	A2, 32(X2)
+	CALL	runtime·reflectcallmove(SB)
+	RET
+
+CALLFN(·call16, 16)
+CALLFN(·call32, 32)
+CALLFN(·call64, 64)
+CALLFN(·call128, 128)
+CALLFN(·call256, 256)
+CALLFN(·call512, 512)
+CALLFN(·call1024, 1024)
+CALLFN(·call2048, 2048)
+CALLFN(·call4096, 4096)
+CALLFN(·call8192, 8192)
+CALLFN(·call16384, 16384)
+CALLFN(·call32768, 32768)
+CALLFN(·call65536, 65536)
+CALLFN(·call131072, 131072)
+CALLFN(·call262144, 262144)
+CALLFN(·call524288, 524288)
+CALLFN(·call1048576, 1048576)
+CALLFN(·call2097152, 2097152)
+CALLFN(·call4194304, 4194304)
+CALLFN(·call8388608, 8388608)
+CALLFN(·call16777216, 16777216)
+CALLFN(·call33554432, 33554432)
+CALLFN(·call67108864, 67108864)
+CALLFN(·call134217728, 134217728)
+CALLFN(·call268435456, 268435456)
+CALLFN(·call536870912, 536870912)
+CALLFN(·call1073741824, 1073741824)
 
 // func goexit(neverCallThisFunction)
 // The top-most function running on a goroutine
@@ -379,9 +497,6 @@ TEXT runtime·goexit(SB),NOSPLIT,$-8-0
 	CALL	runtime·goexit1(SB)	// does not return
 	// traceback from goexit1 must hit code range of goexit
 	MOV	ZERO, ZERO	// NOP
-
-TEXT reflect·call(SB),NOSPLIT,$0-20
-	WORD $0
 
 // func setcallerpc(argp unsafe.Pointer, pc uintptr)
 TEXT runtime·setcallerpc(SB),NOSPLIT,$8-16
