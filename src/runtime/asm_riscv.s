@@ -209,9 +209,65 @@ loop:
 	MOVB	ZERO, ret+32(FP)
 	RET
 
+/*
+ * support for morestack
+ */
+
+// Called during function prolog when more stack is needed.
+// Caller has already loaded:
+// R1: framesize, R2: argsize, R3: LR
+//
+// The traceback routines see morestack on a g0 as being
+// the top of a stack (for example, morestack calling newstack
+// calling the scheduler calling newm calling gc), so we must
+// record an argument size. For that purpose, it has no arguments.
+
 // func morestack()
-TEXT runtime·morestack(SB),NOSPLIT,$-4-0
-	WORD $0
+TEXT runtime·morestack(SB),NOSPLIT,$-8-0
+	// Cannot grow scheduler stack (m->g0).
+	MOV	g_m(g), A0
+	MOV	m_g0(A0), A1
+	BNE	g, A1, 3(PC)
+	CALL	runtime·badmorestackg0(SB)
+	CALL	runtime·abort(SB)
+
+	// Cannot grow signal stack (m->gsignal).
+	MOV	m_gsignal(A0), A1
+	BNE	g, A1, 3(PC)
+	CALL	runtime·badmorestackgsignal(SB)
+	CALL	runtime·abort(SB)
+
+	// Called from f.
+	// Set g->sched to context in f.
+	MOV	X2, (g_sched+gobuf_sp)(g)
+	MOV	T0, (g_sched+gobuf_pc)(g)
+	MOV	RA, (g_sched+gobuf_lr)(g)
+	// newstack will fill gobuf.ctxt.
+
+	// Called from f.
+	// Set m->morebuf to f's caller.
+	MOV	RA, (m_morebuf+gobuf_pc)(A0)	// f's caller's PC
+	MOV	X2, (m_morebuf+gobuf_sp)(A0)	// f's caller's SP
+	MOV	g, (m_morebuf+gobuf_g)(A0)
+
+	// Call newstack on m->g0's stack.
+	MOV	m_g0(A0), g
+	CALL	runtime·save_g(SB)
+	MOV	(g_sched+gobuf_sp)(g), X2
+	// Create a stack frame on g0 to call newstack.
+	MOV	ZERO, -16(X2)	// Zero saved LR in frame
+	ADD	$-16, X2
+	MOV	CTXT, 8(X2)	// ctxt argument
+	CALL	runtime·newstack(SB)
+
+	// Not reached, but make sure the return PC from the call to newstack
+	// is still in this function, and not the beginning of the next.
+	UNDEF
+
+// func morestack_noctxt()
+TEXT runtime·morestack_noctxt(SB),NOSPLIT,$-8-0
+	MOV	ZERO, CTXT
+	JMP	runtime·morestack(SB)
 
 // func return0()
 TEXT runtime·return0(SB), NOSPLIT, $0
@@ -622,6 +678,10 @@ TEXT runtime·prefetchnta(SB),NOSPLIT,$0-8
 	RET
 
 TEXT runtime·breakpoint(SB),NOSPLIT,$-8-0
+	EBREAK
+	RET
+
+TEXT runtime·abort(SB),NOSPLIT,$-8-0
 	EBREAK
 	RET
 

@@ -105,10 +105,10 @@ func lowerjalr(p *obj.Prog) {
 // lr is the link register to use for the JALR.
 //
 // p must be a CALL or JMP.
-func jalrToSym(ctxt *obj.Link, p *obj.Prog, lr int16) {
+func jalrToSym(ctxt *obj.Link, p *obj.Prog, lr int16) *obj.Prog {
 	if p.As != obj.ACALL && p.As != obj.AJMP {
 		ctxt.Diag("unexpected Prog in jalrToSym: %v", p)
-		return
+		return p
 	}
 
 	// AUIPC $off_hi, TMP
@@ -140,6 +140,8 @@ func jalrToSym(ctxt *obj.Link, p *obj.Prog, lr int16) {
 	p.To.Type = obj.TYPE_REG
 	p.To.Reg = REG_TMP
 	lowerjalr(p)
+
+	return p
 }
 
 // movtol converts a MOV mnemonic into the corresponding load instruction.
@@ -452,6 +454,10 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	cursym.Locals = int32(stacksize)
 
 	prologue := text
+
+	if text.From3.Offset&obj.NOSPLIT == 0 {
+		prologue = stacksplit(ctxt, prologue, stacksize) // emit split check
+	}
 
 	// Insert stack adjustment if necessary.
 	if stacksize != 0 {
@@ -1002,6 +1008,151 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 	for p := cursym.Text; p != nil; p = p.Link {
 		encodingForP(p).validate(p)
 	}
+}
+
+func stacksplit(ctxt *obj.Link, p *obj.Prog, framesize int64) *obj.Prog {
+	// Leaf function with no frame is effectively NOSPLIT.
+	if framesize == 0 {
+		return p
+	}
+
+	// MOV	g_stackguard(g), A0
+	p = obj.Appendp(ctxt, p)
+	p.As = AMOV
+	p.From.Type = obj.TYPE_MEM
+	p.From.Reg = REGG
+	p.From.Offset = 2 * int64(ctxt.Arch.PtrSize) // G.stackguard0
+	if ctxt.Cursym.CFunc() {
+		p.From.Offset = 3 * int64(ctxt.Arch.PtrSize) // G.stackguard1
+	}
+	p.To.Type = obj.TYPE_REG
+	p.To.Reg = REG_A0
+
+	var to_done, to_more *obj.Prog
+
+	if framesize <= obj.StackSmall {
+		// small stack: SP < stackguard
+		//	BGTU	SP, stackguard, done
+		p = obj.Appendp(ctxt, p)
+		p.As = ABLTU
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_A0
+		p.Reg = REG_X2
+		p.To.Type = obj.TYPE_BRANCH
+		to_done = p
+	} else if framesize <= obj.StackBig {
+		// large stack: SP-framesize < stackguard-StackSmall
+		//	ADD	$-framesize, SP, A1
+		//	BGTU	A1, stackguard, done
+		p = obj.Appendp(ctxt, p)
+		// TODO(sorear): logic inconsistent with comment, but both match all non-x86 arches
+		p.As = AADDI
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = int64(-framesize)
+		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_X2}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_A1
+
+		p = obj.Appendp(ctxt, p)
+		p.As = ABLTU
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_A0
+		p.Reg = REG_A1
+		p.To.Type = obj.TYPE_BRANCH
+		to_done = p
+	} else {
+		// Such a large stack we need to protect against wraparound.
+		// If SP is close to zero:
+		//	SP-stackguard+StackGuard <= framesize + (StackGuard-StackSmall)
+		// The +StackGuard on both sides is required to keep the left side positive:
+		// SP is allowed to be slightly below stackguard. See stack.h.
+		//
+		// Preemption sets stackguard to StackPreempt, a very large value.
+		// That breaks the math above, so we have to check for that explicitly.
+		//	// stackguard is A0
+		//	MOV	$StackPreempt, A1
+		//	BEQ	A0, A1, more
+		//	ADD	$StackGuard, SP, A1
+		//	SUB	A0, A1
+		//	MOV	$(framesize+(StackGuard-StackSmall)), A0
+		//	BGTU	A1, A0, done
+		p = obj.Appendp(ctxt, p)
+		p.As = AMOV
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = obj.StackPreempt
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_A1
+
+		p = obj.Appendp(ctxt, p)
+		to_more = p
+		p.As = ABEQ
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_A0
+		p.Reg = REG_A1
+		p.To.Type = obj.TYPE_BRANCH
+
+		p = obj.Appendp(ctxt, p)
+		p.As = AADDI
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = obj.StackGuard
+		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_X2}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_A1
+
+		p = obj.Appendp(ctxt, p)
+		p.As = ASUB
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_A0
+		p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: REG_A1}
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_A1
+
+		p = obj.Appendp(ctxt, p)
+		p.As = AMOV
+		p.From.Type = obj.TYPE_CONST
+		p.From.Offset = int64(framesize) + obj.StackGuard - obj.StackSmall
+		p.To.Type = obj.TYPE_REG
+		p.To.Reg = REG_A0
+
+		p = obj.Appendp(ctxt, p)
+		p.As = ABLTU
+		p.From.Type = obj.TYPE_REG
+		p.From.Reg = REG_A0
+		p.Reg = REG_A1
+		p.To.Type = obj.TYPE_BRANCH
+		to_done = p
+	}
+
+	// JAL	runtime.morestack(SB)
+	p = obj.Appendp(ctxt, p)
+	p.As = obj.ACALL
+	p.Reg = REG_T0
+	p.To.Type = obj.TYPE_BRANCH
+	if ctxt.Cursym.CFunc() {
+		p.To.Sym = obj.Linklookup(ctxt, "runtime.morestackc", 0)
+	} else if ctxt.Cursym.Text.From3.Offset&obj.NEEDCTXT == 0 {
+		p.To.Sym = obj.Linklookup(ctxt, "runtime.morestack_noctxt", 0)
+	} else {
+		p.To.Sym = obj.Linklookup(ctxt, "runtime.morestack", 0)
+	}
+	if to_more != nil {
+		to_more.Pcond = p
+	}
+	p = jalrToSym(ctxt, p, REG_T0)
+
+	// JMP	start
+	p = obj.Appendp(ctxt, p)
+	p.As = AJAL
+	p.To = obj.Addr{Type: obj.TYPE_BRANCH}
+	p.From = obj.Addr{Type: obj.TYPE_REG, Reg: REG_ZERO}
+	p.Pcond = ctxt.Cursym.Text.Link
+
+	// placeholder for to_done's jump target
+	p = obj.Appendp(ctxt, p)
+	p.As = obj.ANOP // zero-width place holder
+	to_done.Pcond = p
+
+	return p
 }
 
 // signExtend sign extends val starting at bit bit.
