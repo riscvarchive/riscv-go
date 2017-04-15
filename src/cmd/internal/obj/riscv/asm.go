@@ -431,6 +431,10 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 
 	stacksize := text.To.Offset
 
+	if stacksize < 0 {
+		text.From3.Offset |= obj.NOFRAME
+		stacksize = 0
+	}
 	// We must save RA if there is a CALL.
 	saveRA := containsCall(cursym)
 	// Unless we're told not to!

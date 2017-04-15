@@ -254,7 +254,7 @@ TEXT runtime·futex(SB),NOSPLIT,$-8
 	RET
 
 // func clone(flags int32, stk, mp, gp, fn unsafe.Pointer) int32
-TEXT runtime·clone(SB),NOSPLIT,$0
+TEXT runtime·clone(SB),NOSPLIT,$-8
 	MOVW	flags+0(FP), A0
 	MOV	stk+8(FP), A1
 
