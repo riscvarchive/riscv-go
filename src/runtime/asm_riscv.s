@@ -469,6 +469,10 @@ TEXT runtime·prefetcht2(SB),NOSPLIT,$0-8
 TEXT runtime·prefetchnta(SB),NOSPLIT,$0-8
 	RET
 
+TEXT runtime·breakpoint(SB),NOSPLIT,$-8-0
+	EBREAK
+	RET
+
 // void setg(G*); set g. for use by needm.
 TEXT runtime·setg(SB), NOSPLIT, $0-8
 	MOV	gg+0(FP), g

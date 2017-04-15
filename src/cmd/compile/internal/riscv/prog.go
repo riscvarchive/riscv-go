@@ -39,7 +39,8 @@ var progmap = map[obj.As]gc.ProgInfo{
 	riscv.ABGEU: {Flags: gc.Cjmp | gc.LeftRead | gc.RegRead},
 
 	// 2.9: Environment Call and Breakpoints
-	riscv.AECALL: {Flags: gc.OK},
+	riscv.AECALL:  {Flags: gc.OK},
+	riscv.AEBREAK: {Flags: gc.OK},
 
 	// 4.2: Integer Computational Instructions
 	riscv.AADDI:  {Flags: gc.LeftRead | gc.RightWrite},

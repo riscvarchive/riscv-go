@@ -283,7 +283,7 @@ func progedit(ctxt *obj.Link, p *obj.Prog) {
 	case AJALR:
 		lowerjalr(p)
 
-	case obj.AUNDEF, AECALL, ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
+	case obj.AUNDEF, AECALL, AEBREAK, ASCALL, ARDCYCLE, ARDTIME, ARDINSTRET:
 		if p.As == obj.AUNDEF {
 			p.As = AEBREAK
 		}
