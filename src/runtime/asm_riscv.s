@@ -31,7 +31,7 @@ TEXT runtime·rt0_go(SB),NOSPLIT,$0
 
 	MOV	ZERO, A3	// arg 3: not used
 	MOV	ZERO, A2	// arg 2: not used
-	// FIXME MOV	$·setg_gcc(SB), A1	// arg 1: setg
+	MOV	$setg_gcc<>(SB), A1	// arg 1: setg
 	MOV	g, A0	// arg 0: G
 	JALR	RA, T0
 
@@ -73,10 +73,10 @@ nocgo:
 	RET
 
 // void setg_gcc(G*); set g called from gcc with g in A0
-//TEXT ·setg_gcc(SB),NOSPLIT,$0-0
-//	MOV	A0, g
-//	CALL	runtime·save_g(SB)
-//	RET
+TEXT setg_gcc<>(SB),NOSPLIT,$0-0
+	MOV	A0, g
+	CALL	runtime·save_g(SB)
+	RET
 
 // func cputicks() int64
 TEXT runtime·cputicks(SB),NOSPLIT,$0-8

@@ -502,7 +502,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					p.As = movtol(p.As)
 					p.From3 = &obj.Addr{Type: obj.TYPE_REG, Reg: addrtoreg(p.From)}
 					p.From = obj.Addr{Type: obj.TYPE_CONST, Offset: p.From.Offset}
-				case obj.NAME_EXTERN:
+				case obj.NAME_EXTERN, obj.NAME_STATIC:
 					// AUIPC $off_hi, R
 					// L $off_lo, R
 					as := p.As
@@ -628,7 +628,7 @@ func preprocess(ctxt *obj.Link, cursym *obj.LSym) {
 					ctxt.Diag("progedit: unsupported addr MOV at %v", p)
 				}
 				switch p.From.Name {
-				case obj.NAME_EXTERN:
+				case obj.NAME_EXTERN, obj.NAME_STATIC:
 					// AUIPC $off_hi, R
 					// ADDI $off_lo, R
 					to := p.To
