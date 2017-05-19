@@ -55,10 +55,20 @@ start:
 	JALR	T1, (T0)			// 67830200
 	JALR	T1, 4(T0)			// 67834200
 
-	// Encoded as JAL $0, RA. The linker resolves the real address.
-	CALL	asmtest(SB)			// ef000000
-	// Encoded as JAL $0, ZERO. The linker resolves the real address.
-	JMP	asmtest(SB)			// 6f000000
+	// Encoded as
+	//	AUIPC $0, TMP
+	//	ADDI $0, TMP
+	//	JALR TMP
+	// with a R_RISCV_PCREL_ITYPE relocation. The linker resolves the real
+	// address.
+	CALL	asmtest(SB)			// 970f0000
+	// Encoded as
+	//	AUIPC $0, TMP
+	//	ADDI $0, TMP
+	//	JMP TMP
+	// with a R_RISCV_PCREL_ITYPE relocation. The linker resolves the real
+	// address.
+	JMP	asmtest(SB)			// 970f0000
 
 	ECALL					// 73000000
 	SCALL					// 73000000
