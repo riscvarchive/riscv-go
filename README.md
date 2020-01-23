@@ -6,6 +6,9 @@ This repository is home of the RISC-V port of the Go programming language.
 
 The upstream Go project can be found at https://github.com/golang/go.
 
+**This port has been upstreamed in Go 1.14. Please refer to upstream for all
+RISC-V development. This repository is outdated and archived.**
+
 ### Quick Start
 
 Setup:
